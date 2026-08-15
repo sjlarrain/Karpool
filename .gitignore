@@ -1,0 +1,93 @@
+# ─── Secrets & environment ────────────────────────────────────────────
+# Never commit real values. Only .env.example is tracked.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.cert
+id_rsa*
+.npmrc
+.netrc
+secrets/
+credentials.json
+service-account*.json
+vapid*.json
+*vapid*private*
+
+# ─── Dependencies ─────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+
+# ─── Build output ─────────────────────────────────────────────────────
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# ─── Platform ─────────────────────────────────────────────────────────
+.vercel/
+.supabase/
+supabase/.temp/
+supabase/.branches/
+supabase/logs/
+
+# ─── Test & coverage ──────────────────────────────────────────────────
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# ─── Internal planning docs — local only, not for the repo ────────────
+# Tracked docs: README.md, CLAUDE.md, docs/API.md.
+# Everything below is working material: plans, drafts, scratch, handoffs.
+docs/internal/
+docs/plans/
+docs/scratch/
+docs/drafts/
+docs/WORKLOG.md
+docs/DECISIONS.md
+*.draft.md
+*.local.md
+notes/
+sketches/
+00_DEV_ENVIRONMENT_SETUP.md
+01_PLATFORM_SETUP.md
+02_IMPLEMENTATION_PLAN.md
+Carpool_App_dc.html
+Carpool_App_Infrastructure_Plan_1.md
+
+# ─── Claude Code ──────────────────────────────────────────────────────
+# .claude/settings.json and .claude/hooks/ ARE tracked (shared guardrails).
+.claude/settings.local.json
+.claude/state/
+.claude/cache/
+.claude/*.log
+
+# ─── Editor & OS ──────────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ─── Logs & temp ──────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+.cache/
+tmp/
+temp/
