@@ -3,25 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Database } from "@/types/database";
+import { avatarColorFor as colorFor } from "@/domain/avatarColor";
 
 type Group = Database["public"]["Tables"]["group"]["Row"];
 type PickupPlace = Database["public"]["Tables"]["pickup_place"]["Row"];
-
-const AVATAR_COLORS = [
-  "var(--purple)",
-  "var(--teal)",
-  "var(--cyan)",
-  "var(--amber)",
-  "var(--pink)",
-  "var(--coral)",
-  "var(--green)",
-];
-
-function colorFor(id: string) {
-  let sum = 0;
-  for (let i = 0; i < id.length; i++) sum += id.charCodeAt(i);
-  return AVATAR_COLORS[sum % AVATAR_COLORS.length];
-}
 
 interface Props {
   group: Group;
@@ -59,7 +44,7 @@ export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces,
   }
 
   return (
-    <main style={{ minHeight: "100vh", position: "relative" }}>
+    <div style={{ position: "relative", flex: 1 }}>
       <div style={{ maxWidth: 430, margin: "0 auto", padding: "8px 20px 40px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0 10px" }}>
           <button
@@ -207,7 +192,7 @@ export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces,
       )}
       {sheet === "create" && <CreateGroupSheet onClose={() => setSheet(null)} />}
       {toast && <div className="toast" style={{ position: "fixed" }}>{toast}</div>}
-    </main>
+    </div>
   );
 }
 
@@ -422,7 +407,7 @@ function SwitchGroupSheet({
   );
 }
 
-function CreateGroupSheet({ onClose }: { onClose: () => void }) {
+export function CreateGroupSheet({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [origin, setOrigin] = useState("");

@@ -2,12 +2,17 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { CreateGroupSheet } from "./app/GroupScreen";
 
 // Ported from the sketch's LOCKED block: authenticated users with no group see zero trips and a
-// way back into the group-code step.
+// way back into the group-code step. The sketch itself has no "create a group" affordance here —
+// its "+ Create a new group" button only exists inside the app's You tab, which requires already
+// having a group. That leaves no path for the very first user ever to create a group, so this adds
+// one (reusing the same CreateGroupSheet the in-app Group tab uses) rather than porting the gap.
 export function LockedGate() {
   const router = useRouter();
   const [entering, setEntering] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -78,6 +83,19 @@ export function LockedGate() {
       <button className="btnP" style={{ maxWidth: 220 }} onClick={() => setEntering(true)}>
         Enter a code
       </button>
+      <p style={{ margin: "14px 0 0" }}>
+        <a
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            setCreating(true);
+          }}
+          style={{ font: "600 12px var(--font-body)", color: "rgba(0,0,0,.4)", textDecoration: "none" }}
+        >
+          Or create a new group →
+        </a>
+      </p>
+      {creating && <CreateGroupSheet onClose={() => setCreating(false)} />}
     </div>
   );
 }

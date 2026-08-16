@@ -148,7 +148,104 @@ caller to already be `group_admin` of that membership's group.
 - **Errors**: `401 unauthenticated`, `404 not_found`, `403 forbidden` (`"You can only set your own pickup place."` / `"Only a group admin can change roles."`), `400 invalid_request`, `500 update_failed`
 - **Side effects**: updates the `membership` row. No ledger/audit writes.
 
+## Trips
+
+Lifecycle transitions (`start`/`cancel`/`close`) are enforced by the pure state machine in
+`src/domain/tripMachine.ts` (exhaustively tested — see `tripMachine.test.ts`), not re-implemented in
+each route: `scheduled→started` (driver only, not before T-2h per D-16), `started→closed` (driver
+only), `scheduled→cancelled` (driver only). Every other transition is rejected.
+
+### `GET /api/trips?groupId=&scope=all|mine`
+Live trip feed for a group — `scheduled`/`started` trips only; closed/cancelled trips don't appear
+here.
+
+- **Auth**: required, caller must be a member of `groupId`
+- **Request**: query params `groupId` (required), `scope` (`all` default, or `mine` — trips where the caller is driving or an active rider)
+- **Response**: `{ trips: TripView[] }` (role/badge/day-label already derived for the caller; see `src/domain/types.ts`)
+- **Errors**: `401 unauthenticated`, `400 invalid_request` (missing groupId), `404 not_found` (not a member), `500 trip_lookup_failed` / `rider_lookup_failed` / `driver_lookup_failed`
+- **Side effects**: none
+
+### `POST /api/trips`
+Driver publishes a trip. The group owns the route — trips never invent origin/destination, only
+pick a direction along it.
+
+- **Auth**: required, caller must be a member of `groupId`
+- **Request**: `{ groupId: string (uuid), direction: "out" | "back" | "round", departAt: string (ISO date/time), returnAt?: string (ISO date/time, required iff direction is "round"), capacity: number (1-7) }`
+- **Response**: `201 { trip }`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found` (not a member), `500 trip_create_failed`
+- **Side effects**: inserts a `trip` row (`status: "scheduled"`, `driver_id` = caller). No ledger/audit writes.
+
+### `GET /api/trips/:id`
+Trip detail overlay: decorated summary plus the driver's pickup list in route order. RLS
+(`is_member`) makes this 404 rather than 403 for a non-member.
+
+- **Auth**: required, caller must be a member of the trip's group
+- **Request**: none
+- **Response**: `{ trip: DecoratedTrip, driverId, isDriver: boolean, cancelledReason: string | null, pickups: { id, name, initials?, color?, pickupLabel: string | null, stopOrder: number | null, isViewer: boolean }[] }`
+- **Errors**: `401 unauthenticated`, `404 not_found`
+- **Side effects**: none
+
+### `PATCH /api/trips/:id`
+Edit a trip. Driver only, and only while `status: "scheduled"` — a started or closed trip's plan is
+fixed.
+
+- **Auth**: required, caller must be the trip's driver
+- **Request**: any non-empty subset of `{ departAt: string (ISO), returnAt: string (ISO) | null, capacity: number (1-7) }`
+- **Response**: `{ trip }`
+- **Errors**: `401 unauthenticated`, `404 not_found`, `403 forbidden` (not the driver), `409 wrong_status` (not scheduled), `400 invalid_request`, `500 update_failed`
+- **Side effects**: updates the `trip` row. No ledger/audit writes.
+
+### `POST /api/trips/:id/start`
+Driver only, `scheduled→started`, not before T-2h (D-16).
+
+- **Auth**: required, caller must be the trip's driver
+- **Request**: none
+- **Response**: `{ trip }`
+- **Errors**: `401 unauthenticated`, `404 not_found`, `403 not_driver`, `409 wrong_status`, `409 too_early`
+- **Side effects**: updates `trip.status` and `started_at`. No ledger/audit writes; no `notification` rows yet (lands with Phase 5 push).
+
+### `POST /api/trips/:id/cancel`
+Driver only, `scheduled→cancelled`.
+
+- **Auth**: required, caller must be the trip's driver
+- **Request**: `{ reason?: string (max 200) }`
+- **Response**: `{ trip }`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `403 not_driver`, `409 wrong_status`
+- **Side effects**: updates `trip.status` and `cancelled_reason`. No ledger/audit writes.
+
+### `POST /api/trips/:id/close`
+Driver only, `started→closed`. **Phase 3 scope is the bare status transition only** — the full close
+flow (confirm riders, add guest riders, award drive/pool points, notify for kudos) is Phase 4's
+`feat(points)` commit, which extends this same endpoint rather than adding a new one.
+
+- **Auth**: required, caller must be the trip's driver
+- **Request**: none
+- **Response**: `{ trip }`
+- **Errors**: `401 unauthenticated`, `404 not_found`, `403 not_driver`, `409 wrong_status`
+- **Side effects**: updates `trip.status` and `closed_at`. No ledger/audit writes (yet).
+
+### `POST /api/trips/:id/join`
+Join an open seat. **Phase 3 scope**: a straightforward capacity check then insert. Phase 4 replaces
+this with the capacity-checked, transactional version that closes the race between two riders
+claiming the last seat, plus the pooled-points ledger entry.
+
+- **Auth**: required, caller must be a member of the trip's group and not its driver
+- **Request**: none
+- **Response**: `201 { tripRider }`
+- **Errors**: `401 unauthenticated`, `404 not_found`, `409 is_driver`, `409 wrong_status` (not scheduled), `409 already_joined`, `409 full`, `500 rider_lookup_failed` / `join_failed`
+- **Side effects**: inserts a `trip_rider` row (`state: "joined"`). No ledger/audit writes yet.
+
+### `POST /api/trips/:id/leave`
+Drop a seat you're holding. **Phase 3 scope**: marks the seat left. Phase 4 adds the 60-minute
+late-cancellation window check and the -5 point ledger entry (D-10 / `LATE_LEAVE`).
+
+- **Auth**: required, caller must hold an active seat on the trip
+- **Request**: none
+- **Response**: `{ tripRider }`
+- **Errors**: `401 unauthenticated`, `404 not_found` (trip missing or caller isn't riding it), `409 wrong_status` (trip already closed/cancelled), `500 leave_failed`
+- **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`). No ledger/audit writes yet.
+
 ## Planned surface
 
-Trips, kudos, points, notifications, admin console, and push endpoints land in later phases per
+Kudos, points, notifications, admin console, and push endpoints land in later phases per
 `02_IMPLEMENTATION_PLAN.md` §5 — documented here as each phase's routes are built.
