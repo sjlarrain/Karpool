@@ -1,0 +1,87 @@
+import type { TripView } from "@/domain/types";
+
+// Mirrors the embedded mock state in Carpool App.dc.html's Component class — same trips, same
+// riders, same days — so the styleguide is a like-for-like comparison against the sketch.
+export const mockTrips: TripView[] = [
+  {
+    id: "t1",
+    dayLabel: "Today · Mon 18",
+    time: "7:45",
+    from: "Riverside",
+    to: "HQ",
+    role: "driving",
+    driver: "You",
+    capacity: 4,
+    returnTime: "17:30",
+    status: "scheduled",
+    riders: [
+      { name: "Alex Morgan", initials: "AM", color: "var(--purple)" },
+      { name: "Jordan Silva", initials: "JS", color: "var(--amber)" },
+    ],
+  },
+  {
+    id: "t2",
+    dayLabel: "Today · Mon 18",
+    time: "8:10",
+    from: "Riverside",
+    to: "HQ",
+    role: "joined",
+    driver: "Dana Kim",
+    capacity: 4,
+    returnTime: "17:15",
+    status: "scheduled",
+    riders: [
+      { name: "Dana Kim", initials: "DK", color: "var(--teal)" },
+      { name: "You", initials: "AM", color: "var(--purple)" },
+      { name: "Nia B", initials: "NB", color: "var(--coral)" },
+    ],
+  },
+  {
+    id: "t3",
+    dayLabel: "Tomorrow · Tue 19",
+    time: "7:30",
+    from: "Riverside",
+    to: "HQ",
+    role: "open",
+    driver: "Marco Lee",
+    capacity: 3,
+    returnTime: "17:30",
+    status: "scheduled",
+    riders: [{ name: "Marco Lee", initials: "ML", color: "var(--cyan)" }],
+  },
+  {
+    id: "t4",
+    dayLabel: "Tomorrow · Tue 19",
+    time: "8:30",
+    from: "Riverside",
+    to: "HQ",
+    role: "open",
+    driver: "Priya Rao",
+    capacity: 4,
+    returnTime: "17:00",
+    status: "scheduled",
+    riders: [
+      { name: "Priya Rao", initials: "PR", color: "var(--pink)" },
+      { name: "Tom H", initials: "TH", color: "var(--purple)" },
+      { name: "Lena K", initials: "LK", color: "var(--amber)" },
+    ],
+  },
+  {
+    id: "t5",
+    dayLabel: "Wed 20",
+    time: "8:00",
+    from: "Riverside",
+    to: "HQ",
+    role: "open",
+    driver: "Sam West",
+    capacity: 4,
+    returnTime: null,
+    status: "scheduled",
+    riders: [
+      { name: "Sam West", initials: "SW", color: "var(--green)" },
+      { name: "Ivy P", initials: "IP", color: "var(--purple)" },
+    ],
+  },
+];
+
+export const dayOrder = ["Today · Mon 18", "Tomorrow · Tue 19", "Wed 20"];

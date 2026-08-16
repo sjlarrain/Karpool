@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#d9d5cb;font-family:'Plus Jakarta Sans',system-ui,sans-serif;display:flex;justify-content:center;padding:34px 0}
+a{color:#5b46c9}a:hover{color:#4636a8}
+.phone{width:322px;border-radius:44px;padding:11px;background:#16181d;box-shadow:0 30px 60px -20px rgba(0,0,0,.5),0 6px 16px rgba(0,0,0,.14);flex:none}
+.screen{position:relative;height:684px;border-radius:34px;overflow:hidden;display:flex;flex-direction:column;background:#faf8f2}
+.notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:96px;height:24px;background:#16181d;border-radius:20px;z-index:60}
+.stat{display:flex;justify-content:space-between;align-items:center;padding:13px 22px 3px;font:700 12px 'Plus Jakarta Sans';color:#16181d;flex:none;z-index:5}
+.stat .r{display:flex;gap:5px;align-items:center}
+.d{width:5px;height:5px;border-radius:50%;background:currentColor;display:inline-block}
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden}
+.scroll::-webkit-scrollbar{display:none}
+.card{background:#fff;border-radius:18px;padding:15px;border:1px solid rgba(0,0,0,.07);border-left-width:4px;box-shadow:0 2px 8px rgba(0,0,0,.05);cursor:pointer;transition:transform .12s ease,box-shadow .12s ease}
+.card:active{transform:scale(.985)}
+.pill{font:700 9.5px 'Plus Jakarta Sans';letter-spacing:.04em;padding:4px 9px;border-radius:20px}
+.tabbar{display:flex;justify-content:space-around;align-items:center;padding:11px 8px 22px;background:#fff;border-top:1px solid rgba(0,0,0,.06);flex:none;z-index:20}
+.tab{display:flex;flex-direction:column;align-items:center;gap:3px;font:600 9px 'Plus Jakarta Sans';color:rgba(0,0,0,.34);cursor:pointer;background:none;border:none;padding:2px 8px}
+.tab.on{color:#7c5cff;font-weight:700}
+.tab .i{font-size:18px;line-height:1}
+.fab{width:46px;height:46px;border-radius:16px;background:#17c964;color:#fff;font-size:25px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 7px 16px rgba(23,201,100,.42);margin-top:-26px;border:none;cursor:pointer}
+.ov{position:absolute;inset:0;background:#faf8f2;z-index:40;display:flex;flex-direction:column;animation:slide .26s cubic-bezier(.2,.8,.2,1)}
+@keyframes slide{from{transform:translateX(100%)}to{transform:translateX(0)}}
+.sheet{position:absolute;inset:0;background:rgba(0,0,0,.4);z-index:50;display:flex;align-items:flex-end;animation:fade .2s ease}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.sheetc{background:#faf8f2;border-radius:26px 26px 0 0;width:100%;padding:20px 20px 26px;animation:up .3s cubic-bezier(.2,.8,.2,1)}
+@keyframes up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.iconbtn{width:38px;height:38px;border-radius:13px;background:#fff;border:1px solid rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer}
+.field{width:100%;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:13px;padding:13px 14px;font:600 14px 'Plus Jakarta Sans';color:#16181d;outline:none}
+.field:focus{border-color:#7c5cff}
+.lbl{font:700 11px 'Plus Jakarta Sans';color:rgba(0,0,0,.5);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px;display:block}
+.btnP{width:100%;background:#17c964;color:#fff;border:none;border-radius:15px;padding:15px;font:800 15px 'Bricolage Grotesque';cursor:pointer;box-shadow:0 6px 16px rgba(23,201,100,.35)}
+.btnP:active{transform:scale(.99)}
+.btnG{width:100%;background:#16181d;color:#fff;border:none;border-radius:15px;padding:15px;font:800 15px 'Bricolage Grotesque';cursor:pointer}
+.seg{display:flex;background:#ece9e0;border-radius:13px;padding:3px}
+.segb{flex:1;text-align:center;font:600 12px 'Plus Jakarta Sans';color:rgba(0,0,0,.45);padding:9px;border-radius:10px;border:none;background:none;cursor:pointer}
+.segb.on{color:#16181d;font-weight:800;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.av{border-radius:9px;color:#fff;font:800 10px 'Plus Jakarta Sans';display:flex;align-items:center;justify-content:center;width:28px;height:28px;flex:none}
+.toast{position:absolute;bottom:96px;left:50%;transform:translateX(-50%);background:#16181d;color:#fff;font:700 12px 'Plus Jakarta Sans';padding:11px 18px;border-radius:22px;z-index:70;box-shadow:0 8px 20px rgba(0,0,0,.3);animation:up .3s ease;white-space:nowrap}
+.dayh{font:800 11px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);letter-spacing:.05em;text-transform:uppercase;margin:18px 0 11px}
+.route{font:700 17px 'Bricolage Grotesque';color:#16181d}
+h1,h2,h3{font-family:'Bricolage Grotesque'}
+</style>
+</helmet>
+
+<div class="phone"><div class="screen">
+<div class="notch"></div>
+<div class="stat"><span>9:41</span><span class="r"><span class="d"></span><span class="d"></span><span class="d"></span> 5G ▪</span></div>
+
+<!-- ============ AUTH ============ -->
+<sc-if value="{{ showAuth }}" hint-placeholder-val="{{ true }}">
+
+<!-- STEP 1: credentials -->
+<sc-if value="{{ authFormStep }}" hint-placeholder-val="{{ true }}">
+<div class="scroll" style="padding:26px 24px">
+<div style="width:60px;height:60px;border-radius:19px;background:linear-gradient(135deg,#17c964,#0ea5b0);display:flex;align-items:center;justify-content:center;font-size:30px;box-shadow:0 10px 24px rgba(23,201,100,.35)">🚗</div>
+<h1 style="font-size:30px;font-weight:800;color:#16181d;margin:22px 0 6px;line-height:1.05">Ride together,<br>rank higher.</h1>
+<p style="font:500 13.5px/1.5 'Plus Jakarta Sans';color:rgba(0,0,0,.5);margin:0 0 26px">Join your workplace carpool group to see rides, offer trips, and climb the leaderboard.</p>
+<div class="seg" style="margin-bottom:20px">
+<button class="segb {{ signinCls }}" onClick="{{ setSignin }}">Sign in</button>
+<button class="segb {{ signupCls }}" onClick="{{ setSignup }}">Sign up</button>
+</div>
+<label class="lbl">Email</label>
+<input class="field" style="margin-bottom:16px" type="email" placeholder="you@company.com" value="{{ email }}" onChange="{{ onEmail }}">
+<sc-if value="{{ isSignup }}" hint-placeholder-val="{{ false }}">
+<label class="lbl">Username</label>
+<input class="field" style="margin-bottom:16px" placeholder="e.g. Alex Morgan" value="{{ name }}" onChange="{{ onName }}">
+</sc-if>
+<label class="lbl">Password</label>
+<input class="field" style="margin-bottom:16px" type="password" placeholder="••••••••" value="{{ password }}" onChange="{{ onPassword }}">
+<button class="btnP" style="margin-top:14px" onClick="{{ submitStep1 }}">{{ step1Btn }}</button>
+<p style="text-align:center;margin:16px 0 0"><a href="#" onClick="{{ toggleAuthMode }}" style="font:600 12.5px 'Plus Jakarta Sans';text-decoration:none">{{ authSwitch }}</a></p>
+</div>
+</sc-if>
+
+<!-- STEP 2: group code (second window) -->
+<sc-if value="{{ authCodeStep }}" hint-placeholder-val="{{ false }}">
+<div class="scroll" style="padding:26px 24px">
+<button class="iconbtn" style="margin-top:18px" onClick="{{ backToStep1 }}">←</button>
+<div style="font-size:40px;margin:24px 0 0">🔑</div>
+<h1 style="font-size:26px;font-weight:800;color:#16181d;margin:14px 0 6px;line-height:1.1">Enter your<br>group code</h1>
+<p style="font:500 13.5px/1.5 'Plus Jakarta Sans';color:rgba(0,0,0,.5);margin:0 0 24px">One more step, {{ signupFirstName }}. A code connects you to your workplace carpool group.</p>
+<label class="lbl">Group code</label>
+<input class="field" placeholder="6-digit invite code" value="{{ code }}" onChange="{{ onCode }}">
+<p style="font:500 11.5px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);margin:8px 2px 4px">Ask your group admin for a code — try <b style="color:#17c964">NORTH1</b>.</p>
+<button class="btnP" style="margin-top:18px" onClick="{{ submitAuth }}">Join group &amp; finish</button>
+<p style="text-align:center;margin:14px 0 0"><a href="#" onClick="{{ noCode }}" style="font:600 12px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);text-decoration:none">I don't have a code yet →</a></p>
+</div>
+</sc-if>
+
+</sc-if>
+
+<!-- ============ LOCKED (no group) ============ -->
+<sc-if value="{{ showLocked }}" hint-placeholder-val="{{ false }}">
+<div class="scroll" style="padding:26px 24px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+<div style="font-size:46px">🔒</div>
+<h2 style="font-size:21px;font-weight:800;color:#16181d;margin:16px 0 6px">No group yet</h2>
+<p style="font:500 13px/1.5 'Plus Jakarta Sans';color:rgba(0,0,0,.5);margin:0 0 22px;max-width:230px">You need a group to see any trips. Enter an invite code or ask your admin to add you.</p>
+<button class="btnP" style="max-width:220px" onClick="{{ backToAuth }}">Enter a code</button>
+</div>
+</sc-if>
+
+<!-- ============ APP ============ -->
+<sc-if value="{{ showApp }}" hint-placeholder-val="{{ false }}">
+
+<!-- header -->
+<div style="padding:8px 20px 10px;flex:none">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<div><button onClick="{{ openGroup }}" style="background:none;border:none;padding:0;text-align:left;cursor:pointer;font:800 22px 'Bricolage Grotesque';color:#16181d">{{ groupName }} <span style="color:rgba(0,0,0,.3);font-size:15px">▾</span></button><div style="font:600 11px 'Plus Jakarta Sans';color:rgba(0,0,0,.45);margin-top:2px">{{ groupOrigin }} → {{ groupDest }}</div></div>
+<button class="iconbtn" onClick="{{ goAlerts }}" style="position:relative;background:#16181d;color:#fff;border:none">🔔<span style="position:absolute;top:8px;right:9px;width:8px;height:8px;border-radius:50%;background:#ff6b4a;border:2px solid #16181d"></span></button>
+</div>
+</div>
+
+<!-- CARPOOLS TAB -->
+<sc-if value="{{ tabCarpools }}" hint-placeholder-val="{{ true }}">
+<div style="padding:0 20px 6px;flex:none">
+<div class="seg">
+<button class="segb {{ allCls }}" onClick="{{ setFilterAll }}">All trips</button>
+<button class="segb {{ mineCls }}" onClick="{{ setFilterMine }}">Mine <sc-if value="{{ mineCount }}" hint-placeholder-val="{{ false }}"><span style="background:#7c5cff;color:#fff;border-radius:8px;padding:1px 6px;font-size:9px;margin-left:3px">{{ mineCount }}</span></sc-if></button>
+</div>
+</div>
+<div class="scroll" style="padding:0 20px 16px">
+<sc-for list="{{ days }}" as="day" hint-placeholder-count="2">
+<div class="dayh">{{ day.label }}</div>
+<sc-for list="{{ day.trips }}" as="t" hint-placeholder-count="2">
+<div class="card" style="border-left-color:{{ t.accent }};margin-bottom:11px" onClick="{{ t.open }}">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">
+<span class="pill" style="color:{{ t.badgeColor }};background:{{ t.badgeBg }}">{{ t.badge }}</span>
+<span style="font:800 14px 'Bricolage Grotesque';color:#16181d">{{ t.time }}</span>
+</div>
+<div class="route">{{ t.from }} <span style="color:rgba(0,0,0,.3)">→</span> {{ t.to }}</div>
+<div style="font:600 12px 'Plus Jakarta Sans';color:rgba(0,0,0,.5);margin-top:4px">{{ t.driverLabel }}</div>
+<div style="display:flex;gap:5px;align-items:center;margin-top:12px">
+<sc-for list="{{ t.avatars }}" as="a" hint-placeholder-count="2">
+<span class="av" style="background:{{ a.bg }};color:{{ a.fg }};{{ a.extra }}">{{ a.label }}</span>
+</sc-for>
+<span style="margin-left:auto;font:700 11px 'Plus Jakarta Sans';color:{{ t.seatColor }}">{{ t.seatStr }}</span>
+<sc-if value="{{ t.joinable }}" hint-placeholder-val="{{ false }}">
+<button onClick="{{ t.joinCard }}" style="width:30px;height:30px;border-radius:10px;background:#17c964;color:#fff;border:none;font-size:19px;font-weight:700;cursor:pointer;flex:none;box-shadow:0 3px 8px rgba(23,201,100,.35);line-height:1">+</button>
+</sc-if>
+</div>
+</div>
+</sc-for>
+</sc-for>
+<div style="height:8px"></div>
+</div>
+</sc-if>
+
+<!-- RANKS TAB -->
+<sc-if value="{{ tabRanks }}" hint-placeholder-val="{{ false }}">
+<div class="scroll" style="padding:0 20px 18px">
+<div style="background:linear-gradient(130deg,#7c5cff,#a855f7);border-radius:20px;padding:18px;color:#fff;margin-bottom:16px">
+<div style="font:700 11px 'Plus Jakarta Sans';opacity:.85;letter-spacing:.04em">YOUR SCORE · THIS MONTH</div>
+<div style="display:flex;align-items:flex-end;gap:8px;margin-top:4px"><span style="font:800 40px 'Bricolage Grotesque';line-height:1">{{ mePoints }}</span><span style="font:700 13px 'Plus Jakarta Sans';opacity:.85;margin-bottom:7px">pts · rank #{{ meRank }}</span></div>
+<div style="display:flex;gap:8px;margin-top:14px">
+<div style="flex:1;background:rgba(255,255,255,.15);border-radius:12px;padding:9px 11px"><div style="font:800 18px 'Bricolage Grotesque'">{{ meDriven }}</div><div style="font-size:10px;opacity:.85">🚗 Driven</div></div>
+<div style="flex:1;background:rgba(255,255,255,.15);border-radius:12px;padding:9px 11px"><div style="font:800 18px 'Bricolage Grotesque'">{{ mePooled }}</div><div style="font-size:10px;opacity:.85">🧍 Pooled</div></div>
+<div style="flex:1;background:rgba(255,255,255,.15);border-radius:12px;padding:9px 11px"><div style="font:800 18px 'Bricolage Grotesque'">{{ meKudos }}</div><div style="font-size:10px;opacity:.85">💚 Kudos</div></div>
+</div>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3 style="font-size:16px;font-weight:800;color:#16181d;margin:0">Leaderboard</h3><span style="font:600 10.5px 'Plus Jakarta Sans';color:rgba(0,0,0,.4)">{{ lbFormula }}</span></div>
+<sc-for list="{{ lb }}" as="r" hint-placeholder-count="5">
+<div style="display:flex;align-items:center;gap:11px;background:{{ r.rowBg }};border:1px solid {{ r.rowBorder }};border-radius:15px;padding:11px 13px;margin-bottom:8px">
+<div style="width:26px;text-align:center;font:800 15px 'Bricolage Grotesque';color:{{ r.rankColor }}">{{ r.rankLabel }}</div>
+<span class="av" style="background:{{ r.color }};width:34px;height:34px;border-radius:11px;font-size:12px">{{ r.initials }}</span>
+<div style="flex:1"><div style="font:700 14px 'Bricolage Grotesque';color:#16181d">{{ r.name }}</div><div style="font:600 10.5px 'Plus Jakarta Sans';color:rgba(0,0,0,.45)">{{ r.sub }}</div></div>
+<div style="font:800 16px 'Bricolage Grotesque';color:#16181d">{{ r.points }}</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<!-- ALERTS TAB -->
+<!-- YOU TAB -->
+<sc-if value="{{ tabYou }}" hint-placeholder-val="{{ false }}">
+<div class="scroll" style="padding:8px 20px 18px;text-align:center">
+<span class="av" style="width:72px;height:72px;border-radius:24px;font-size:26px;margin:8px auto 0;background:#7c5cff">{{ userInitials }}</span>
+<h2 style="font-size:20px;font-weight:800;color:#16181d;margin:12px 0 2px">{{ userName }}</h2>
+<p style="font:600 12px 'Plus Jakarta Sans';color:rgba(0,0,0,.45);margin:0 0 18px">{{ groupName }} · {{ groupMembers }} members</p>
+<button onClick="{{ goGroup }}" style="width:100%;display:flex;align-items:center;gap:12px;background:#f0ecff;border:1px solid rgba(124,92,255,.3);border-radius:15px;padding:12px 13px;margin:0 0 14px;cursor:pointer;text-align:left"><span class="av" style="width:38px;height:38px;border-radius:12px;background:#7c5cff;font-size:14px">N</span><div style="flex:1"><div style="font:800 14px 'Bricolage Grotesque';color:#16181d">North Campus</div><div style="font:600 11px 'Plus Jakarta Sans';color:rgba(0,0,0,.45)">Group profile · location, code, prices</div></div><span style="color:rgba(0,0,0,.3);font-size:15px">→</span></button>
+<div style="background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:16px;padding:14px;margin-bottom:14px;text-align:left">
+<label class="lbl">Your pickup neighborhood</label>
+<div class="seg">
+<button class="segb {{ locSepCls }}" onClick="{{ setLocSep }}">Sepulveda</button>
+<button class="segb {{ locSawCls }}" onClick="{{ setLocSaw }}">Sawtelle</button>
+</div>
+<p style="font:500 10.5px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);margin:9px 2px 0">Drivers' route maps use this to plot your pickup stop.</p>
+</div>
+<div style="display:flex;gap:9px;margin-bottom:10px">
+<div style="flex:1;background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:15px;padding:14px"><div style="font:800 22px 'Bricolage Grotesque';color:#7c5cff">{{ meDriven }}</div><div style="font:600 10px 'Plus Jakarta Sans';color:rgba(0,0,0,.5)">Trips driven</div></div>
+<div style="flex:1;background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:15px;padding:14px"><div style="font:800 22px 'Bricolage Grotesque';color:#14b8c4">{{ mePooled }}</div><div style="font:600 10px 'Plus Jakarta Sans';color:rgba(0,0,0,.5)">People pooled</div></div>
+<div style="flex:1;background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:15px;padding:14px"><div style="font:800 22px 'Bricolage Grotesque';color:#17c964">{{ meKudos }}</div><div style="font:600 10px 'Plus Jakarta Sans';color:rgba(0,0,0,.5)">Kudos earned</div></div>
+</div>
+<button class="btnP" style="margin-top:8px;margin-bottom:10px" onClick="{{ openNewGroup }}">+ Create a new group</button>
+<button class="btnG" onClick="{{ signOut }}">Switch group / sign out</button>
+</div>
+</sc-if>
+
+<!-- TAB BAR -->
+
+</sc-if>
+
+<!-- ============ TRIP DETAIL OVERLAY ============ -->
+<sc-if value="{{ overlayTrip }}" hint-placeholder-val="{{ false }}">
+<div class="ov">
+<div style="padding:44px 18px 0;flex:none;display:flex;align-items:center;gap:12px"><button class="iconbtn" onClick="{{ closeOverlay }}">←</button><span class="pill" style="color:{{ cur.badgeColor }};background:{{ cur.badgeBg }}">{{ cur.badge }}</span></div>
+<div class="scroll" style="padding:14px 18px 18px">
+<!-- map -->
+<div style="position:relative;height:158px;border-radius:18px;overflow:hidden;margin-bottom:16px;background:#e8ede7">
+<svg viewBox="0 0 320 160" style="position:absolute;inset:0;width:100%;height:100%">
+<rect width="320" height="160" fill="#eef1ea"></rect>
+<g stroke="#dbe0d6" stroke-width="1">
+<path d="M0 40 H320 M0 90 H320 M0 130 H320 M70 0 V160 M170 0 V160 M250 0 V160"></path></g>
+<path d="M40 130 C 110 110, 120 60, 200 55 S 280 40, 285 32" fill="none" stroke="#17c964" stroke-width="4" stroke-linecap="round" stroke-dasharray="1 9"></path>
+<circle cx="40" cy="130" r="7" fill="#7c5cff" stroke="#fff" stroke-width="2.5"></circle>
+<circle cx="140" cy="70" r="6" fill="#ffb020" stroke="#fff" stroke-width="2.5"></circle>
+<circle cx="200" cy="55" r="6" fill="#ffb020" stroke="#fff" stroke-width="2.5"></circle>
+<rect x="277" y="24" width="16" height="16" rx="4" fill="#16181d"></rect>
+</svg>
+<span style="position:absolute;top:10px;left:12px;background:rgba(255,255,255,.9);border-radius:8px;padding:4px 9px;font:700 10px 'Plus Jakarta Sans';color:#16181d">🗺️ Route preview</span>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px"><h2 style="font-size:22px;font-weight:800;color:#16181d;margin:0;max-width:220px;line-height:1.1">{{ cur.from }} → {{ cur.to }}</h2></div>
+<div style="display:flex;gap:16px;margin:12px 0 18px">
+<div><div style="font:600 10px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);text-transform:uppercase">Departs</div><div style="font:800 17px 'Bricolage Grotesque';color:#16181d">{{ cur.time }}</div></div>
+<sc-if value="{{ cur.hasReturn }}" hint-placeholder-val="{{ false }}"><div><div style="font:600 10px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);text-transform:uppercase">Returns</div><div style="font:800 17px 'Bricolage Grotesque';color:#16181d">{{ cur.returnTime }}</div></div></sc-if>
+<div><div style="font:600 10px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);text-transform:uppercase">Seats</div><div style="font:800 17px 'Bricolage Grotesque';color:{{ cur.seatColor }}">{{ cur.seatStr }}</div></div>
+</div>
+
+<!-- driver row -->
+<div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:15px;padding:12px;margin-bottom:16px">
+<span class="av" style="width:38px;height:38px;border-radius:12px;background:{{ cur.driverColor }};font-size:13px">{{ cur.driverInitials }}</span>
+<div style="flex:1"><div style="font:700 14px 'Bricolage Grotesque';color:#16181d">{{ cur.driverName }}</div><div style="font:600 11px 'Plus Jakarta Sans';color:rgba(0,0,0,.45)">Driver{{ cur.driverYou }}</div></div>
+</div>
+
+<!-- OWNER: passengers + pickups -->
+<sc-if value="{{ cur.isOwner }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px"><h3 style="font-size:14px;font-weight:800;color:#16181d;margin:0">Pickups ({{ cur.pax.length }})</h3><span style="font:600 10.5px 'Plus Jakarta Sans';color:rgba(0,0,0,.4)">in route order</span></div>
+<sc-for list="{{ cur.pax }}" as="p" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:15px;padding:11px 12px;margin-bottom:8px">
+<div style="width:22px;height:22px;border-radius:50%;background:#ffb020;color:#053d20;font:800 10px 'Plus Jakarta Sans';display:flex;align-items:center;justify-content:center;flex:none">{{ p.stop }}</div>
+<span class="av" style="background:{{ p.color }}">{{ p.initials }}</span>
+<div style="flex:1"><div style="font:700 13px 'Plus Jakarta Sans';color:#16181d">{{ p.name }}</div><div style="font:600 11px 'Plus Jakarta Sans';color:rgba(0,0,0,.5)">📍 {{ p.pickup }}</div></div>
+</div>
+</sc-for>
+<div style="height:8px"></div>
+<sc-if value="{{ cur.notStarted }}" hint-placeholder-val="{{ true }}"><button class="btnP" onClick="{{ startTrip }}">Start trip · notify riders</button></sc-if>
+<sc-if value="{{ cur.started }}" hint-placeholder-val="{{ false }}"><div style="background:#e2f7f8;border:1px solid rgba(20,184,196,.4);border-radius:13px;padding:11px;text-align:center;font:700 12px 'Plus Jakarta Sans';color:#0e9aa6;margin-bottom:10px">● Trip in progress — riders notified</div><button class="btnG" onClick="{{ askClose }}">End &amp; close trip</button></sc-if>
+</sc-if>
+
+<!-- OPEN: join -->
+<sc-if value="{{ cur.canJoin }}" hint-placeholder-val="{{ false }}">
+<div style="background:#e4f9ee;border:1px solid rgba(23,201,100,.4);border-radius:13px;padding:12px;text-align:center;font:600 12.5px 'Plus Jakarta Sans';color:#0a7a41;margin-bottom:12px">{{ cur.seatsLeft }} seat left — hop in and split the drive.</div>
+<button class="btnP" onClick="{{ joinTrip }}">Request to join</button>
+</sc-if>
+<sc-if value="{{ cur.full }}" hint-placeholder-val="{{ false }}">
+<div style="background:#f3f1ea;border:1px solid rgba(0,0,0,.08);border-radius:13px;padding:12px;text-align:center;font:600 12.5px 'Plus Jakarta Sans';color:rgba(0,0,0,.5)">This carpool is full.</div>
+</sc-if>
+
+<!-- JOINED -->
+<sc-if value="{{ cur.isJoined }}" hint-placeholder-val="{{ false }}">
+<div style="background:#e2f7f8;border:1px solid rgba(20,184,196,.4);border-radius:13px;padding:12px;text-align:center;font:600 12.5px 'Plus Jakarta Sans';color:#0e9aa6;margin-bottom:10px">✓ You're riding this trip. {{ cur.driverName }} will pick you up.</div>
+<div style="background:#fff7e6;border:1px solid rgba(255,176,32,.4);border-radius:13px;padding:11px 12px;font:500 11.5px/1.45 'Plus Jakarta Sans';color:#8a5a00;margin-bottom:12px">⚠️ Drop out up to <b>1 hour before departure</b> for free — later cancellations cost points.</div>
+<button class="btnG" style="background:#fff;color:#c0392b;border:1px solid rgba(192,57,43,.3)" onClick="{{ askLeave }}">Leave this carpool</button>
+</sc-if>
+</div>
+</div>
+</sc-if>
+
+<!-- ============ CREATE OVERLAY ============ -->
+<sc-if value="{{ overlayCreate }}" hint-placeholder-val="{{ false }}">
+<div class="ov">
+<div style="padding:44px 18px 12px;flex:none;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(0,0,0,.06)"><button class="iconbtn" onClick="{{ closeOverlay }}">←</button><h2 style="font-size:18px;font-weight:800;color:#16181d;margin:0">Offer a trip</h2></div>
+<div class="scroll" style="padding:18px">
+<label class="lbl">Direction</label>
+<div class="seg" style="margin-bottom:18px">
+<button class="segb {{ f_twoway }}" onClick="{{ setTwoway }}">↔ Round trip</button>
+<button class="segb {{ f_oneway }}" onClick="{{ setOneway }}">→ One way</button>
+</div>
+<label class="lbl">Route</label>
+<sc-if value="{{ fShowReturn }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;align-items:center;gap:10px;background:#f0ecff;border:1px solid rgba(124,92,255,.3);border-radius:13px;padding:13px 14px;margin-bottom:6px"><span style="font:800 15px 'Bricolage Grotesque';color:#16181d">{{ groupOrigin }} ↔ {{ groupDest }}</span></div>
+<p style="font:500 11px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);margin:0 2px 18px">Set by your group — every {{ groupName }} trip runs this route.</p>
+</sc-if>
+<sc-if value="{{ fShowDir }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px">
+<button onClick="{{ setDirOut }}" style="display:flex;align-items:center;gap:10px;background:{{ dirOutBg }};border:1.5px solid {{ dirOutBorder }};border-radius:13px;padding:13px 14px;cursor:pointer;text-align:left"><span style="font-size:16px">🌅</span><div style="flex:1"><div style="font:800 14px 'Bricolage Grotesque';color:#16181d">{{ groupOrigin }} → {{ groupDest }}</div><div style="font:600 10.5px 'Plus Jakarta Sans';color:rgba(0,0,0,.45)">Morning commute in</div></div><span style="font-size:15px;color:{{ dirOutBorder }}">{{ dirOutCheck }}</span></button>
+<button onClick="{{ setDirBack }}" style="display:flex;align-items:center;gap:10px;background:{{ dirBackBg }};border:1.5px solid {{ dirBackBorder }};border-radius:13px;padding:13px 14px;cursor:pointer;text-align:left"><span style="font-size:16px">🌇</span><div style="flex:1"><div style="font:800 14px 'Bricolage Grotesque';color:#16181d">{{ groupDest }} → {{ groupOrigin }}</div><div style="font:600 10.5px 'Plus Jakarta Sans';color:rgba(0,0,0,.45)">Evening commute home</div></div><span style="font-size:15px;color:{{ dirBackBorder }}">{{ dirBackCheck }}</span></button>
+</div>
+<p style="font:500 11px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);margin:6px 2px 18px">One-way — pick which leg of the group route you're driving.</p>
+</sc-if>
+<label class="lbl">Seats available</label>
+<div style="display:flex;align-items:center;gap:16px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:13px;padding:9px 14px;margin-bottom:18px">
+<button onClick="{{ capDec }}" style="width:34px;height:34px;border-radius:11px;border:none;background:#f0eee7;font-size:20px;font-weight:700;cursor:pointer">−</button>
+<div style="flex:1;text-align:center;font:800 20px 'Bricolage Grotesque';color:#16181d">{{ fCap }}</div>
+<button onClick="{{ capInc }}" style="width:34px;height:34px;border-radius:11px;border:none;background:#f0eee7;font-size:20px;font-weight:700;cursor:pointer">+</button>
+</div>
+<div style="display:flex;gap:12px;margin-bottom:18px">
+<div style="flex:1"><label class="lbl">Departs</label><input class="field" type="time" value="{{ fDep }}" onChange="{{ onFDep }}"></div>
+<sc-if value="{{ fShowReturn }}" hint-placeholder-val="{{ true }}"><div style="flex:1"><label class="lbl">Returns</label><input class="field" type="time" value="{{ fRet }}" onChange="{{ onFRet }}"></div></sc-if>
+</div>
+<button class="btnP" onClick="{{ createTrip }}">Publish to {{ groupName }}</button>
+</div>
+</div>
+</sc-if>
+
+<!-- ============ CLOSE / RATE OWNER OVERLAY ============ -->
+<sc-if value="{{ overlayClose }}" hint-placeholder-val="{{ false }}">
+<div class="ov">
+<div style="padding:44px 18px 12px;flex:none;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(0,0,0,.06)"><button class="iconbtn" onClick="{{ closeOverlay }}">←</button><h2 style="font-size:18px;font-weight:800;color:#16181d;margin:0">Close trip</h2></div>
+<div class="scroll" style="padding:18px">
+<p style="font:600 13px/1.5 'Plus Jakarta Sans';color:rgba(0,0,0,.55);margin:0 0 16px">Confirm who rode with you. Everyone confirmed gets pooled points and a nudge to leave you kudos.</p>
+<label class="lbl">Riders</label>
+<sc-for list="{{ closePax }}" as="p" hint-placeholder-count="2">
+<button onClick="{{ p.toggle }}" style="width:100%;display:flex;align-items:center;gap:11px;background:#fff;border:1px solid {{ p.border }};border-radius:14px;padding:11px 12px;margin-bottom:8px;cursor:pointer">
+<span class="av" style="background:{{ p.color }}">{{ p.initials }}</span>
+<div style="flex:1;text-align:left;font:700 13px 'Plus Jakarta Sans';color:#16181d">{{ p.name }}</div>
+<span style="width:24px;height:24px;border-radius:50%;background:{{ p.checkBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px">{{ p.check }}</span>
+</button>
+</sc-for>
+<label class="lbl" style="margin-top:14px">Drove someone not in the group?</label>
+<div style="display:flex;gap:8px;margin-bottom:6px"><input class="field" placeholder="Add a guest rider's name" value="{{ newPassenger }}" onChange="{{ onNewPassenger }}"><button onClick="{{ addUnregistered }}" style="background:#16181d;color:#fff;border:none;border-radius:13px;padding:0 16px;font-weight:800;cursor:pointer">Add</button></div>
+<p style="font:500 11px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);margin:2px 2px 20px">Guest riders still count toward your pooled score.</p>
+<button class="btnP" onClick="{{ confirmClose }}">Close &amp; notify riders</button>
+</div>
+</div>
+</sc-if>
+
+<!-- ============ RATE (passenger) OVERLAY ============ -->
+<sc-if value="{{ overlayRate }}" hint-placeholder-val="{{ false }}">
+<div class="ov">
+<div style="padding:44px 18px 12px;flex:none;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(0,0,0,.06)"><button class="iconbtn" onClick="{{ closeOverlay }}">←</button><h2 style="font-size:18px;font-weight:800;color:#16181d;margin:0">Rate your ride</h2></div>
+<div class="scroll" style="padding:18px;text-align:center">
+<span class="av" style="width:64px;height:64px;border-radius:20px;font-size:22px;margin:10px auto 0;background:#7c5cff">DK</span>
+<h2 style="font-size:19px;font-weight:800;color:#16181d;margin:14px 0 2px">Dana drove Riverside → HQ</h2>
+<p style="font:600 12px 'Plus Jakarta Sans';color:rgba(0,0,0,.45);margin:0 0 22px">Say thanks — it boosts their score.</p>
+<div style="background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:16px;padding:18px;text-align:left">
+<button onClick="{{ toggleKudos }}" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:5px;background:{{ kBg }};border:1.5px solid {{ kBorder }};border-radius:16px;padding:20px;cursor:pointer;margin-bottom:18px">
+<div style="font-size:38px">💚</div>
+<div style="font:800 15px 'Bricolage Grotesque';color:{{ kFg }}">{{ kudosLabel }}</div>
+<div style="font:500 11px 'Plus Jakarta Sans';color:rgba(0,0,0,.45)">One kudos per ride — you give it or you don't</div>
+</button>
+<label class="lbl">Comment (optional)</label>
+<textarea class="field" rows="3" placeholder="Great ride, thanks for the coffee!" value="{{ rateComment }}" onChange="{{ onRateComment }}" style="resize:none;font-family:'Plus Jakarta Sans'"></textarea>
+</div>
+<button class="btnP" style="margin-top:16px" onClick="{{ submitRate }}">{{ rateBtn }}</button>
+</div>
+</div>
+</sc-if>
+
+<!-- ============ GROUP SHEET ============ -->
+<!-- GROUP SWITCHER (from top bar) -->
+<sc-if value="{{ overlayGroup }}" hint-placeholder-val="{{ false }}">
+<div class="sheet" onClick="{{ closeOverlay }}">
+<div class="sheetc" onClick="{{ stop }}">
+<div style="width:38px;height:4px;background:rgba(0,0,0,.15);border-radius:2px;margin:0 auto 16px"></div>
+<h3 style="font-size:17px;font-weight:800;color:#16181d;margin:0 0 12px">Switch group</h3>
+<div style="display:flex;align-items:center;gap:11px;background:#f0ecff;border:1px solid rgba(124,92,255,.35);border-radius:15px;padding:12px;margin-bottom:9px"><span class="av" style="width:38px;height:38px;border-radius:12px;background:#7c5cff;font-size:14px">N</span><div style="flex:1"><div style="font:800 14px 'Bricolage Grotesque';color:#16181d">North Campus</div><div style="font:600 11px 'Plus Jakarta Sans';color:rgba(0,0,0,.45)">24 members · admin: Sarah</div></div><span style="color:#7c5cff;font-size:16px">✓</span></div>
+<div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:15px;padding:12px;margin-bottom:16px"><span class="av" style="width:38px;height:38px;border-radius:12px;background:#0ea5b0;font-size:14px">W</span><div style="flex:1"><div style="font:800 14px 'Bricolage Grotesque';color:#16181d">Warehouse East</div><div style="font:600 11px 'Plus Jakarta Sans';color:rgba(0,0,0,.45)">11 members</div></div></div>
+<label class="lbl">Join another group</label>
+<div style="display:flex;gap:8px"><input class="field" placeholder="Enter invite code" value="{{ joinCode }}" onChange="{{ onJoinCode }}"><button onClick="{{ closeOverlay }}" style="background:#17c964;color:#fff;border:none;border-radius:13px;padding:0 18px;font-weight:800;cursor:pointer">Join</button></div>
+</div>
+</div>
+</sc-if>
+
+<!-- GROUP TAB (full view) -->
+<sc-if value="{{ tabGroup }}" hint-placeholder-val="{{ false }}">
+<div class="scroll" style="padding:8px 20px 18px;text-align:center">
+<span class="av" style="width:72px;height:72px;border-radius:24px;font-size:26px;margin:8px auto 0;background:#7c5cff">N</span>
+<h2 style="font-size:20px;font-weight:800;color:#16181d;margin:12px 0 2px">North Campus</h2>
+<p style="font:600 12px 'Plus Jakarta Sans';color:rgba(0,0,0,.45);margin:0 0 18px">24 members · Riverside → HQ</p>
+<label class="lbl" style="text-align:left">Group details</label>
+<div style="background:#fff;border:1px solid rgba(0,0,0,.07);border-radius:16px;overflow:hidden;margin-bottom:16px;text-align:left">
+<div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid rgba(0,0,0,.06)"><span style="font-size:17px">📍</span><div style="flex:1"><div style="font:600 10px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);text-transform:uppercase;letter-spacing:.04em">Location</div><div style="font:700 13px 'Plus Jakarta Sans';color:#16181d">Riverside → HQ · West LA</div></div></div>
+<div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid rgba(0,0,0,.06)"><span style="font-size:17px">👑</span><div style="flex:1"><div style="font:600 10px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);text-transform:uppercase;letter-spacing:.04em">Administrator</div><div style="font:700 13px 'Plus Jakarta Sans';color:#16181d">Sarah Chen</div></div></div>
+<div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid rgba(0,0,0,.06)"><span style="font-size:17px">💵</span><div style="flex:1"><div style="font:600 10px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);text-transform:uppercase;letter-spacing:.04em">Cost split</div><div style="font:700 13px 'Plus Jakarta Sans';color:#16181d">~$2.40 / rider · gas &amp; tolls shared</div></div></div>
+<div style="display:flex;align-items:center;gap:12px;padding:13px 14px"><span style="font-size:17px">🔢</span><div style="flex:1"><div style="font:600 10px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);text-transform:uppercase;letter-spacing:.04em">Group code</div><div style="font:800 15px 'Bricolage Grotesque';color:#16181d;letter-spacing:.14em">NORTH1</div></div></div>
+</div>
+<label class="lbl" style="text-align:left">Pickup places</label>
+<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+<div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:14px;padding:12px 13px;text-align:left"><span style="width:30px;height:30px;border-radius:9px;background:#f0ecff;display:flex;align-items:center;justify-content:center;font-size:15px;flex:none">📍</span><div style="flex:1"><div style="font:800 13px 'Plus Jakarta Sans';color:#16181d">Sepulveda</div><div style="font:600 10.5px 'Plus Jakarta Sans';color:rgba(0,0,0,.45)">Sepulveda &amp; Venice — 7:40a</div></div></div>
+<div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:14px;padding:12px 13px;text-align:left"><span style="width:30px;height:30px;border-radius:9px;background:#e2f7f8;display:flex;align-items:center;justify-content:center;font-size:15px;flex:none">📍</span><div style="flex:1"><div style="font:800 13px 'Plus Jakarta Sans';color:#16181d">Sawtelle</div><div style="font:600 10.5px 'Plus Jakarta Sans';color:rgba(0,0,0,.45)">Sawtelle &amp; Olympic — 7:52a</div></div></div>
+</div>
+<label class="lbl" style="text-align:left">Invite more riders</label>
+<div style="display:flex;gap:8px"><div class="field" style="flex:1;display:flex;align-items:center;font-weight:700;color:rgba(0,0,0,.55);overflow:hidden;white-space:nowrap">carpool.app/j/NORTH1</div><button onClick="{{ copyInvite }}" style="background:#16181d;color:#fff;border:none;border-radius:13px;padding:0 16px;font-weight:800;cursor:pointer;flex:none">Share</button></div>
+</div>
+</sc-if>
+
+<!-- TAB BAR (static bottom) -->
+<sc-if value="{{ showApp }}" hint-placeholder-val="{{ false }}">
+<div class="tabbar">
+<button class="tab {{ carpoolsCls }}" onClick="{{ goCarpools }}"><span class="i">🚗</span>Carpools</button>
+<button class="tab {{ ranksCls }}" onClick="{{ goRanks }}"><span class="i">🏆</span>Ranks</button>
+<button class="fab" onClick="{{ openCreate }}">+</button>
+<button class="tab {{ groupCls }}" onClick="{{ goGroup }}"><span class="i">👥</span>Group</button>
+<button class="tab {{ youCls }}" onClick="{{ goYou }}"><span class="i">👤</span>You</button>
+</div>
+</sc-if>
+
+<!-- NOTIFICATIONS (from bell) -->
+<sc-if value="{{ overlayNotifs }}" hint-placeholder-val="{{ false }}">
+<div class="sheet" onClick="{{ closeOverlay }}">
+<div class="sheetc" onClick="{{ stop }}">
+<div style="width:38px;height:4px;background:rgba(0,0,0,.15);border-radius:2px;margin:0 auto 16px"></div>
+<h3 style="font-size:17px;font-weight:800;color:#16181d;margin:0 0 12px">Notifications</h3>
+<sc-for list="{{ notifs }}" as="n" hint-placeholder-count="4">
+<div style="display:flex;gap:12px;padding:13px;background:{{ n.bg }};border:1px solid rgba(0,0,0,.06);border-radius:15px;margin-bottom:9px;cursor:{{ n.cursor }}" onClick="{{ n.action }}">
+<div style="width:34px;height:34px;border-radius:11px;background:{{ n.iconBg }};display:flex;align-items:center;justify-content:center;font-size:16px;flex:none">{{ n.icon }}</div>
+<div style="flex:1"><div style="font:700 13px 'Plus Jakarta Sans';color:#16181d;line-height:1.3">{{ n.title }}</div><div style="font:500 11.5px 'Plus Jakarta Sans';color:rgba(0,0,0,.5);margin-top:3px">{{ n.body }}</div><sc-if value="{{ n.cta }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;margin-top:8px;font:800 11px 'Plus Jakarta Sans';color:#7c5cff">{{ n.cta }} →</span></sc-if></div>
+<div style="font:600 10px 'Plus Jakarta Sans';color:rgba(0,0,0,.35);flex:none">{{ n.time }}</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ overlayNewGroup }}" hint-placeholder-val="{{ false }}">
+<div class="sheet" onClick="{{ closeOverlay }}">
+<div class="sheetc" onClick="{{ stop }}">
+<div style="width:38px;height:4px;background:rgba(0,0,0,.15);border-radius:2px;margin:0 auto 16px"></div>
+<h3 style="font-size:17px;font-weight:800;color:#16181d;margin:0 0 4px">Create a group</h3>
+<p style="font:500 12px 'Plus Jakarta Sans';color:rgba(0,0,0,.45);margin:0 0 16px">You'll be the admin. Set the shared route every trip will run.</p>
+<label class="lbl">Group name</label>
+<input class="field" style="margin-bottom:14px" placeholder="e.g. South Office Pool" value="{{ ngName }}" onChange="{{ onNgName }}">
+<div style="display:flex;gap:10px;margin-bottom:16px">
+<div style="flex:1"><label class="lbl">Starts at</label><input class="field" placeholder="Riverside" value="{{ ngOrigin }}" onChange="{{ onNgOrigin }}"></div>
+<div style="flex:1"><label class="lbl">Ends at</label><input class="field" placeholder="HQ" value="{{ ngDest }}" onChange="{{ onNgDest }}"></div>
+</div>
+<label class="lbl">Pickup places</label>
+<p style="font:500 11px 'Plus Jakarta Sans';color:rgba(0,0,0,.4);margin:-2px 2px 8px">Stops along the route where riders wait for pickup.</p>
+<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
+<sc-for list="{{ ngPickups }}" as="p" hint-placeholder-count="2">
+<div style="display:flex;gap:8px;align-items:center"><input class="field" style="flex:1" placeholder="e.g. Sepulveda &amp; Venice" value="{{ p.value }}" onChange="{{ p.onChange }}"><button onClick="{{ p.remove }}" style="width:44px;height:44px;border-radius:13px;background:#fff;border:1px solid rgba(0,0,0,.1);color:rgba(0,0,0,.4);font-size:18px;cursor:pointer;flex:none">−</button></div>
+</sc-for>
+</div>
+<button onClick="{{ addNgPickup }}" style="width:100%;background:#f0ecff;border:1px dashed rgba(124,92,255,.5);border-radius:13px;padding:11px;font:800 12px 'Plus Jakarta Sans';color:#7c5cff;cursor:pointer;margin-bottom:16px">+ Add pickup place</button>
+<button class="btnP" onClick="{{ createGroup }}">Create group</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ overlayConfirmLeave }}" hint-placeholder-val="{{ false }}">
+<div class="sheet" style="align-items:center;padding:0 26px" onClick="{{ cancelLeave }}">
+<div class="sheetc" style="border-radius:22px;width:100%;padding:24px;animation:fade .18s ease" onClick="{{ stop }}">
+<div style="font-size:34px;text-align:center">🚪</div>
+<h3 style="font-size:18px;font-weight:800;color:#16181d;margin:12px 0 6px;text-align:center">Leave this carpool?</h3>
+<p style="font:500 12.5px/1.5 'Plus Jakarta Sans';color:rgba(0,0,0,.55);margin:0 0 20px;text-align:center">Your seat opens up for someone else. Dropping within 1 hour of departure costs points.</p>
+<div style="display:flex;gap:10px">
+<button class="btnG" style="background:#f0eee7;color:#16181d" onClick="{{ cancelLeave }}">Cancel</button>
+<button class="btnP" style="background:#c0392b;box-shadow:none" onClick="{{ leaveTrip }}">Leave</button>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}"><div class="toast">{{ toast }}</div></sc-if>
+
+</div></div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:344,&quot;height&quot;:740},&quot;driveWeight&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:10,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:0,&quot;max&quot;:30,&quot;section&quot;:&quot;Leaderboard scoring&quot;,&quot;unit&quot;:&quot;pts/drive&quot;},&quot;poolWeight&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:3,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:0,&quot;max&quot;:30,&quot;section&quot;:&quot;Leaderboard scoring&quot;,&quot;unit&quot;:&quot;pts/pool&quot;},&quot;kudosWeight&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:2,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:0,&quot;max&quot;:30,&quot;section&quot;:&quot;Leaderboard scoring&quot;,&quot;unit&quot;:&quot;pts/kudos&quot;},&quot;defaultSeats&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:3,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:1,&quot;max&quot;:7,&quot;section&quot;:&quot;Trips&quot;,&quot;unit&quot;:&quot;seats&quot;}}">
+class Component extends DCLogic {
+  state = {
+    authed: false, name: "", email: "", password: "", code: "", hasGroup: true, authMode: "signin", signupStep: 1, userLocation: "Sepulveda", ngName: "", ngOrigin: "", ngDest: "", ngPickupList: ["", ""],
+    tab: "carpools", filter: "all",
+    overlay: null, currentId: null,
+    fMode: "twoway", fDir: "out", fName: "", fCap: 3, fDep: "07:45", fRet: "17:30",
+    kudosGiven: false, rateComment: "",
+    newPassenger: "", joinCode: "",
+    riderChecks: { "Alex Morgan": true, "Jordan Silva": true },
+    meDriven: 9, mePooled: 26, meKudos: 31,
+    toast: "",
+    trips: [
+      { id: "t1", day: "Today · Mon 18", time: "7:45", from: "Riverside", to: "HQ", role: "driving",
+        driver: "You", cap: 4, returnTime: "17:30",
+        pax: [ { name: "Alex Morgan", initials: "AM", color: "#7c5cff", pickup: "Riverside Metro · 7:50", stop: 1 },
+               { name: "Jordan Silva", initials: "JS", color: "#ffb020", pickup: "Elm & 4th · 7:58", stop: 2 } ],
+        status: "scheduled" },
+      { id: "t2", day: "Today · Mon 18", time: "8:10", from: "Riverside", to: "HQ", role: "joined",
+        driver: "Dana Kim", cap: 4, returnTime: "17:15",
+        pax: [ { name: "Dana Kim", initials: "DK", color: "#14b8c4" }, { name: "You", initials: "AM", color: "#7c5cff" }, { name: "Nia B", initials: "NB", color: "#ff6b4a" } ], status: "scheduled" },
+      { id: "t3", day: "Tomorrow · Tue 19", time: "7:30", from: "Riverside", to: "HQ", role: "open",
+        driver: "Marco Lee", cap: 3, returnTime: "17:30",
+        pax: [ { name: "Marco Lee", initials: "ML", color: "#0ea5b0" } ], status: "scheduled" },
+      { id: "t4", day: "Tomorrow · Tue 19", time: "8:30", from: "Riverside", to: "HQ", role: "open",
+        driver: "Priya Rao", cap: 4, returnTime: "17:00",
+        pax: [ { name: "Priya Rao", initials: "PR", color: "#e0559f" }, { name: "Tom H", initials: "TH", color: "#7c5cff" }, { name: "Lena K", initials: "LK", color: "#ffb020" } ], status: "scheduled" },
+      { id: "t5", day: "Wed 20", time: "8:00", from: "Riverside", to: "HQ", role: "open",
+        driver: "Sam West", cap: 4, returnTime: null,
+        pax: [ { name: "Sam West", initials: "SW", color: "#17c964" }, { name: "Ivy P", initials: "IP", color: "#7c5cff" } ], status: "scheduled" },
+    ],
+    notifs: [
+      { id: "n1", type: "start", icon: "🚗", title: "Dana started your carpool", body: "Maple St → HQ · she's on the way to your stop.", time: "now", read: false },
+      { id: "n2", type: "rate", icon: "💚", title: "Trip closed — leave kudos", body: "Rate Dana's ride and award points.", time: "2m", cta: "Rate ride" },
+      { id: "n3", type: "change", icon: "⏰", title: "Departure changed", body: "Priya moved Downtown → HQ to 8:30 (was 8:15).", time: "1h" },
+      { id: "n4", type: "comment", icon: "💬", title: "Jordan commented on your trip", body: "\"Thanks for the ride — smooth as always!\"", time: "3h" },
+      { id: "n5", type: "tip", icon: "💡", title: "Tip", body: "Add a pickup note so drivers find you faster.", time: "1d" },
+    ],
+    others: [
+      { name: "Sarah Chen", initials: "SC", color: "#e0559f", driven: 12, pooled: 34, kudos: 48 },
+      { name: "Dana Kim", initials: "DK", color: "#14b8c4", driven: 8, pooled: 22, kudos: 40 },
+      { name: "Priya Rao", initials: "PR", color: "#0ea5b0", driven: 6, pooled: 15, kudos: 20 },
+      { name: "Marco Lee", initials: "ML", color: "#ffb020", driven: 4, pooled: 9, kudos: 12 },
+    ],
+  };
+
+  flash(msg) { this.setState({ toast: msg }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ toast: "" }), 2200); }
+  set(k) { return (e) => this.setState({ [k]: e.target.value }); }
+  componentDidMount() { const d = this.props.defaultSeats; if (d != null) this.setState({ fCap: d }); }
+  pts(d, p, k) { const dw = this.props.driveWeight ?? 10, pw = this.props.poolWeight ?? 3, kw = this.props.kudosWeight ?? 2; return d * dw + p * pw + k * kw; }
+
+  decorate(t) {
+    const roles = {
+      driving: { badge: "YOU'RE DRIVING", badgeColor: "#7c5cff", badgeBg: "#f0ecff", accent: "#7c5cff" },
+      joined:  { badge: "JOINED", badgeColor: "#0e9aa6", badgeBg: "#e2f7f8", accent: "#14b8c4" },
+      open:    { badge: "", badgeColor: "rgba(0,0,0,.5)", badgeBg: "#eeece6", accent: "#e5e1d6" },
+    };
+    const r = roles[t.role];
+    const filled = t.pax.length;
+    const seatsLeft = t.cap - filled;
+    const badge = t.role === "open" ? (seatsLeft > 0 ? "OPEN · " + seatsLeft + " SEAT" + (seatsLeft > 1 ? "S" : "") : "FULL") : r.badge;
+    const avatars = t.pax.slice(0, 3).map(p => ({ label: p.initials, bg: p.color, fg: "#fff", extra: "" }));
+    for (let i = filled; i < t.cap && avatars.length < 4; i++)
+      avatars.push({ label: "+", bg: "rgba(0,0,0,.04)", fg: "rgba(0,0,0,.35)", extra: "border:1px dashed rgba(0,0,0,.2)" });
+    return { ...t, badge, badgeColor: r.badgeColor, badgeBg: r.badgeBg, accent: r.accent,
+      avatars, seatsLeft, joinable: t.role === "open" && seatsLeft > 0, seatStr: filled + " / " + t.cap + " seats",
+      seatColor: t.role === "open" && seatsLeft > 0 ? "#17c964" : "rgba(0,0,0,.45)",
+      driverLabel: t.role === "driving" ? "You\u2019re driving" : t.driver + " is driving" };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const showAuth = !s.authed && !s.hasGroup === false && !s.authed;
+    const authed = s.authed && s.hasGroup;
+    const go = (tab) => () => this.setState({ tab, overlay: null });
+    const cls = (on) => on ? "on" : "";
+
+    const joinById = (id) => { this.setState(st => ({ trips: st.trips.map(t => t.id === id ? { ...t, role: "joined", pax: [...t.pax, { name: "You", initials: "AM", color: "#7c5cff" }] } : t) })); this.flash("Joined \u2014 added to your trips \ud83c\udf89"); };
+
+    // filtered days
+    const list = s.trips.filter(t => s.filter === "all" ? true : (t.role === "driving" || t.role === "joined"));
+    const order = ["Today · Mon 18", "Tomorrow · Tue 19", "Wed 20"];
+    const days = order.map(label => ({
+      label, trips: list.filter(t => t.day === label).sort((a, b) => a.time.localeCompare(b.time))
+        .map(t => ({ ...this.decorate(t), open: () => this.setState({ overlay: "trip", currentId: t.id }), joinCard: (e) => { e.stopPropagation(); joinById(t.id); } })),
+    })).filter(d => d.trips.length);
+    const mineCount = s.trips.filter(t => t.role === "driving" || t.role === "joined").length;
+
+    // current trip
+    const raw = s.trips.find(t => t.id === s.currentId);
+    let cur = {};
+    if (raw) {
+      const d = this.decorate(raw);
+      const driver = raw.pax[0] || { initials: "?", color: "#888", name: raw.driver };
+      cur = { ...d,
+        hasReturn: !!raw.returnTime,
+        driverName: raw.role === "driving" ? "You" : raw.driver,
+        driverInitials: raw.role === "driving" ? "AM" : driver.initials,
+        driverColor: raw.role === "driving" ? "#7c5cff" : driver.color,
+        driverYou: raw.role === "driving" ? " · that's you" : "",
+        isOwner: raw.role === "driving",
+        isJoined: raw.role === "joined",
+        canJoin: raw.role === "open" && d.seatsLeft > 0,
+        full: raw.role === "open" && d.seatsLeft <= 0,
+        notStarted: raw.status === "scheduled",
+        started: raw.status === "started",
+        pax: raw.pax.filter(p => p.name !== "You"),
+      };
+    }
+
+    // leaderboard
+    const meRow = { name: "You (" + (s.name || "Alex") + ")", initials: "AM", color: "#7c5cff", driven: s.meDriven, pooled: s.mePooled, kudos: s.meKudos, me: true };
+    const rows = [...s.others, meRow].map(r => ({ ...r, points: this.pts(r.driven, r.pooled, r.kudos) }))
+      .sort((a, b) => b.points - a.points);
+    const medals = ["🥇", "🥈", "🥉"];
+    const lb = rows.map((r, i) => ({
+      name: r.name, initials: r.initials, color: r.color, points: r.points,
+      rankLabel: i < 3 ? medals[i] : (i + 1),
+      rankColor: i < 3 ? "#16181d" : "rgba(0,0,0,.4)",
+      sub: r.driven + " driven · " + r.pooled + " pooled · " + r.kudos + " kudos",
+      rowBg: r.me ? "#f0ecff" : "#fff", rowBorder: r.me ? "rgba(124,92,255,.35)" : "rgba(0,0,0,.06)",
+    }));
+    const meRank = rows.findIndex(r => r.me) + 1;
+
+    // notifications
+    const notifs = s.notifs.map(n => {
+      const bg = { start: "#e2f7f8", rate: "#f4f0ff", change: "#fff7e6", comment: "#fff", tip: "#eef6ff" }[n.type] || "#fff";
+      const iconBg = { start: "#e2f7f8", rate: "#efeaff", change: "#fff0d6", comment: "#f0eee7", tip: "#e3efff" }[n.type] || "#f0eee7";
+      const isRate = n.type === "rate";
+      return { ...n, bg: n.type === "start" ? "#e2f7f8" : bg, iconBg, cta: n.cta || null,
+        cursor: isRate ? "pointer" : "default",
+        action: isRate ? () => this.setState({ overlay: "rate" }) : () => {} };
+    });
+
+    // close overlay riders
+    const closePax = raw && raw.role === "driving"
+      ? raw.pax.filter(p => p.name !== "You").map(p => {
+          const on = s.riderChecks[p.name] !== false;
+          return { name: p.name, initials: p.initials, color: p.color,
+            check: on ? "✓" : "", checkBg: on ? "#17c964" : "rgba(0,0,0,.12)",
+            border: on ? "rgba(23,201,100,.45)" : "rgba(0,0,0,.08)",
+            toggle: () => this.setState({ riderChecks: { ...s.riderChecks, [p.name]: !on } }) };
+        })
+      : [];
+
+    // kudos (binary)
+    const kudosGiven = s.kudosGiven;
+
+    return {
+      showAuth: !s.authed, showApp: authed, showLocked: s.authed && !s.hasGroup,
+      authFormStep: !(s.authMode === "signup" && s.signupStep === 2),
+      authCodeStep: s.authMode === "signup" && s.signupStep === 2,
+      signupFirstName: (s.name || "").trim().split(" ")[0] || "there",
+      name: s.name, email: s.email, code: s.code, onName: this.set("name"), onEmail: this.set("email"), onCode: this.set("code"),
+      submitStep1: () => { if (s.authMode === "signup") this.setState({ signupStep: 2 }); else this.setState({ authed: true, hasGroup: true }); },
+      step1Btn: s.authMode === "signup" ? "Continue" : "Sign in",
+      backToStep1: () => this.setState({ signupStep: 1 }),
+      submitAuth: () => this.setState({ authed: true, hasGroup: true }),
+      noCode: (e) => { e.preventDefault(); this.setState({ authed: true, hasGroup: false }); },
+      backToAuth: () => this.setState({ authed: false, hasGroup: true }),
+      userLocation: s.userLocation,
+      locSepCls: cls(s.userLocation === "Sepulveda"), locSawCls: cls(s.userLocation === "Sawtelle"),
+      setLocSep: () => this.setState({ userLocation: "Sepulveda" }), setLocSaw: () => this.setState({ userLocation: "Sawtelle" }),
+      copyInvite: () => this.flash("Invite link copied \ud83d\udd17"),
+      groupName: "North Campus", groupInitial: "N", groupMembers: 24, groupOrigin: "Riverside", groupDest: "HQ",
+      userName: s.name || "Alex Morgan", userInitials: "AM",
+
+      tabCarpools: s.tab === "carpools", tabRanks: s.tab === "ranks", tabGroup: s.tab === "group", tabYou: s.tab === "you",
+      carpoolsCls: cls(s.tab === "carpools"), ranksCls: cls(s.tab === "ranks"), groupCls: cls(s.tab === "group"), youCls: cls(s.tab === "you"),
+      goCarpools: go("carpools"), goRanks: go("ranks"), goGroup: go("group"), goYou: go("you"),
+      goAlerts: () => this.setState({ overlay: "notifs" }),
+
+      allCls: cls(s.filter === "all"), mineCls: cls(s.filter === "mine"),
+      setFilterAll: () => this.setState({ filter: "all" }), setFilterMine: () => this.setState({ filter: "mine" }),
+      mineCount, days,
+
+      cur, overlayTrip: s.overlay === "trip", overlayCreate: s.overlay === "create",
+      overlayClose: s.overlay === "close", overlayGroup: s.overlay === "group", overlayRate: s.overlay === "rate",
+      overlayNotifs: s.overlay === "notifs",
+      closeOverlay: () => this.setState({ overlay: null }), stop: (e) => e.stopPropagation(),
+      openGroup: () => this.setState({ overlay: "group" }), openCreate: () => this.setState({ overlay: "create" }),
+      password: s.password, onPassword: this.set("password"),
+      isSignup: s.authMode === "signup", signinCls: cls(s.authMode === "signin"), signupCls: cls(s.authMode === "signup"),
+      setSignin: () => this.setState({ authMode: "signin", signupStep: 1 }), setSignup: () => this.setState({ authMode: "signup", signupStep: 1 }),
+      toggleAuthMode: (e) => { e.preventDefault(); this.setState({ authMode: s.authMode === "signin" ? "signup" : "signin", signupStep: 1 }); },
+      authBtn: s.authMode === "signup" ? "Create account" : "Sign in",
+      authSwitch: s.authMode === "signup" ? "Have an account? Sign in" : "New here? Create account",
+      overlayNewGroup: s.overlay === "newgroup", openNewGroup: () => this.setState({ overlay: "newgroup" }),
+      ngName: s.ngName, onNgName: this.set("ngName"), ngOrigin: s.ngOrigin, onNgOrigin: this.set("ngOrigin"), ngDest: s.ngDest, onNgDest: this.set("ngDest"),
+      ngPickups: s.ngPickupList.map((v, i) => ({ value: v, onChange: (e) => this.setState(st => ({ ngPickupList: st.ngPickupList.map((x, j) => j === i ? e.target.value : x) })), remove: () => this.setState(st => ({ ngPickupList: st.ngPickupList.length > 1 ? st.ngPickupList.filter((_, j) => j !== i) : st.ngPickupList })) })),
+      addNgPickup: () => this.setState(st => ({ ngPickupList: [...st.ngPickupList, ""] })),
+      createGroup: () => { this.flash((s.ngName || "New group") + " created \u2014 you're admin \u2728"); this.setState({ overlay: null, ngName: "", ngOrigin: "", ngDest: "", ngPickupList: ["", ""] }); },
+      overlayConfirmLeave: s.overlay === "confirmLeave", askLeave: () => this.setState({ overlay: "confirmLeave" }), cancelLeave: () => this.setState({ overlay: "trip" }),
+
+      joinTrip: () => { this.setState(st => ({ trips: st.trips.map(t => t.id === st.currentId ? { ...t, role: "joined", pax: [...t.pax, { name: "You", initials: "AM", color: "#7c5cff" }] } : t) })); this.flash("Joined — added to your trips 🎉"); },
+      leaveTrip: () => { const late = raw && raw.day.startsWith("Today"); this.setState(st => ({ overlay: null, trips: st.trips.map(t => t.id === st.currentId ? { ...t, role: "open", pax: t.pax.filter(p => p.name !== "You") } : t) })); this.flash(late ? "Left within 1h \u2014 \u22125 pts penalty" : "You left the carpool"); },
+      startTrip: () => { this.setState(st => ({ trips: st.trips.map(t => t.id === st.currentId ? { ...t, status: "started" } : t) })); this.flash("Trip started — riders notified 🚗"); },
+      askClose: () => this.setState({ overlay: "close" }),
+      confirmClose: () => { const n = Object.values(s.riderChecks).filter(Boolean).length; this.setState(st => ({ overlay: null, meDriven: st.meDriven + 1, mePooled: st.mePooled + n, trips: st.trips.map(t => t.id === st.currentId ? { ...t, status: "closed" } : t) })); this.flash("Trip closed · +" + (10 + n * 3) + " pts, riders notified"); },
+      newPassenger: s.newPassenger, onNewPassenger: this.set("newPassenger"),
+      addUnregistered: () => { if (!s.newPassenger.trim()) return; this.flash(s.newPassenger.trim() + " added as guest rider"); this.setState({ newPassenger: "" }); },
+      closePax,
+
+      f_twoway: cls(s.fMode === "twoway"), f_oneway: cls(s.fMode === "oneway"),
+      setTwoway: () => this.setState({ fMode: "twoway" }), setOneway: () => this.setState({ fMode: "oneway" }),
+      fName: s.fName, onFName: this.set("fName"), fShowReturn: s.fMode === "twoway", fShowDir: s.fMode === "oneway",
+      setDirOut: () => this.setState({ fDir: "out" }), setDirBack: () => this.setState({ fDir: "back" }),
+      dirOutBg: s.fDir === "out" ? "#f0ecff" : "#fff", dirOutBorder: s.fDir === "out" ? "#7c5cff" : "rgba(0,0,0,.1)", dirOutCheck: s.fDir === "out" ? "\u25cf" : "\u25cb",
+      dirBackBg: s.fDir === "back" ? "#f0ecff" : "#fff", dirBackBorder: s.fDir === "back" ? "#7c5cff" : "rgba(0,0,0,.1)", dirBackCheck: s.fDir === "back" ? "\u25cf" : "\u25cb",
+      fCap: s.fCap, capInc: () => this.setState(st => ({ fCap: Math.min(7, st.fCap + 1) })), capDec: () => this.setState(st => ({ fCap: Math.max(1, st.fCap - 1) })),
+      fDep: s.fDep, onFDep: this.set("fDep"), fRet: s.fRet, onFRet: this.set("fRet"),
+      createTrip: () => { this.setState(st => { const back = st.fMode === "oneway" && st.fDir === "back"; return ({ overlay: null, tab: "carpools", trips: [...st.trips, { id: "u" + Date.now(), day: "Today · Mon 18", time: st.fDep.replace(/^0/, ""), from: back ? "HQ" : "Riverside", to: back ? "Riverside" : "HQ", role: "driving", driver: "You", cap: st.fCap, returnTime: st.fMode === "twoway" ? st.fRet : null, pax: [], status: "scheduled" }] }); }); this.flash("Trip published to North Campus \u2728"); },
+
+      lb, meRank, mePoints: this.pts(s.meDriven, s.mePooled, s.meKudos),
+      meDriven: s.meDriven, mePooled: s.mePooled, meKudos: s.meKudos,
+      lbFormula: (this.props.driveWeight ?? 10) + "\u00b7drive + " + (this.props.poolWeight ?? 3) + "\u00b7pool + " + (this.props.kudosWeight ?? 2) + "\u00b7kudos",
+
+      notifs,
+      rateComment: s.rateComment, onRateComment: this.set("rateComment"),
+      kudosGiven, toggleKudos: () => this.setState({ kudosGiven: !s.kudosGiven }),
+      kBg: kudosGiven ? "#e4f9ee" : "#faf8f2", kBorder: kudosGiven ? "rgba(23,201,100,.6)" : "rgba(0,0,0,.12)", kFg: kudosGiven ? "#0a7a41" : "rgba(0,0,0,.6)",
+      kudosLabel: kudosGiven ? "Kudos given \u2713" : "Give kudos",
+      rateBtn: kudosGiven ? "Send kudos \ud83d\udc9a" : "Skip & close",
+      submitRate: () => { this.setState({ overlay: null, kudosGiven: false, rateComment: "", notifs: s.notifs.filter(n => n.type !== "rate") }); this.flash(s.kudosGiven ? "Kudos sent to Dana \ud83d\udc9a" : "Ride closed"); },
+
+      joinCode: s.joinCode, onJoinCode: this.set("joinCode"),
+      signOut: () => this.setState({ authed: false, tab: "carpools", overlay: null }),
+      toast: s.toast,
+    };
+  }
+}
+</script>
+</body>
+</html>

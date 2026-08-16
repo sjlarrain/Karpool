@@ -1,0 +1,46 @@
+/* Design tokens — ported verbatim from Carpool App.dc.html / 02_IMPLEMENTATION_PLAN.md §3.2.
+   Do not re-derive or "improve" these values; they are the visual spec. */
+:root {
+  --page: #d9d5cb;
+  --bg: #faf8f2;
+  --surface: #fff;
+  --ink: #16181d;
+  --muted: rgba(0, 0, 0, 0.45);
+  --hairline: rgba(0, 0, 0, 0.07);
+  --purple: #7c5cff;
+  --purple-soft: #f0ecff;
+  --purple-deep: #a855f7;
+  --green: #17c964;
+  --green-soft: #e4f9ee;
+  --green-ink: #0a7a41;
+  --teal: #14b8c4;
+  --teal-soft: #e2f7f8;
+  --teal-ink: #0e9aa6;
+  --cyan: #0ea5b0;
+  --amber: #ffb020;
+  --amber-soft: #fff7e6;
+  --amber-ink: #8a5a00;
+  --coral: #ff6b4a;
+  --pink: #e0559f;
+  --danger: #c0392b;
+  --seg-bg: #ece9e0;
+  --chip: #f0eee7;
+  --r-sm: 10px;
+  --r-md: 13px;
+  --r-lg: 15px;
+  --r-xl: 18px;
+  --r-2xl: 22px;
+  --r-3xl: 26px;
+  --font-display: "Bricolage Grotesque", system-ui, sans-serif;
+  --font-body: "Plus Jakarta Sans", system-ui, sans-serif;
+
+  /* Extensions beyond the base palette snippet — the sketch's decorate() function uses these two
+     hex values for the "open" trip role (unclaimed seat) that aren't in the core palette above.
+     Added here rather than inline so G7 (no hex outside tokens.css) still holds. */
+  --role-open-accent: #e5e1d6;
+  --role-open-badge-bg: #eeece6;
+
+  /* Sketch's default link colour, used nowhere else in the palette block. */
+  --link: #5b46c9;
+  --link-hover: #4636a8;
+}

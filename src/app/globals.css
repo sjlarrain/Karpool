@@ -1,0 +1,11 @@
+@import "../styles/tokens.css";
+@import "../styles/components.css";
+
+body {
+  margin: 0;
+  background: var(--page);
+  font-family: var(--font-body);
+  display: flex;
+  justify-content: center;
+  padding: 34px 0;
+}
