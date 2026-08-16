@@ -1,0 +1,44 @@
+{
+  "name": "carpool",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test",
+    "db:types": "supabase gen types typescript --local > src/types/database.ts",
+    "db:diff": "supabase db diff",
+    "verify": "pnpm typecheck && pnpm lint && pnpm test"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.43.0",
+    "@supabase/ssr": "^0.12.0",
+    "date-fns": "^3.0.0",
+    "next": "^15.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "web-push": "^3.6.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.1",
+    "@types/node": "^20.10.6",
+    "@types/react": "^18.2.46",
+    "@types/react-dom": "^18.2.18",
+    "@types/web-push": "^3.6.3",
+    "@vitest/coverage-v8": "^1.1.1",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "^15.0.3",
+    "prettier": "^3.1.1",
+    "supabase": "^1.154.5",
+    "typescript": "^5.3.3",
+    "tsx": "^4.7.0",
+    "vitest": "^1.1.1"
+  }
+}
