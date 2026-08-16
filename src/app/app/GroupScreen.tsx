@@ -1,0 +1,482 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import type { Database } from "@/types/database";
+
+type Group = Database["public"]["Tables"]["group"]["Row"];
+type PickupPlace = Database["public"]["Tables"]["pickup_place"]["Row"];
+
+const AVATAR_COLORS = [
+  "var(--purple)",
+  "var(--teal)",
+  "var(--cyan)",
+  "var(--amber)",
+  "var(--pink)",
+  "var(--coral)",
+  "var(--green)",
+];
+
+function colorFor(id: string) {
+  let sum = 0;
+  for (let i = 0; i < id.length; i++) sum += id.charCodeAt(i);
+  return AVATAR_COLORS[sum % AVATAR_COLORS.length];
+}
+
+interface Props {
+  group: Group;
+  role: "member" | "group_admin";
+  memberCount: number;
+  adminName: string | null;
+  pickupPlaces: PickupPlace[];
+  inviteLink: string;
+  otherGroups: { id: string; name: string }[];
+}
+
+export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces, inviteLink, otherGroups }: Props) {
+  const router = useRouter();
+  const [sheet, setSheet] = useState<"switch" | "create" | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  function flash(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(null), 2200);
+  }
+
+  async function signOut() {
+    await fetch("/api/auth/signout", { method: "POST" });
+    router.push("/");
+    router.refresh();
+  }
+
+  async function copyInvite() {
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      flash("Invite link copied 🔗");
+    } catch {
+      flash("Couldn't copy — copy it manually");
+    }
+  }
+
+  return (
+    <main style={{ minHeight: "100vh", position: "relative" }}>
+      <div style={{ maxWidth: 430, margin: "0 auto", padding: "8px 20px 40px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0 10px" }}>
+          <button
+            onClick={() => setSheet("switch")}
+            style={{ background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer" }}
+          >
+            <span style={{ font: "800 20px var(--font-display)", color: "var(--ink)" }}>
+              {group.name} <span style={{ color: "rgba(0,0,0,.3)", fontSize: 15 }}>▾</span>
+            </span>
+          </button>
+          <button className="iconbtn" onClick={signOut} title="Sign out">
+            ⎋
+          </button>
+        </div>
+
+        <div style={{ textAlign: "center", padding: "8px 0 18px" }}>
+          <span
+            className="av"
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: 24,
+              fontSize: 26,
+              margin: "8px auto 0",
+              background: colorFor(group.id),
+            }}
+          >
+            {group.name.charAt(0).toUpperCase()}
+          </span>
+          <h2 style={{ fontSize: 20, fontWeight: 800, color: "var(--ink)", margin: "12px 0 2px" }}>{group.name}</h2>
+          <p style={{ font: "600 12px var(--font-body)", color: "rgba(0,0,0,.45)", margin: 0 }}>
+            {memberCount} member{memberCount === 1 ? "" : "s"} · {group.origin_label} → {group.dest_label}
+          </p>
+        </div>
+
+        <label className="lbl" style={{ textAlign: "left" }}>
+          Group details
+        </label>
+        <div
+          style={{
+            background: "var(--surface)",
+            border: "1px solid var(--hairline)",
+            borderRadius: 16,
+            overflow: "hidden",
+            marginBottom: 16,
+            textAlign: "left",
+          }}
+        >
+          <DetailRow icon="📍" label="Location" value={`${group.origin_label} → ${group.dest_label}`} />
+          <DetailRow icon="👑" label="Administrator" value={adminName ?? "—"} />
+          <DetailRow icon="💵" label="Cost split" value={group.cost_split_note ?? "Not set"} />
+          <DetailRow icon="🔢" label="Group code" value={group.code} last mono />
+        </div>
+
+        <label className="lbl" style={{ textAlign: "left" }}>
+          Pickup places
+        </label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+          {pickupPlaces.length === 0 && (
+            <p style={{ font: "500 12px var(--font-body)", color: "rgba(0,0,0,.4)" }}>No pickup places yet.</p>
+          )}
+          {pickupPlaces.map((p) => (
+            <div
+              key={p.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 11,
+                background: "var(--surface)",
+                border: "1px solid rgba(0,0,0,.08)",
+                borderRadius: 14,
+                padding: "12px 13px",
+                textAlign: "left",
+              }}
+            >
+              <span
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 9,
+                  background: "var(--purple-soft)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 15,
+                  flex: "none",
+                }}
+              >
+                📍
+              </span>
+              <div style={{ flex: 1 }}>
+                <div style={{ font: "800 13px var(--font-body)", color: "var(--ink)" }}>{p.label}</div>
+                <div style={{ font: "600 10.5px var(--font-body)", color: "rgba(0,0,0,.45)" }}>
+                  {p.address}
+                  {p.typical_time ? ` — ${p.typical_time}` : ""}
+                </div>
+              </div>
+            </div>
+          ))}
+          {role === "group_admin" && <AddPickupPlace groupId={group.id} onAdded={() => router.refresh()} />}
+        </div>
+
+        <label className="lbl" style={{ textAlign: "left" }}>
+          Invite more riders
+        </label>
+        <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+          <div
+            className="field"
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              fontWeight: 700,
+              color: "rgba(0,0,0,.55)",
+              overflow: "hidden",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {inviteLink}
+          </div>
+          <button
+            onClick={copyInvite}
+            style={{
+              background: "var(--ink)",
+              color: "var(--surface)",
+              border: "none",
+              borderRadius: 13,
+              padding: "0 16px",
+              fontWeight: 800,
+              cursor: "pointer",
+              flex: "none",
+            }}
+          >
+            Share
+          </button>
+        </div>
+
+        <button className="btnP" style={{ marginBottom: 10 }} onClick={() => setSheet("create")}>
+          + Create a new group
+        </button>
+      </div>
+
+      {sheet === "switch" && (
+        <SwitchGroupSheet current={{ id: group.id, name: group.name }} others={otherGroups} onClose={() => setSheet(null)} />
+      )}
+      {sheet === "create" && <CreateGroupSheet onClose={() => setSheet(null)} />}
+      {toast && <div className="toast" style={{ position: "fixed" }}>{toast}</div>}
+    </main>
+  );
+}
+
+function DetailRow({ icon, label, value, last, mono }: { icon: string; label: string; value: string; last?: boolean; mono?: boolean }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "13px 14px",
+        borderBottom: last ? undefined : "1px solid rgba(0,0,0,.06)",
+      }}
+    >
+      <span style={{ fontSize: 17 }}>{icon}</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ font: "600 10px var(--font-body)", color: "rgba(0,0,0,.4)", textTransform: "uppercase", letterSpacing: ".04em" }}>
+          {label}
+        </div>
+        <div
+          style={{
+            font: mono ? "800 15px var(--font-display)" : "700 13px var(--font-body)",
+            color: "var(--ink)",
+            letterSpacing: mono ? ".14em" : undefined,
+          }}
+        >
+          {value}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddPickupPlace({ groupId, onAdded }: { groupId: string; onAdded: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [label, setLabel] = useState("");
+  const [address, setAddress] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        style={{
+          width: "100%",
+          background: "var(--purple-soft)",
+          border: "1px dashed rgba(124,92,255,.5)",
+          borderRadius: 13,
+          padding: 11,
+          font: "800 12px var(--font-body)",
+          color: "var(--purple)",
+          cursor: "pointer",
+        }}
+      >
+        + Add pickup place
+      </button>
+    );
+  }
+
+  async function submit() {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/groups/${groupId}/pickup-places`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label, address }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.message ?? "Couldn't add that pickup place.");
+        return;
+      }
+      setLabel("");
+      setAddress("");
+      setOpen(false);
+      onAdded();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid rgba(0,0,0,.08)", borderRadius: 14, padding: 12 }}>
+      <input className="field" style={{ marginBottom: 8 }} placeholder="e.g. Sepulveda" value={label} onChange={(e) => setLabel(e.target.value)} />
+      <input
+        className="field"
+        style={{ marginBottom: 8 }}
+        placeholder="e.g. Sepulveda & Venice"
+        value={address}
+        onChange={(e) => setAddress(e.target.value)}
+      />
+      {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "0 0 8px" }}>{error}</p>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button className="btnG" style={{ background: "var(--chip)", color: "var(--ink)" }} onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+        <button className="btnP" disabled={busy} onClick={submit}>
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SwitchGroupSheet({
+  current,
+  others,
+  onClose,
+}: {
+  current: { id: string; name: string };
+  others: { id: string; name: string }[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function join() {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/groups/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.message ?? "That code didn't work.");
+        return;
+      }
+      router.push(`/app?g=${body.group.id}`);
+      router.refresh();
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="sheet" onClick={onClose}>
+      <div className="sheetc" onClick={(e) => e.stopPropagation()}>
+        <div style={{ width: 38, height: 4, background: "rgba(0,0,0,.15)", borderRadius: 2, margin: "0 auto 16px" }} />
+        <h3 style={{ fontSize: 17, fontWeight: 800, color: "var(--ink)", margin: "0 0 12px" }}>Switch group</h3>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 11,
+            background: "var(--purple-soft)",
+            border: "1px solid rgba(124,92,255,.35)",
+            borderRadius: 15,
+            padding: 12,
+            marginBottom: 9,
+          }}
+        >
+          <span className="av" style={{ width: 38, height: 38, borderRadius: 12, background: colorFor(current.id), fontSize: 14 }}>
+            {current.name.charAt(0).toUpperCase()}
+          </span>
+          <div style={{ flex: 1, font: "800 14px var(--font-display)", color: "var(--ink)" }}>{current.name}</div>
+          <span style={{ color: "var(--purple)", fontSize: 16 }}>✓</span>
+        </div>
+
+        {others.map((g) => (
+          <button
+            key={g.id}
+            onClick={() => {
+              router.push(`/app?g=${g.id}`);
+              onClose();
+            }}
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              gap: 11,
+              background: "var(--surface)",
+              border: "1px solid rgba(0,0,0,.08)",
+              borderRadius: 15,
+              padding: 12,
+              marginBottom: 9,
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+          >
+            <span className="av" style={{ width: 38, height: 38, borderRadius: 12, background: colorFor(g.id), fontSize: 14 }}>
+              {g.name.charAt(0).toUpperCase()}
+            </span>
+            <div style={{ flex: 1, font: "800 14px var(--font-display)", color: "var(--ink)" }}>{g.name}</div>
+          </button>
+        ))}
+
+        <label className="lbl" style={{ marginTop: 8 }}>
+          Join another group
+        </label>
+        {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "0 0 8px" }}>{error}</p>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <input className="field" placeholder="Enter invite code" value={code} onChange={(e) => setCode(e.target.value)} />
+          <button
+            onClick={join}
+            disabled={busy}
+            style={{ background: "var(--green)", color: "var(--surface)", border: "none", borderRadius: 13, padding: "0 18px", fontWeight: 800, cursor: "pointer" }}
+          >
+            Join
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreateGroupSheet({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [origin, setOrigin] = useState("");
+  const [dest, setDest] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, originLabel: origin, destLabel: dest }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.message ?? "Couldn't create that group.");
+        return;
+      }
+      router.push(`/app?g=${body.group.id}`);
+      router.refresh();
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="sheet" onClick={onClose}>
+      <div className="sheetc" onClick={(e) => e.stopPropagation()}>
+        <div style={{ width: 38, height: 4, background: "rgba(0,0,0,.15)", borderRadius: 2, margin: "0 auto 16px" }} />
+        <h3 style={{ fontSize: 17, fontWeight: 800, color: "var(--ink)", margin: "0 0 4px" }}>Create a group</h3>
+        <p style={{ font: "500 12px var(--font-body)", color: "rgba(0,0,0,.45)", margin: "0 0 16px" }}>
+          You&apos;ll be the admin. Set the shared route every trip will run.
+        </p>
+        <label className="lbl">Group name</label>
+        <input className="field" style={{ marginBottom: 14 }} placeholder="e.g. South Office Pool" value={name} onChange={(e) => setName(e.target.value)} />
+        <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+          <div style={{ flex: 1 }}>
+            <label className="lbl">Starts at</label>
+            <input className="field" placeholder="Riverside" value={origin} onChange={(e) => setOrigin(e.target.value)} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label className="lbl">Ends at</label>
+            <input className="field" placeholder="HQ" value={dest} onChange={(e) => setDest(e.target.value)} />
+          </div>
+        </div>
+        {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "0 0 12px" }}>{error}</p>}
+        <button className="btnP" disabled={busy} onClick={submit}>
+          Create group
+        </button>
+      </div>
+    </div>
+  );
+}

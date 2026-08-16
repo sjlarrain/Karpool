@@ -21,7 +21,17 @@ export default function StyleguidePage() {
     .filter((d) => d.trips.length > 0);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 40 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 40,
+        background: "var(--page)",
+        padding: "34px 0",
+        minHeight: "100vh",
+      }}
+    >
       <section>
         <h2 style={{ fontFamily: "var(--font-display)", textAlign: "center" }}>
           Carpools tab — vs. Carpool App.dc.html

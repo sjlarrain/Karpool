@@ -1,20 +1,37 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { AuthGate } from "./AuthGate";
+import { LockedGate } from "./LockedGate";
 
-export default function Home() {
-  return (
-    <main
-      style={{
-        fontFamily: "var(--font-body)",
-        color: "var(--ink)",
-        textAlign: "center",
-        padding: "40px 20px",
-      }}
-    >
-      <h1 style={{ fontFamily: "var(--font-display)" }}>Carpool</h1>
-      <p>Product screens ship in later phases. See the design primitives:</p>
-      <Link href="/styleguide" style={{ fontWeight: 700 }}>
-        /styleguide →
-      </Link>
-    </main>
-  );
+export default async function RootPage() {
+  const supabase = await createSupabaseServerClient();
+  const { data: userData } = await supabase.auth.getUser();
+
+  if (!userData.user) {
+    return (
+      <main style={{ minHeight: "100vh" }}>
+        <div style={{ maxWidth: 430, margin: "0 auto" }}>
+          <AuthGate />
+        </div>
+      </main>
+    );
+  }
+
+  const { data: memberships } = await supabase
+    .from("membership")
+    .select("group_id")
+    .eq("profile_id", userData.user.id)
+    .limit(1);
+
+  if (!memberships || memberships.length === 0) {
+    return (
+      <main style={{ minHeight: "100vh" }}>
+        <div style={{ maxWidth: 430, margin: "0 auto" }}>
+          <LockedGate />
+        </div>
+      </main>
+    );
+  }
+
+  redirect("/app");
 }
