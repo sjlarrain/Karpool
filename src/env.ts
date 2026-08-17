@@ -29,18 +29,20 @@ const schema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: requiredString("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
   SUPABASE_SERVICE_ROLE_KEY: requiredString("SUPABASE_SERVICE_ROLE_KEY"),
 
-  // Not read by any app code — the Supabase CLI reads these directly from process.env for
-  // migrations/type-gen, and Phases 5/6/8/9 vars aren't wired up yet either (no Vercel deployment).
-  // Validated loosely so the app can boot without them; tighten only if/when app code starts
-  // actually consuming one of these.
+  // Phase 5 (push): now actually read by src/lib/push/send.ts and /api/cron/tick.
+  VAPID_SUBJECT: requiredString("VAPID_SUBJECT"),
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: requiredString("NEXT_PUBLIC_VAPID_PUBLIC_KEY"),
+  VAPID_PRIVATE_KEY: requiredString("VAPID_PRIVATE_KEY"),
+  CRON_SECRET: requiredString("CRON_SECRET"),
+
+  // Not read by any app code yet. The Supabase CLI reads DATABASE_URL/DIRECT_URL directly from
+  // process.env for migrations, not through this schema; Phases 6/8 vars aren't wired up yet either
+  // (no Vercel deployment). Validated loosely so the app can boot without them; tighten only if/when
+  // app code starts actually consuming one of these.
   DATABASE_URL: z.string().optional(),
   DIRECT_URL: z.string().optional(),
-  VAPID_SUBJECT: z.string().optional(),
-  NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().optional(),
-  VAPID_PRIVATE_KEY: z.string().optional(),
   GOOGLE_MAPS_SERVER_KEY: z.string().optional(),
   NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY: z.string().optional(),
-  CRON_SECRET: z.string().optional(),
   ADMIN_BOOTSTRAP_EMAIL: z.string().optional(),
 });
 

@@ -7,6 +7,7 @@ import { SEATS } from "@/domain/constants";
 import { toTripView } from "@/domain/toTripView";
 import type { TripRiderRowInput, TripRowInput } from "@/domain/toTripView";
 import { decorateTrip } from "@/domain/decorateTrip";
+import { notifyProfiles } from "@/lib/notify/tripNotify";
 
 // GET /api/trips/:id — trip detail overlay: decorated summary + the driver's pickup list in route
 // order. RLS (is_member) makes this 404 rather than 403 for a non-member (plan's "404 never leaks
@@ -166,6 +167,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (error || !updated) {
     return NextResponse.json({ error: "update_failed", message: error?.message }, { status: 500 });
+  }
+
+  if (parsed.data.departAt !== undefined || parsed.data.returnAt !== undefined) {
+    const { data: activeRiders } = await supabase
+      .from("trip_rider")
+      .select("profile_id")
+      .eq("trip_id", id)
+      .in("state", ["joined", "confirmed"]);
+    const riderProfileIds = (activeRiders ?? []).map((r) => r.profile_id).filter((pid): pid is string => !!pid);
+    await notifyProfiles(riderProfileIds, {
+      type: "change",
+      title: "Departure changed",
+      body: "Your driver updated this trip's time — check the new details.",
+      tripId: id,
+    });
   }
 
   return NextResponse.json({ trip: updated });

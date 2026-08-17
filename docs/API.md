@@ -244,7 +244,44 @@ Drop a seat you're holding.
 - **Errors**: `401 unauthenticated`, `404 not_found` (trip missing or caller isn't riding it), `409 wrong_status` (trip already closed/cancelled), `500 leave_failed`
 - **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`). If the leave falls inside the group's configured cancellation window (`group.late_window_minutes`, default 60 — from `windowMinutes` before departure through any time after), inserts a `late_leave` `points_ledger` entry (`group.late_penalty`, default -5) for the leaving rider.
 
+## Push
+
+### `POST /api/push/subscribe`
+Store a browser's `PushSubscription` (from `registration.pushManager.subscribe()`). Upserts on
+`endpoint`, so re-subscribing (e.g. after a key rotation, or the same browser signing in as a
+different user) updates the existing row instead of duplicating it.
+
+- **Auth**: required
+- **Request**: `{ endpoint: string (url), keys: { p256dh: string, auth: string } }` — a `PushSubscription.toJSON()` object
+- **Response**: `201 { subscription }`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `500 subscribe_failed`
+- **Side effects**: upserts a `push_subscription` row (`profile_id` = caller, `user_agent` from the request header). No ledger/audit writes.
+
+### `POST /api/push/unsubscribe`
+Remove a browser's `PushSubscription`. Scoped to the caller's own subscriptions.
+
+- **Auth**: required
+- **Request**: `{ endpoint: string (url) }`
+- **Response**: `{ ok: true }`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `500 unsubscribe_failed`
+- **Side effects**: deletes the matching `push_subscription` row, if any (idempotent — a missing row is still `{ ok: true }`).
+
+## Cron
+
+### `POST /api/cron/tick`
+Vercel Cron target (`vercel.json`, every 5 minutes). Two jobs per tick: (1) departure reminders —
+any `scheduled` trip departing within 15 minutes gets a `reminder`-type notification + push to its
+driver and active riders, deduped by checking for an existing reminder notification carrying that
+trip's id; (2) auto-close — any trip left `started` for 6+ hours is force-closed as a safety net
+(never touches `points_ledger` — no driver confirmed who actually rode).
+
+- **Auth**: `Authorization: Bearer <CRON_SECRET>` (Vercel Cron's own convention when `CRON_SECRET` is set on the project)
+- **Request**: none
+- **Response**: `{ remindersSent: number, autoClosed: number }`
+- **Errors**: `401 unauthorized`
+- **Side effects**: inserts `notification` rows (`type: "reminder"`) + sends push; updates stale trips' `status`/`closed_at`; inserts an `audit_log` row per auto-close (`actor_profile_id: null` marks it as system-acted, `action: "cron_auto_close"`).
+
 ## Planned surface
 
-Kudos, notifications (delivery), admin console, and push endpoints land in later phases per
-`02_IMPLEMENTATION_PLAN.md` §5 — documented here as each phase's routes are built.
+Kudos, in-app notification reads (the bell/sheet UI), and the admin console land in later phases
+per `02_IMPLEMENTATION_PLAN.md` §5 — documented here as each phase's routes are built.

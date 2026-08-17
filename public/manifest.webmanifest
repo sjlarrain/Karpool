@@ -1,0 +1,14 @@
+{
+  "name": "Carpool",
+  "short_name": "Carpool",
+  "description": "Workplace commute carpooling with light gamification",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#faf8f2",
+  "theme_color": "#faf8f2",
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

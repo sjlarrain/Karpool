@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { transition, type TripTransitionErrorCode } from "@/domain/tripMachine";
 import { computeCloseAwards } from "@/domain/points";
+import { notifyProfiles } from "@/lib/notify/tripNotify";
 
 const STATUS_BY_ERROR: Record<TripTransitionErrorCode, number> = {
   not_driver: 403,
@@ -131,17 +132,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "ledger_write_failed", message: ledgerError.message }, { status: 500 });
   }
 
-  if (confirmedProfileIds.length > 0) {
-    await admin.from("notification").insert(
-      confirmedProfileIds.map((profileId) => ({
-        profile_id: profileId,
-        type: "rate" as const,
-        title: "Trip closed — leave kudos",
-        body: "Rate your driver's ride and award points.",
-        payload: { tripId: id },
-      })),
-    );
-  }
+  await notifyProfiles(confirmedProfileIds, {
+    type: "rate",
+    title: "Trip closed — leave kudos",
+    body: "Rate your driver's ride and award points.",
+    tripId: id,
+  });
 
   const { data: updated, error } = await admin
     .from("trip")

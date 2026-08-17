@@ -1,9 +1,23 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Carpool",
   description: "Workplace commute carpool with light gamification.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Carpool",
+  },
+  icons: {
+    icon: "/icons/icon.svg",
+    apple: "/icons/icon.svg",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#faf8f2",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

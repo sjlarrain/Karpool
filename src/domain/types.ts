@@ -10,7 +10,9 @@ export type TripDirection = "out" | "back" | "round";
 // The viewer's relationship to a trip — always derived per viewer, never stored (§3.1 of the plan).
 export type ViewerRole = "driving" | "joined" | "open";
 
-export type NotificationType = "start" | "rate" | "change" | "comment" | "tip";
+// "reminder" (Phase 5, migration 0003) is distinct from "start" — "start" means the trip has
+// actually started; "reminder" means it's departing soon. Not in the sketch's original mock list.
+export type NotificationType = "start" | "rate" | "change" | "comment" | "tip" | "reminder";
 
 export interface TripRiderView {
   name: string;

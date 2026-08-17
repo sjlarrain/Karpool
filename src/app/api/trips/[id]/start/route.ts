@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { transition, type TripTransitionErrorCode } from "@/domain/tripMachine";
+import { notifyProfiles } from "@/lib/notify/tripNotify";
 
 const STATUS_BY_ERROR: Record<TripTransitionErrorCode, number> = {
   not_driver: 403,
@@ -45,6 +46,19 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (error || !updated) {
     return NextResponse.json({ error: "update_failed", message: error?.message }, { status: 500 });
   }
+
+  const { data: activeRiders } = await supabase
+    .from("trip_rider")
+    .select("profile_id")
+    .eq("trip_id", id)
+    .in("state", ["joined", "confirmed"]);
+  const riderProfileIds = (activeRiders ?? []).map((r) => r.profile_id).filter((pid): pid is string => !!pid);
+  await notifyProfiles(riderProfileIds, {
+    type: "start",
+    title: "Your driver is on the way",
+    body: "The trip has started — get to your pickup spot.",
+    tripId: id,
+  });
 
   return NextResponse.json({ trip: updated });
 }

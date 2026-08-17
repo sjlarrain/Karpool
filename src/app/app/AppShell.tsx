@@ -8,6 +8,8 @@ import { GroupScreen } from "./GroupScreen";
 import { CarpoolsScreen } from "./CarpoolsScreen";
 import { CreateTripOverlay } from "./CreateTripOverlay";
 import { TripDetailOverlay } from "./TripDetailOverlay";
+import { PushSubscribe } from "./PushSubscribe";
+import { IosInstallPrompt } from "./IosInstallPrompt";
 
 type Group = Database["public"]["Tables"]["group"]["Row"];
 type PickupPlace = Database["public"]["Tables"]["pickup_place"]["Row"];
@@ -99,7 +101,19 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
               otherGroups={otherGroups}
             />
           )}
-          {tab === "you" && <ComingSoon icon="👤" title={viewerName} note="Your stats show up once trips start closing." />}
+          {tab === "you" && (
+            <div style={{ flex: 1, padding: "24px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ textAlign: "center", marginBottom: 4 }}>
+                <div style={{ fontSize: 40 }}>👤</div>
+                <h2 style={{ fontSize: 19, fontWeight: 800, color: "var(--ink)", margin: "12px 0 4px" }}>{viewerName}</h2>
+                <p style={{ font: "500 12.5px var(--font-body)", color: "rgba(0,0,0,.45)", margin: 0 }}>
+                  Your stats show up once trips start closing.
+                </p>
+              </div>
+              <IosInstallPrompt />
+              <PushSubscribe />
+            </div>
+          )}
         </div>
       </div>
 
