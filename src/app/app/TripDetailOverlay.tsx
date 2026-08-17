@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import type { DecoratedTrip } from "@/domain/decorateTrip";
+import { CloseTripOverlay } from "./CloseTripOverlay";
 
 interface Pickup {
   id: string;
@@ -32,6 +33,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const [closing, setClosing] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/trips/${tripId}`);
@@ -206,19 +208,25 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
               </button>
             )}
             {trip.status === "started" && (
-              <div
-                style={{
-                  background: "var(--teal-soft)",
-                  border: "1px solid rgba(20,184,196,.4)",
-                  borderRadius: 13,
-                  padding: 11,
-                  textAlign: "center",
-                  font: "700 12px var(--font-body)",
-                  color: "var(--teal-ink)",
-                }}
-              >
-                ● Trip in progress — riders notified
-              </div>
+              <>
+                <div
+                  style={{
+                    background: "var(--teal-soft)",
+                    border: "1px solid rgba(20,184,196,.4)",
+                    borderRadius: 13,
+                    padding: 11,
+                    textAlign: "center",
+                    font: "700 12px var(--font-body)",
+                    color: "var(--teal-ink)",
+                    marginBottom: 10,
+                  }}
+                >
+                  ● Trip in progress — riders notified
+                </div>
+                <button className="btnG" onClick={() => setClosing(true)}>
+                  End &amp; close trip
+                </button>
+              </>
             )}
           </>
         )}
@@ -324,6 +332,18 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
           </div>
         )}
       </div>
+
+      {closing && (
+        <CloseTripOverlay
+          tripId={tripId}
+          riders={otherPickups.map((p) => ({ id: p.id, name: p.name, initials: p.initials, color: p.color }))}
+          onClose={() => setClosing(false)}
+          onClosed={(message) => {
+            setClosing(false);
+            onChanged(message);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -3,10 +3,26 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 
-// POST /api/trips/:id/join — join an open seat. Phase 3 scope: a straightforward capacity check
-// then insert; Phase 4 ("feat(points)") replaces this with the capacity-checked, transactional
-// version that closes the race between two riders claiming the last seat, plus the pooled-points
-// ledger entry. No ledger writes happen here yet.
+const STATUS_BY_ERROR: Record<string, number> = {
+  trip_not_found: 404,
+  is_driver: 409,
+  wrong_status: 409,
+  already_joined: 409,
+  full: 409,
+};
+
+const MESSAGE_BY_ERROR: Record<string, string> = {
+  is_driver: "You're driving this trip.",
+  wrong_status: "This trip isn't open to join.",
+  already_joined: "You're already riding this trip.",
+  full: "That trip just filled up.",
+};
+
+// POST /api/trips/:id/join — join an open seat. Calls join_trip() (supabase/migrations/0002),
+// a Postgres function that locks the trip row for the duration of the capacity check + insert, so
+// two riders racing for the last seat produce exactly one winner (G4-adjacent correctness, not a
+// count-then-insert race in application code). No ledger writes here — pooled points are awarded
+// on close (Phase 4's close flow), not on join.
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
@@ -15,46 +31,19 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const { data: trip } = await supabase.from("trip").select("driver_id, status, capacity").eq("id", id).maybeSingle();
+  // RLS (is_member) makes this null for a non-member, giving the same 404 as a truly missing trip.
+  const { data: trip } = await supabase.from("trip").select("id").eq("id", id).maybeSingle();
   if (!trip) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  if (trip.driver_id === user.id) {
-    return NextResponse.json({ error: "is_driver", message: "You're driving this trip." }, { status: 409 });
-  }
-  if (trip.status !== "scheduled") {
-    return NextResponse.json({ error: "wrong_status", message: "This trip isn't open to join." }, { status: 409 });
-  }
-
-  const { data: activeRiders, error: ridersError } = await supabase
-    .from("trip_rider")
-    .select("id, profile_id, state")
-    .eq("trip_id", id)
-    .in("state", ["joined", "confirmed"]);
-  if (ridersError) {
-    return NextResponse.json({ error: "rider_lookup_failed" }, { status: 500 });
-  }
-
-  if ((activeRiders ?? []).some((r) => r.profile_id === user.id)) {
-    return NextResponse.json({ error: "already_joined" }, { status: 409 });
-  }
-  if ((activeRiders ?? []).length >= trip.capacity) {
-    return NextResponse.json({ error: "full" }, { status: 409 });
-  }
 
   const admin = createSupabaseAdminClient();
-  const { data: joined, error } = await admin
-    .from("trip_rider")
-    .insert({ trip_id: id, profile_id: user.id, state: "joined" })
-    .select()
-    .single();
+  const { data: joined, error } = await admin.rpc("join_trip", { p_trip_id: id, p_profile_id: user.id });
 
   if (error || !joined) {
-    // 23505 = unique_violation — trip_rider_one_active_seat caught a race the count-check missed.
-    if (error?.code === "23505") {
-      return NextResponse.json({ error: "already_joined" }, { status: 409 });
-    }
-    return NextResponse.json({ error: "join_failed", message: error?.message }, { status: 500 });
+    const code = error?.message ?? "join_failed";
+    const status = STATUS_BY_ERROR[code] ?? 500;
+    return NextResponse.json({ error: code, message: MESSAGE_BY_ERROR[code] }, { status });
   }
 
   return NextResponse.json({ tripRider: joined }, { status: 201 });

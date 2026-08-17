@@ -214,38 +214,37 @@ Driver only, `scheduled→cancelled`.
 - **Side effects**: updates `trip.status` and `cancelled_reason`. No ledger/audit writes.
 
 ### `POST /api/trips/:id/close`
-Driver only, `started→closed`. **Phase 3 scope is the bare status transition only** — the full close
-flow (confirm riders, add guest riders, award drive/pool points, notify for kudos) is Phase 4's
-`feat(points)` commit, which extends this same endpoint rather than adding a new one.
+Driver only, `started→closed`. Confirms which currently-active registered riders actually rode
+(everyone not listed becomes `no_show`), adds any guest riders, and awards points.
 
 - **Auth**: required, caller must be the trip's driver
-- **Request**: none
-- **Response**: `{ trip }`
-- **Errors**: `401 unauthenticated`, `404 not_found`, `403 not_driver`, `409 wrong_status`
-- **Side effects**: updates `trip.status` and `closed_at`. No ledger/audit writes (yet).
+- **Request**: `{ confirmedTripRiderIds?: string[] (uuid, trip_rider row ids — not profile ids — of active riders who rode; default []), guestNames?: string[] (1-80 chars each, max 20; default []) }`. Any id in `confirmedTripRiderIds` that isn't an active rider on this trip is silently ignored, not trusted.
+- **Response**: `{ trip, confirmedCount: number, noShowCount: number, pointsAwarded: number }`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `403 not_driver`, `409 wrong_status`, `500 confirm_failed` / `no_show_failed` / `guest_add_failed` / `ledger_write_failed` / `update_failed`
+- **Side effects**: updates confirmed riders' `trip_rider.state` to `"confirmed"`, unconfirmed active riders to `"no_show"`; inserts a `trip_rider` row per guest (`state: "confirmed"`, `profile_id: null`); inserts `points_ledger` rows to the **driver** — one `drive` entry (`group.drive_weight`) plus one `pool` entry (`group.pool_weight`) per confirmed rider, registered or guest (guests have no profile to hold their own points, so their contribution always lands on the driver — matches the sketch's "guest riders still count toward your pooled score"); inserts a `rate`-type `notification` row for each confirmed *registered* rider; updates `trip.status` and `closed_at`.
 
 ### `POST /api/trips/:id/join`
-Join an open seat. **Phase 3 scope**: a straightforward capacity check then insert. Phase 4 replaces
-this with the capacity-checked, transactional version that closes the race between two riders
-claiming the last seat, plus the pooled-points ledger entry.
+Join an open seat. Calls `join_trip()` (`supabase/migrations/0002_join_trip.sql`), a Postgres
+function that locks the trip row (`select ... for update`) for the duration of the capacity check +
+insert, so two riders racing for the last seat produce exactly one winner — verified against the
+live database with concurrent requests on a 1-seat trip.
 
 - **Auth**: required, caller must be a member of the trip's group and not its driver
 - **Request**: none
 - **Response**: `201 { tripRider }`
-- **Errors**: `401 unauthenticated`, `404 not_found`, `409 is_driver`, `409 wrong_status` (not scheduled), `409 already_joined`, `409 full`, `500 rider_lookup_failed` / `join_failed`
-- **Side effects**: inserts a `trip_rider` row (`state: "joined"`). No ledger/audit writes yet.
+- **Errors**: `401 unauthenticated`, `404 not_found`, `409 is_driver`, `409 wrong_status` (not scheduled), `409 already_joined`, `409 full`
+- **Side effects**: inserts a `trip_rider` row (`state: "joined"`). No ledger writes on join — pooled points are awarded on close.
 
 ### `POST /api/trips/:id/leave`
-Drop a seat you're holding. **Phase 3 scope**: marks the seat left. Phase 4 adds the 60-minute
-late-cancellation window check and the -5 point ledger entry (D-10 / `LATE_LEAVE`).
+Drop a seat you're holding.
 
 - **Auth**: required, caller must hold an active seat on the trip
 - **Request**: none
-- **Response**: `{ tripRider }`
+- **Response**: `{ tripRider, latePenalty: number | null }`
 - **Errors**: `401 unauthenticated`, `404 not_found` (trip missing or caller isn't riding it), `409 wrong_status` (trip already closed/cancelled), `500 leave_failed`
-- **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`). No ledger/audit writes yet.
+- **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`). If the leave falls inside the group's configured cancellation window (`group.late_window_minutes`, default 60 — from `windowMinutes` before departure through any time after), inserts a `late_leave` `points_ledger` entry (`group.late_penalty`, default -5) for the leaving rider.
 
 ## Planned surface
 
-Kudos, points, notifications, admin console, and push endpoints land in later phases per
+Kudos, notifications (delivery), admin console, and push endpoints land in later phases per
 `02_IMPLEMENTATION_PLAN.md` §5 — documented here as each phase's routes are built.

@@ -1,9 +1,10 @@
-// Generated via `supabase gen types typescript --linked` against the live project, then
-// hand-patched: columns backed by a CHECK constraint (not a native Postgres enum) come back as
-// `string` from the generator, so this restores literal-union types for those columns (trip.status,
-// trip.direction, trip_rider.state, membership.group_role, profile.platform_role, points_ledger.kind,
-// notification.type) to match supabase/migrations/*.sql. Regenerate with `pnpm db:types --linked`
-// and reapply those patches if the schema changes.
+// Generated via `pnpm db:types:linked` (`supabase gen types typescript --linked`) against the live
+// project, then hand-patched: columns backed by a CHECK constraint (not a native Postgres enum)
+// come back as `string` from the generator, so this restores literal-union types for those columns
+// (trip.status, trip.direction, trip_rider.state — including join_trip()'s Returns shape —
+// membership.group_role, profile.platform_role, points_ledger.kind, notification.type) to match
+// supabase/migrations/*.sql. Regenerate with `pnpm db:types:linked` and reapply those patches if the
+// schema changes.
 
 export type Json =
   | string
@@ -580,6 +581,26 @@ export type Database = {
     Functions: {
       compute_initials: { Args: { full_name: string }; Returns: string }
       is_member: { Args: { p_group_id: string }; Returns: boolean }
+      join_trip: {
+        Args: { p_profile_id: string; p_trip_id: string }
+        Returns: {
+          guest_name: string | null
+          id: string
+          joined_at: string
+          left_at: string | null
+          pickup_place_id: string | null
+          profile_id: string | null
+          state: "joined" | "left" | "confirmed" | "no_show"
+          stop_order: number | null
+          trip_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "trip_rider"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       [_ in never]: never
