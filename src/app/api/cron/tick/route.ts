@@ -6,8 +6,9 @@ import { notifyProfiles } from "@/lib/notify/tripNotify";
 const REMINDER_WINDOW_MINUTES = 15;
 const AUTO_CLOSE_AFTER_HOURS = 6;
 
-// POST /api/cron/tick — CRON_SECRET-gated (Vercel Cron's Authorization: Bearer <secret>
-// convention). Two jobs per tick:
+// GET/POST /api/cron/tick — CRON_SECRET-gated (Vercel Cron's Authorization: Bearer <secret>
+// convention). Vercel Cron sends GET; POST is kept for manual/local triggering with curl.
+// Two jobs per tick:
 //
 // 1. Departure reminders — any scheduled trip departing within REMINDER_WINDOW_MINUTES gets a
 //    "reminder"-type notification to its driver and active riders, deduped by checking for an
@@ -16,7 +17,7 @@ const AUTO_CLOSE_AFTER_HOURS = 6;
 // 2. Auto-close abandoned trips — a trip left "started" for AUTO_CLOSE_AFTER_HOURS is force-closed.
 //    This is a safety net, not the real close flow: no driver confirmed who rode, so it never
 //    touches points_ledger. Logged to audit_log (actor_profile_id: null marks it as system-acted).
-export async function POST(request: Request) {
+async function handleTick(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -80,3 +81,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ remindersSent, autoClosed });
 }
+
+export const GET = handleTick;
+export const POST = handleTick;
