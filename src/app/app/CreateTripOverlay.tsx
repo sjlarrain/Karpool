@@ -53,6 +53,8 @@ export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, 
         return;
       }
       onCreated();
+    } catch {
+      setError("Couldn't reach the server — check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -70,7 +72,7 @@ export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, 
           borderBottom: "1px solid rgba(0,0,0,.06)",
         }}
       >
-        <button className="iconbtn" onClick={onClose}>
+        <button className="iconbtn" onClick={onClose} aria-label="Back">
           ←
         </button>
         <h2 style={{ fontSize: 18, fontWeight: 800, color: "var(--ink)", margin: 0 }}>Offer a trip</h2>

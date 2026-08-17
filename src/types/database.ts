@@ -456,6 +456,35 @@ export type Database = {
           },
         ]
       }
+      rate_limit_hit: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          profile_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          profile_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rate_limit_hit_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip: {
         Row: {
           cancelled_reason: string | null

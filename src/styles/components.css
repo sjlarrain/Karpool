@@ -117,7 +117,9 @@ a:hover {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 3px;
+  min-height: 44px;
   font: 600 9px var(--font-body);
   color: rgba(0, 0, 0, 0.34);
   cursor: pointer;
@@ -204,8 +206,8 @@ a:hover {
 }
 
 .iconbtn {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--r-md);
   background: var(--surface);
   border: 1px solid rgba(0, 0, 0, 0.08);
@@ -274,6 +276,10 @@ a:hover {
 
 .segb {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
   text-align: center;
   font: 600 12px var(--font-body);
   color: rgba(0, 0, 0, 0.45);
@@ -335,4 +341,26 @@ h1,
 h2,
 h3 {
   font-family: var(--font-display);
+}
+
+/* Phase 9 — a11y: a visible keyboard-focus ring on every interactive element. :focus-visible only
+   fires for keyboard/programmatic focus, not mouse/touch clicks, so this doesn't add a ring around
+   every tap. */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--purple);
+  outline-offset: 2px;
+}
+
+/* Phase 9 — a11y: respect prefers-reduced-motion for the slide/sheet/toast animations. */
+@media (prefers-reduced-motion: reduce) {
+  .ov,
+  .sheet,
+  .sheetc,
+  .toast {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

@@ -48,6 +48,8 @@ export function CloseTripOverlay({ tripId, riders, onClose, onClosed }: Props) {
         return;
       }
       onClosed(`Trip closed · +${body.pointsAwarded} pts, riders notified`);
+    } catch {
+      setError("Couldn't reach the server — check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -65,7 +67,7 @@ export function CloseTripOverlay({ tripId, riders, onClose, onClosed }: Props) {
           borderBottom: "1px solid rgba(0,0,0,.06)",
         }}
       >
-        <button className="iconbtn" onClick={onClose}>
+        <button className="iconbtn" onClick={onClose} aria-label="Back">
           ←
         </button>
         <h2 style={{ fontSize: 18, fontWeight: 800, color: "var(--ink)", margin: 0 }}>Close trip</h2>

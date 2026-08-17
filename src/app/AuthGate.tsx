@@ -55,6 +55,8 @@ export function AuthGate() {
         }
         router.refresh();
       }
+    } catch {
+      setError("Couldn't reach the server — check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -75,6 +77,8 @@ export function AuthGate() {
         return;
       }
       router.refresh();
+    } catch {
+      setError("Couldn't reach the server — check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -89,7 +93,7 @@ export function AuthGate() {
   if (mode === "signup" && signupStep === 2) {
     return (
       <div style={{ padding: "26px 24px" }}>
-        <button className="iconbtn" style={{ marginTop: 18 }} onClick={() => setSignupStep(1)}>
+        <button className="iconbtn" style={{ marginTop: 18 }} onClick={() => setSignupStep(1)} aria-label="Back">
           ←
         </button>
         <div style={{ fontSize: 40, margin: "24px 0 0" }}>🔑</div>

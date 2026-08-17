@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 const STATUS_BY_ERROR: Record<string, number> = {
   trip_not_found: 404,
@@ -38,6 +39,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   }
 
   const admin = createSupabaseAdminClient();
+
+  const { allowed } = await checkRateLimit(admin, user.id, "trip_join", 20, 600);
+  if (!allowed) {
+    return NextResponse.json({ error: "rate_limited", message: "Too many join attempts — try again in a bit." }, { status: 429 });
+  }
+
   const { data: joined, error } = await admin.rpc("join_trip", { p_trip_id: id, p_profile_id: user.id });
 
   if (error || !joined) {

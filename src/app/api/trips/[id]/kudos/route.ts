@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 const bodySchema = z.object({ comment: z.string().trim().max(500).optional() });
 
@@ -55,6 +56,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const admin = createSupabaseAdminClient();
+
+  const { allowed } = await checkRateLimit(admin, user.id, "kudos", 20, 3600);
+  if (!allowed) {
+    return NextResponse.json({ error: "rate_limited", message: "Too many kudos attempts — try again in a bit." }, { status: 429 });
+  }
+
   const { data: kudos, error } = await admin
     .from("kudos")
     .insert({

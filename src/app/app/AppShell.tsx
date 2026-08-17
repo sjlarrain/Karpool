@@ -42,14 +42,18 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
   }
 
   async function quickJoin(tripId: string) {
-    const res = await fetch(`/api/trips/${tripId}/join`, { method: "POST" });
-    const body = await res.json();
-    if (!res.ok) {
-      flash(body.message ?? (body.error === "full" ? "That trip just filled up." : "Couldn't join that trip."));
-      return;
+    try {
+      const res = await fetch(`/api/trips/${tripId}/join`, { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) {
+        flash(body.message ?? (body.error === "full" ? "That trip just filled up." : "Couldn't join that trip."));
+        return;
+      }
+      flash("Joined — added to your trips 🎉");
+      router.refresh();
+    } catch {
+      flash("Couldn't reach the server — check your connection and try again.");
     }
-    flash("Joined — added to your trips 🎉");
-    router.refresh();
   }
 
   const tabButton = (id: Tab, icon: string, label: string) => (

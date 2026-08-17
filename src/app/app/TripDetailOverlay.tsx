@@ -33,14 +33,19 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
   const [data, setData] = useState<DetailResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const [closing, setClosing] = useState(false);
   const [kudosComment, setKudosComment] = useState("");
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/trips/${tripId}`);
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/trips/${tripId}`);
+      if (!res.ok) throw new Error(`status ${res.status}`);
       setData(await res.json());
+      setLoadFailed(false);
+    } catch {
+      setLoadFailed(true);
     }
   }, [tripId]);
 
@@ -61,6 +66,8 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
       setConfirmingLeave(false);
       await load();
       onChanged(message);
+    } catch {
+      setError("Couldn't reach the server — check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -82,6 +89,8 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
       }
       await load();
       onChanged("Kudos sent 💚");
+    } catch {
+      setError("Couldn't reach the server — check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -91,10 +100,18 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
     return (
       <div className="ov">
         <div style={{ padding: "44px 18px 0", flex: "none", display: "flex", alignItems: "center", gap: 12 }}>
-          <button className="iconbtn" onClick={onClose}>
+          <button className="iconbtn" onClick={onClose} aria-label="Back">
             ←
           </button>
         </div>
+        {loadFailed && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
+            <p style={{ font: "600 12.5px var(--font-body)", color: "rgba(0,0,0,.45)" }}>Couldn&apos;t load this trip.</p>
+            <button className="btnG" style={{ width: "auto", padding: "10px 20px" }} onClick={load}>
+              Retry
+            </button>
+          </div>
+        )}
       </div>
     );
   }

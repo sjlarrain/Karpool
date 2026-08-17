@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { SEATS } from "@/domain/constants";
 import { loadGroupTrips } from "@/lib/trips/loadGroupTrips";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 // GET /api/trips?groupId=&scope=all|mine — live trip feed for a group (scheduled/started only;
 // closed and cancelled trips don't appear in the Carpools tab feed).
@@ -82,6 +83,12 @@ export async function POST(request: Request) {
   }
 
   const admin = createSupabaseAdminClient();
+
+  const { allowed } = await checkRateLimit(admin, user.id, "trip_create", 10, 3600);
+  if (!allowed) {
+    return NextResponse.json({ error: "rate_limited", message: "Too many trips published — try again in a bit." }, { status: 429 });
+  }
+
   const { data: trip, error } = await admin
     .from("trip")
     .insert({

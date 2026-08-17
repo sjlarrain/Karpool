@@ -11,12 +11,35 @@ interface LeaderboardResponse {
 
 export function RanksScreen({ groupId }: { groupId: string }) {
   const [data, setData] = useState<LeaderboardResponse | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
+    setFailed(false);
     fetch(`/api/groups/${groupId}/leaderboard`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then(setData);
-  }, [groupId]);
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`status ${res.status}`))))
+      .then((body) => {
+        if (!cancelled) setData(body);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId, reloadKey]);
+
+  if (failed) {
+    return (
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
+        <p style={{ font: "600 12.5px var(--font-body)", color: "rgba(0,0,0,.45)" }}>Couldn&apos;t load the leaderboard.</p>
+        <button className="btnG" style={{ width: "auto", padding: "10px 20px" }} onClick={() => setReloadKey((k) => k + 1)}>
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   if (!data) {
     return <div style={{ flex: 1 }} />;

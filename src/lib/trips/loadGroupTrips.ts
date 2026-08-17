@@ -18,11 +18,16 @@ export async function loadGroupTrips(
     return { ok: false, error: "not_found" };
   }
 
+  // Live trips, plus anything closed in the last 24h — a closed trip needs to stay reachable for a
+  // while so a rider can actually open it and give kudos; otherwise it vanishes from the feed the
+  // instant the driver closes it and the "Rate your ride" prompt (in the trip detail overlay)
+  // becomes unreachable (caught by the Phase 9 E2E test — there was no card left to click).
+  const recentCutoff = new Date(now.getTime() - 24 * 3_600_000).toISOString();
   const { data: trips, error: tripsError } = await supabase
     .from("trip")
     .select("id, direction, depart_at, return_at, capacity, status, driver_id")
     .eq("group_id", groupId)
-    .in("status", ["scheduled", "started"])
+    .or(`status.in.(scheduled,started),and(status.eq.closed,closed_at.gte.${recentCutoff})`)
     .order("depart_at", { ascending: true });
   if (tripsError) {
     return { ok: false, error: "lookup_failed" };

@@ -55,7 +55,7 @@ export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces,
               {group.name} <span style={{ color: "rgba(0,0,0,.3)", fontSize: 15 }}>▾</span>
             </span>
           </button>
-          <button className="iconbtn" onClick={signOut} title="Sign out">
+          <button className="iconbtn" onClick={signOut} title="Sign out" aria-label="Sign out">
             ⎋
           </button>
         </div>
@@ -271,6 +271,8 @@ function AddPickupPlace({ groupId, onAdded }: { groupId: string; onAdded: () => 
       setAddress("");
       setOpen(false);
       onAdded();
+    } catch {
+      setError("Couldn't reach the server — check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -330,6 +332,8 @@ function SwitchGroupSheet({
       router.push(`/app?g=${body.group.id}`);
       router.refresh();
       onClose();
+    } catch {
+      setError("Couldn't reach the server — check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -432,6 +436,8 @@ export function CreateGroupSheet({ onClose }: { onClose: () => void }) {
       router.push(`/app?g=${body.group.id}`);
       router.refresh();
       onClose();
+    } catch {
+      setError("Couldn't reach the server — check your connection and try again.");
     } finally {
       setBusy(false);
     }

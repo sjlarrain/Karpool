@@ -172,7 +172,7 @@ pick a direction along it.
 - **Auth**: required, caller must be a member of `groupId`
 - **Request**: `{ groupId: string (uuid), direction: "out" | "back" | "round", departAt: string (ISO date/time), returnAt?: string (ISO date/time, required iff direction is "round"), capacity: number (1-7) }`
 - **Response**: `201 { trip }`
-- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found` (not a member), `500 trip_create_failed`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found` (not a member), `429 rate_limited` (10/hour per caller), `500 trip_create_failed`
 - **Side effects**: inserts a `trip` row (`status: "scheduled"`, `driver_id` = caller). No ledger/audit writes.
 
 ### `GET /api/trips/:id`
@@ -232,7 +232,7 @@ live database with concurrent requests on a 1-seat trip.
 - **Auth**: required, caller must be a member of the trip's group and not its driver
 - **Request**: none
 - **Response**: `201 { tripRider }`
-- **Errors**: `401 unauthenticated`, `404 not_found`, `409 is_driver`, `409 wrong_status` (not scheduled), `409 already_joined`, `409 full`
+- **Errors**: `401 unauthenticated`, `404 not_found`, `429 rate_limited` (20/10min per caller), `409 is_driver`, `409 wrong_status` (not scheduled), `409 already_joined`, `409 full`
 - **Side effects**: inserts a `trip_rider` row (`state: "joined"`). No ledger writes on join — pooled points are awarded on close.
 
 ### `POST /api/trips/:id/leave`
@@ -254,7 +254,7 @@ kudos, once per trip. Awards the driver `group.kudos_weight` points.
 - **Auth**: required, caller must be a confirmed rider (`trip_rider.state = "confirmed"`) on this trip
 - **Request**: `{ comment?: string (max 500) }`
 - **Response**: `201 { kudos }`
-- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `409 wrong_status` (not closed), `409 is_driver`, `403 not_confirmed_rider`, `409 already_given`, `500 kudos_failed`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `409 wrong_status` (not closed), `409 is_driver`, `403 not_confirmed_rider`, `429 rate_limited` (20/hour per caller), `409 already_given`, `500 kudos_failed`
 - **Side effects**: inserts a `kudos` row; inserts a `kind: "kudos"` `points_ledger` entry for the driver.
 
 ### `GET /api/groups/:id/leaderboard`
