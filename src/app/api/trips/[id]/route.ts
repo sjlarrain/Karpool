@@ -102,12 +102,24 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     };
   });
 
+  let viewerGaveKudos = false;
+  if (trip.status === "closed" && trip.driver_id !== user.id) {
+    const { data: existingKudos } = await supabase
+      .from("kudos")
+      .select("id")
+      .eq("trip_id", id)
+      .eq("from_profile_id", user.id)
+      .maybeSingle();
+    viewerGaveKudos = !!existingKudos;
+  }
+
   return NextResponse.json({
     trip: decorateTrip(view),
     driverId: trip.driver_id,
     isDriver: trip.driver_id === user.id,
     cancelledReason: trip.cancelled_reason,
     pickups,
+    viewerGaveKudos,
   });
 }
 

@@ -20,6 +20,7 @@ interface DetailResponse {
   isDriver: boolean;
   cancelledReason: string | null;
   pickups: Pickup[];
+  viewerGaveKudos: boolean;
 }
 
 interface Props {
@@ -34,6 +35,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [kudosComment, setKudosComment] = useState("");
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/trips/${tripId}`);
@@ -59,6 +61,27 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
       setConfirmingLeave(false);
       await load();
       onChanged(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function giveKudos() {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/kudos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment: kudosComment.trim() || undefined }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.message ?? "Couldn't send kudos.");
+        return;
+      }
+      await load();
+      onChanged("Kudos sent 💚");
     } finally {
       setBusy(false);
     }
@@ -269,7 +292,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
           </div>
         )}
 
-        {!isDriver && trip.role === "joined" && !confirmingLeave && (
+        {!isDriver && trip.role === "joined" && trip.status !== "closed" && !confirmingLeave && (
           <>
             <div
               style={{
@@ -309,7 +332,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
           </>
         )}
 
-        {!isDriver && trip.role === "joined" && confirmingLeave && (
+        {!isDriver && trip.role === "joined" && trip.status !== "closed" && confirmingLeave && (
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 34 }}>🚪</div>
             <h3 style={{ fontSize: 18, fontWeight: 800, color: "var(--ink)", margin: "12px 0 6px" }}>Leave this carpool?</h3>
@@ -329,6 +352,44 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
                 Leave
               </button>
             </div>
+          </div>
+        )}
+
+        {!isDriver && trip.role === "joined" && trip.status === "closed" && (
+          <div style={{ textAlign: "center" }}>
+            {data.viewerGaveKudos ? (
+              <div
+                style={{
+                  background: "var(--green-soft)",
+                  border: "1px solid rgba(23,201,100,.4)",
+                  borderRadius: 13,
+                  padding: 12,
+                  font: "600 12.5px var(--font-body)",
+                  color: "var(--green-ink)",
+                }}
+              >
+                💚 Kudos sent to {trip.driver}
+              </div>
+            ) : (
+              <div style={{ background: "var(--surface)", border: "1px solid rgba(0,0,0,.07)", borderRadius: 16, padding: 18, textAlign: "left" }}>
+                <h3 style={{ fontSize: 15, fontWeight: 800, color: "var(--ink)", margin: "0 0 4px", textAlign: "center" }}>Rate your ride</h3>
+                <p style={{ font: "500 11px var(--font-body)", color: "rgba(0,0,0,.45)", margin: "0 0 14px", textAlign: "center" }}>
+                  Say thanks — it boosts {trip.driver}&apos;s score.
+                </p>
+                <label className="lbl">Comment (optional)</label>
+                <textarea
+                  className="field"
+                  rows={3}
+                  placeholder="Great ride, thanks for the coffee!"
+                  value={kudosComment}
+                  onChange={(e) => setKudosComment(e.target.value)}
+                  style={{ resize: "none", fontFamily: "var(--font-body)", marginBottom: 12 }}
+                />
+                <button className="btnP" disabled={busy} onClick={giveKudos}>
+                  Send kudos 💚
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -10,6 +10,7 @@ import { CreateTripOverlay } from "./CreateTripOverlay";
 import { TripDetailOverlay } from "./TripDetailOverlay";
 import { PushSubscribe } from "./PushSubscribe";
 import { IosInstallPrompt } from "./IosInstallPrompt";
+import { RanksScreen } from "./RanksScreen";
 
 type Group = Database["public"]["Tables"]["group"]["Row"];
 type PickupPlace = Database["public"]["Tables"]["pickup_place"]["Row"];
@@ -89,7 +90,7 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
               onQuickJoin={quickJoin}
             />
           )}
-          {tab === "ranks" && <ComingSoon icon="🏆" title="Leaderboard" note="Kudos and rankings land in a later phase." />}
+          {tab === "ranks" && <RanksScreen groupId={group.id} />}
           {tab === "group" && (
             <GroupScreen
               group={group}
@@ -155,15 +156,5 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
 
       {toast && <div className="toast" style={{ position: "fixed" }}>{toast}</div>}
     </main>
-  );
-}
-
-function ComingSoon({ icon, title, note }: { icon: string; title: string; note: string }) {
-  return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 30px", textAlign: "center" }}>
-      <div style={{ fontSize: 40 }}>{icon}</div>
-      <h2 style={{ fontSize: 19, fontWeight: 800, color: "var(--ink)", margin: "12px 0 4px" }}>{title}</h2>
-      <p style={{ font: "500 12.5px var(--font-body)", color: "rgba(0,0,0,.45)", margin: 0 }}>{note}</p>
-    </div>
   );
 }

@@ -244,6 +244,40 @@ Drop a seat you're holding.
 - **Errors**: `401 unauthenticated`, `404 not_found` (trip missing or caller isn't riding it), `409 wrong_status` (trip already closed/cancelled), `500 leave_failed`
 - **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`). If the leave falls inside the group's configured cancellation window (`group.late_window_minutes`, default 60 — from `windowMinutes` before departure through any time after), inserts a `late_leave` `points_ledger` entry (`group.late_penalty`, default -5) for the leaving rider.
 
+## Kudos & scores
+
+### `POST /api/trips/:id/kudos`
+Binary kudos (you give it or you don't — calling this endpoint at all *is* the "give" action;
+there's no body flag for declining). Only a confirmed registered rider on a `closed` trip can give
+kudos, once per trip. Awards the driver `group.kudos_weight` points.
+
+- **Auth**: required, caller must be a confirmed rider (`trip_rider.state = "confirmed"`) on this trip
+- **Request**: `{ comment?: string (max 500) }`
+- **Response**: `201 { kudos }`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `409 wrong_status` (not closed), `409 is_driver`, `403 not_confirmed_rider`, `409 already_given`, `500 kudos_failed`
+- **Side effects**: inserts a `kudos` row; inserts a `kind: "kudos"` `points_ledger` entry for the driver.
+
+### `GET /api/groups/:id/leaderboard`
+Calendar-month ranking (D-12 — the ledger itself stays all-time; only this view's window resets
+monthly), weighted per the group's own `drive_weight`/`pool_weight`/`kudos_weight` (D-11). Every
+group member appears, even with zero points this month.
+
+- **Auth**: required, caller must be a member of `:id`
+- **Request**: none
+- **Response**: `{ entries: RankedRow[] (profileId, name, initials, color, driven, pooled, kudos, points, rank, medal: string | null), formula: string, viewerProfileId: string }`
+- **Errors**: `401 unauthenticated`, `404 not_found`
+- **Side effects**: none
+
+### `GET /api/me/points`
+The caller's own lifetime totals — all-time, across every group they belong to (D-12: only the
+group leaderboard view is month-scoped, the ledger itself never resets).
+
+- **Auth**: required
+- **Request**: none
+- **Response**: `{ driven: number, pooled: number, kudos: number, points: number }`
+- **Errors**: `401 unauthenticated`
+- **Side effects**: none
+
 ## Push
 
 ### `POST /api/push/subscribe`
@@ -283,5 +317,5 @@ trip's id; (2) auto-close — any trip left `started` for 6+ hours is force-clos
 
 ## Planned surface
 
-Kudos, in-app notification reads (the bell/sheet UI), and the admin console land in later phases
-per `02_IMPLEMENTATION_PLAN.md` §5 — documented here as each phase's routes are built.
+In-app notification reads (the bell/sheet UI), Google Maps routing, and the admin console land in
+later phases per `02_IMPLEMENTATION_PLAN.md` §5 — documented here as each phase's routes are built.
