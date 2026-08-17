@@ -17,7 +17,10 @@ const canRun = Boolean(SERVICE_ROLE_KEY && ANON_KEY);
 describe.skipIf(!canRun)("G2 — cross-group read isolation", () => {
   let admin: SupabaseClient;
   let userAClient: SupabaseClient;
+  let groupAId: string;
   let groupBId: string;
+  let userAId: string;
+  let userBId: string;
 
   beforeAll(async () => {
     admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY as string);
@@ -29,6 +32,7 @@ describe.skipIf(!canRun)("G2 — cross-group read isolation", () => {
       email_confirm: true,
     });
     if (userAErr || !userA.user) throw userAErr ?? new Error("failed to create user A");
+    userAId = userA.user.id;
 
     const { data: userB, error: userBErr } = await admin.auth.admin.createUser({
       email: `rls-test-b-${stamp}@example.com`,
@@ -36,6 +40,7 @@ describe.skipIf(!canRun)("G2 — cross-group read isolation", () => {
       email_confirm: true,
     });
     if (userBErr || !userB.user) throw userBErr ?? new Error("failed to create user B");
+    userBId = userB.user.id;
 
     const { data: groupA, error: groupAErr } = await admin
       .from("group")
@@ -49,6 +54,7 @@ describe.skipIf(!canRun)("G2 — cross-group read isolation", () => {
       .select()
       .single();
     if (groupAErr || !groupA) throw groupAErr ?? new Error("failed to create group A");
+    groupAId = groupA.id;
 
     const { data: groupB, error: groupBErr } = await admin
       .from("group")
@@ -97,5 +103,13 @@ describe.skipIf(!canRun)("G2 — cross-group read isolation", () => {
 
   afterAll(async () => {
     await userAClient?.auth.signOut();
+    // Membership cascades from both group and profile deletion, but trip/group reference profile
+    // via created_by/driver_id with no cascade — delete children before the users that own them.
+    if (groupAId || groupBId) {
+      await admin.from("trip").delete().in("group_id", [groupAId, groupBId].filter(Boolean));
+      await admin.from("group").delete().in("id", [groupAId, groupBId].filter(Boolean));
+    }
+    if (userAId) await admin.auth.admin.deleteUser(userAId);
+    if (userBId) await admin.auth.admin.deleteUser(userBId);
   });
 });

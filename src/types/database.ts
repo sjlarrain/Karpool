@@ -1,303 +1,717 @@
-// Hand-written from supabase/migrations/0001_init.sql — `pnpm db:types` normally generates this
-// file from a running local Supabase instance, which needs Docker (unavailable in this session's
-// environment, see docs/WORKLOG.md). Regenerate with `pnpm db:types` once Docker is available and
-// delete this note; verify it matches before trusting it over the migration.
+// Generated via `supabase gen types typescript --linked` against the live project, then
+// hand-patched: columns backed by a CHECK constraint (not a native Postgres enum) come back as
+// `string` from the generator, so this restores literal-union types for those columns (trip.status,
+// trip.direction, trip_rider.state, membership.group_role, profile.platform_role, points_ledger.kind,
+// notification.type) to match supabase/migrations/*.sql. Regenerate with `pnpm db:types --linked`
+// and reapply those patches if the schema changes.
 
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
-export interface Database {
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.15"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
-      profile: {
-        Row: {
-          id: string;
-          display_name: string;
-          initials: string;
-          avatar_color: string;
-          platform_role: "member" | "platform_admin";
-          last_seen_at: string | null;
-          created_at: string;
-        };
-        Insert: {
-          id: string;
-          display_name: string;
-          initials: string;
-          avatar_color: string;
-          platform_role?: "member" | "platform_admin";
-          last_seen_at?: string | null;
-          created_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["profile"]["Insert"]>;
-        Relationships: [];
-      };
-      group: {
-        Row: {
-          id: string;
-          name: string;
-          origin_label: string;
-          dest_label: string;
-          code: string;
-          cost_split_note: string | null;
-          drive_weight: number;
-          pool_weight: number;
-          kudos_weight: number;
-          late_window_minutes: number;
-          late_penalty: number;
-          created_by: string;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          name: string;
-          origin_label: string;
-          dest_label: string;
-          code: string;
-          cost_split_note?: string | null;
-          drive_weight?: number;
-          pool_weight?: number;
-          kudos_weight?: number;
-          late_window_minutes?: number;
-          late_penalty?: number;
-          created_by: string;
-          created_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["group"]["Insert"]>;
-        Relationships: [];
-      };
-      pickup_place: {
-        Row: {
-          id: string;
-          group_id: string;
-          label: string;
-          address: string;
-          typical_time: string | null;
-          sort_order: number;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          group_id: string;
-          label: string;
-          address: string;
-          typical_time?: string | null;
-          sort_order?: number;
-          created_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["pickup_place"]["Insert"]>;
-        Relationships: [];
-      };
-      membership: {
-        Row: {
-          id: string;
-          group_id: string;
-          profile_id: string;
-          group_role: "member" | "group_admin";
-          pickup_place_id: string | null;
-          joined_at: string;
-        };
-        Insert: {
-          id?: string;
-          group_id: string;
-          profile_id: string;
-          group_role?: "member" | "group_admin";
-          pickup_place_id?: string | null;
-          joined_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["membership"]["Insert"]>;
-        Relationships: [];
-      };
-      trip: {
-        Row: {
-          id: string;
-          group_id: string;
-          driver_id: string;
-          direction: "out" | "back" | "round";
-          depart_at: string;
-          return_at: string | null;
-          capacity: number;
-          status: "scheduled" | "started" | "closed" | "cancelled";
-          started_at: string | null;
-          closed_at: string | null;
-          cancelled_reason: string | null;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          group_id: string;
-          driver_id: string;
-          direction: "out" | "back" | "round";
-          depart_at: string;
-          return_at?: string | null;
-          capacity: number;
-          status?: "scheduled" | "started" | "closed" | "cancelled";
-          started_at?: string | null;
-          closed_at?: string | null;
-          cancelled_reason?: string | null;
-          created_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["trip"]["Insert"]>;
-        Relationships: [];
-      };
-      trip_rider: {
-        Row: {
-          id: string;
-          trip_id: string;
-          profile_id: string | null;
-          guest_name: string | null;
-          pickup_place_id: string | null;
-          stop_order: number | null;
-          state: "joined" | "left" | "confirmed" | "no_show";
-          joined_at: string;
-          left_at: string | null;
-        };
-        Insert: {
-          id?: string;
-          trip_id: string;
-          profile_id?: string | null;
-          guest_name?: string | null;
-          pickup_place_id?: string | null;
-          stop_order?: number | null;
-          state?: "joined" | "left" | "confirmed" | "no_show";
-          joined_at?: string;
-          left_at?: string | null;
-        };
-        Update: Partial<Database["public"]["Tables"]["trip_rider"]["Insert"]>;
-        Relationships: [];
-      };
-      kudos: {
-        Row: {
-          id: string;
-          trip_id: string;
-          from_profile_id: string;
-          to_profile_id: string;
-          comment: string | null;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          trip_id: string;
-          from_profile_id: string;
-          to_profile_id: string;
-          comment?: string | null;
-          created_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["kudos"]["Insert"]>;
-        Relationships: [];
-      };
-      points_ledger: {
-        Row: {
-          id: string;
-          profile_id: string;
-          group_id: string;
-          trip_id: string | null;
-          kind: "drive" | "pool" | "kudos" | "late_leave" | "admin_adjust";
-          points: number;
-          reason: string | null;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          profile_id: string;
-          group_id: string;
-          trip_id?: string | null;
-          kind: "drive" | "pool" | "kudos" | "late_leave" | "admin_adjust";
-          points: number;
-          reason?: string | null;
-          created_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["points_ledger"]["Insert"]>;
-        Relationships: [];
-      };
-      notification: {
-        Row: {
-          id: string;
-          profile_id: string;
-          type: "start" | "rate" | "change" | "comment" | "tip";
-          title: string;
-          body: string | null;
-          payload: Json | null;
-          read_at: string | null;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          profile_id: string;
-          type: "start" | "rate" | "change" | "comment" | "tip";
-          title: string;
-          body?: string | null;
-          payload?: Json | null;
-          read_at?: string | null;
-          created_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["notification"]["Insert"]>;
-        Relationships: [];
-      };
-      push_subscription: {
-        Row: {
-          id: string;
-          profile_id: string;
-          endpoint: string;
-          p256dh: string;
-          auth: string;
-          user_agent: string | null;
-          last_success_at: string | null;
-          failure_count: number;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          profile_id: string;
-          endpoint: string;
-          p256dh: string;
-          auth: string;
-          user_agent?: string | null;
-          last_success_at?: string | null;
-          failure_count?: number;
-          created_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["push_subscription"]["Insert"]>;
-        Relationships: [];
-      };
       audit_log: {
         Row: {
-          id: string;
-          actor_profile_id: string | null;
-          action: string;
-          entity_type: string;
-          entity_id: string | null;
-          before: Json | null;
-          after: Json | null;
-          ip: string | null;
-          user_agent: string | null;
-          created_at: string;
-        };
+          action: string
+          actor_profile_id: string | null
+          after: Json | null
+          before: Json | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          ip: string | null
+          user_agent: string | null
+        }
         Insert: {
-          id?: string;
-          actor_profile_id?: string | null;
-          action: string;
-          entity_type: string;
-          entity_id?: string | null;
-          before?: Json | null;
-          after?: Json | null;
-          ip?: string | null;
-          user_agent?: string | null;
-          created_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["audit_log"]["Insert"]>;
-        Relationships: [];
-      };
-    };
-    Views: Record<string, never>;
+          action: string
+          actor_profile_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          ip?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          action?: string
+          actor_profile_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          ip?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_actor_profile_id_fkey"
+            columns: ["actor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group: {
+        Row: {
+          code: string
+          cost_split_note: string | null
+          created_at: string
+          created_by: string
+          dest_label: string
+          drive_weight: number
+          id: string
+          kudos_weight: number
+          late_penalty: number
+          late_window_minutes: number
+          name: string
+          origin_label: string
+          pool_weight: number
+        }
+        Insert: {
+          code: string
+          cost_split_note?: string | null
+          created_at?: string
+          created_by: string
+          dest_label: string
+          drive_weight?: number
+          id?: string
+          kudos_weight?: number
+          late_penalty?: number
+          late_window_minutes?: number
+          name: string
+          origin_label: string
+          pool_weight?: number
+        }
+        Update: {
+          code?: string
+          cost_split_note?: string | null
+          created_at?: string
+          created_by?: string
+          dest_label?: string
+          drive_weight?: number
+          id?: string
+          kudos_weight?: number
+          late_penalty?: number
+          late_window_minutes?: number
+          name?: string
+          origin_label?: string
+          pool_weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kudos: {
+        Row: {
+          comment: string | null
+          created_at: string
+          from_profile_id: string
+          id: string
+          to_profile_id: string
+          trip_id: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          from_profile_id: string
+          id?: string
+          to_profile_id: string
+          trip_id: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          from_profile_id?: string
+          id?: string
+          to_profile_id?: string
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kudos_from_profile_id_fkey"
+            columns: ["from_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kudos_to_profile_id_fkey"
+            columns: ["to_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kudos_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      membership: {
+        Row: {
+          group_id: string
+          group_role: "member" | "group_admin"
+          id: string
+          joined_at: string
+          pickup_place_id: string | null
+          profile_id: string
+        }
+        Insert: {
+          group_id: string
+          group_role?: "member" | "group_admin"
+          id?: string
+          joined_at?: string
+          pickup_place_id?: string | null
+          profile_id: string
+        }
+        Update: {
+          group_id?: string
+          group_role?: "member" | "group_admin"
+          id?: string
+          joined_at?: string
+          pickup_place_id?: string | null
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "membership_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "group"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "membership_pickup_place_id_fkey"
+            columns: ["pickup_place_id"]
+            isOneToOne: false
+            referencedRelation: "pickup_place"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "membership_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          payload: Json | null
+          profile_id: string
+          read_at: string | null
+          title: string
+          type: "start" | "rate" | "change" | "comment" | "tip"
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          payload?: Json | null
+          profile_id: string
+          read_at?: string | null
+          title: string
+          type: "start" | "rate" | "change" | "comment" | "tip"
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          payload?: Json | null
+          profile_id?: string
+          read_at?: string | null
+          title?: string
+          type?: "start" | "rate" | "change" | "comment" | "tip"
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pickup_place: {
+        Row: {
+          address: string
+          created_at: string
+          group_id: string
+          id: string
+          label: string
+          sort_order: number
+          typical_time: string | null
+        }
+        Insert: {
+          address: string
+          created_at?: string
+          group_id: string
+          id?: string
+          label: string
+          sort_order?: number
+          typical_time?: string | null
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          group_id?: string
+          id?: string
+          label?: string
+          sort_order?: number
+          typical_time?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pickup_place_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "group"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      points_ledger: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          kind: "drive" | "pool" | "kudos" | "late_leave" | "admin_adjust"
+          points: number
+          profile_id: string
+          reason: string | null
+          trip_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          kind: "drive" | "pool" | "kudos" | "late_leave" | "admin_adjust"
+          points: number
+          profile_id: string
+          reason?: string | null
+          trip_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          kind?: "drive" | "pool" | "kudos" | "late_leave" | "admin_adjust"
+          points?: number
+          profile_id?: string
+          reason?: string | null
+          trip_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "points_ledger_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "group"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "points_ledger_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "points_ledger_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profile: {
+        Row: {
+          avatar_color: string
+          created_at: string
+          display_name: string
+          id: string
+          initials: string
+          last_seen_at: string | null
+          platform_role: "member" | "platform_admin"
+        }
+        Insert: {
+          avatar_color: string
+          created_at?: string
+          display_name: string
+          id: string
+          initials: string
+          last_seen_at?: string | null
+          platform_role?: "member" | "platform_admin"
+        }
+        Update: {
+          avatar_color?: string
+          created_at?: string
+          display_name?: string
+          id?: string
+          initials?: string
+          last_seen_at?: string | null
+          platform_role?: "member" | "platform_admin"
+        }
+        Relationships: []
+      }
+      push_subscription: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          failure_count: number
+          id: string
+          last_success_at: string | null
+          p256dh: string
+          profile_id: string
+          user_agent: string | null
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          failure_count?: number
+          id?: string
+          last_success_at?: string | null
+          p256dh: string
+          profile_id: string
+          user_agent?: string | null
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          failure_count?: number
+          id?: string
+          last_success_at?: string | null
+          p256dh?: string
+          profile_id?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscription_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip: {
+        Row: {
+          cancelled_reason: string | null
+          capacity: number
+          closed_at: string | null
+          created_at: string
+          depart_at: string
+          direction: "out" | "back" | "round"
+          driver_id: string
+          group_id: string
+          id: string
+          return_at: string | null
+          started_at: string | null
+          status: "scheduled" | "started" | "closed" | "cancelled"
+        }
+        Insert: {
+          cancelled_reason?: string | null
+          capacity: number
+          closed_at?: string | null
+          created_at?: string
+          depart_at: string
+          direction: "out" | "back" | "round"
+          driver_id: string
+          group_id: string
+          id?: string
+          return_at?: string | null
+          started_at?: string | null
+          status?: "scheduled" | "started" | "closed" | "cancelled"
+        }
+        Update: {
+          cancelled_reason?: string | null
+          capacity?: number
+          closed_at?: string | null
+          created_at?: string
+          depart_at?: string
+          direction?: "out" | "back" | "round"
+          driver_id?: string
+          group_id?: string
+          id?: string
+          return_at?: string | null
+          started_at?: string | null
+          status?: "scheduled" | "started" | "closed" | "cancelled"
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "group"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_rider: {
+        Row: {
+          guest_name: string | null
+          id: string
+          joined_at: string
+          left_at: string | null
+          pickup_place_id: string | null
+          profile_id: string | null
+          state: "joined" | "left" | "confirmed" | "no_show"
+          stop_order: number | null
+          trip_id: string
+        }
+        Insert: {
+          guest_name?: string | null
+          id?: string
+          joined_at?: string
+          left_at?: string | null
+          pickup_place_id?: string | null
+          profile_id?: string | null
+          state?: "joined" | "left" | "confirmed" | "no_show"
+          stop_order?: number | null
+          trip_id: string
+        }
+        Update: {
+          guest_name?: string | null
+          id?: string
+          joined_at?: string
+          left_at?: string | null
+          pickup_place_id?: string | null
+          profile_id?: string | null
+          state?: "joined" | "left" | "confirmed" | "no_show"
+          stop_order?: number | null
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_rider_pickup_place_id_fkey"
+            columns: ["pickup_place_id"]
+            isOneToOne: false
+            referencedRelation: "pickup_place"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_rider_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_rider_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
     Functions: {
-      is_member: {
-        Args: { p_group_id: string };
-        Returns: boolean;
-      };
-      compute_initials: {
-        Args: { full_name: string };
-        Returns: string;
-      };
-    };
-    Enums: Record<string, never>;
-  };
+      compute_initials: { Args: { full_name: string }; Returns: string }
+      is_member: { Args: { p_group_id: string }; Returns: boolean }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
 }
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
+  public: {
+    Enums: {},
+  },
+} as const

@@ -14,6 +14,7 @@
     "test:rls": "vitest run --config vitest.rls.config.ts",
     "e2e": "playwright test",
     "db:types": "supabase gen types typescript --local > src/types/database.ts",
+    "db:types:linked": "supabase gen types typescript --linked > src/types/database.ts",
     "db:diff": "supabase db diff",
     "verify": "pnpm typecheck && pnpm lint && pnpm test"
   },
