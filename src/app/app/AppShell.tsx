@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { Database } from "@/types/database";
 import type { TripView } from "@/domain/types";
 import { GroupScreen } from "./GroupScreen";
@@ -27,9 +28,10 @@ interface Props {
   otherGroups: { id: string; name: string }[];
   trips: TripView[];
   viewerName: string;
+  isPlatformAdmin: boolean;
 }
 
-export function AppShell({ group, role, memberCount, adminName, pickupPlaces, inviteLink, otherGroups, trips, viewerName }: Props) {
+export function AppShell({ group, role, memberCount, adminName, pickupPlaces, inviteLink, otherGroups, trips, viewerName, isPlatformAdmin }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("carpools");
   const [overlay, setOverlay] = useState<"create" | null>(null);
@@ -117,6 +119,11 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
               </div>
               <IosInstallPrompt />
               <PushSubscribe />
+              {isPlatformAdmin && (
+                <Link href="/admin" className="btnG" style={{ textAlign: "center", textDecoration: "none" }}>
+                  Admin console
+                </Link>
+              )}
             </div>
           )}
         </div>

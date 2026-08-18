@@ -12,10 +12,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:rls": "vitest run --config vitest.rls.config.ts",
+    "test:admin": "vitest run --config vitest.admin.config.ts",
     "e2e": "playwright test",
     "db:types": "supabase gen types typescript --local > src/types/database.ts",
     "db:types:linked": "supabase gen types typescript --linked > src/types/database.ts",
     "db:diff": "supabase db diff",
+    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "verify": "pnpm typecheck && pnpm lint && pnpm test"
   },
   "dependencies": {

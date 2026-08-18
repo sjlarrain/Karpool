@@ -316,7 +316,114 @@ trip's id; (2) auto-close — any trip left `started` for 6+ hours is force-clos
 - **Errors**: `401 unauthorized`
 - **Side effects**: inserts `notification` rows (`type: "reminder"`) + sends push; updates stale trips' `status`/`closed_at`; inserts an `audit_log` row per auto-close (`actor_profile_id: null` marks it as system-acted, `action: "cron_auto_close"`).
 
+## Admin
+
+Every route below re-checks `profile.platform_role === 'platform_admin'` server-side via
+`authenticateAdmin()` (`src/lib/api/adminAuth.ts`) — a role claim from the client is never trusted.
+A non-admin (including an unauthenticated caller) gets `403 forbidden` (G9). The first
+`platform_admin` is set by `pnpm admin:bootstrap` (`scripts/bootstrap-admin.ts`), which promotes
+whichever account matches `ADMIN_BOOTSTRAP_EMAIL`; idempotent, safe to re-run.
+
+### `GET /api/admin/metrics`
+Headline counts for the console's Overview tab: user/group/ledger-entry counts and trips by status.
+
+- **Auth**: `platform_admin`
+- **Request**: none
+- **Response**: `{ userCount, groupCount, ledgerEntryCount, totalTrips, tripsByStatus: { scheduled, started, closed, cancelled } }`
+- **Errors**: `401 unauthenticated`, `403 forbidden`
+- **Side effects**: none (read-only, no audit row — not a privileged PII read).
+
+### `GET /api/admin/users`
+Platform-wide user list. `?search=` filters by display name (case-insensitive substring); `?limit=`/`?offset=` paginate (max 200/page).
+
+- **Auth**: `platform_admin`
+- **Request**: none (query params only)
+- **Response**: `{ users: [{ id, display_name, initials, avatar_color, platform_role, created_at, last_seen_at, email }], total, limit, offset }`
+- **Errors**: `401 unauthenticated`, `403 forbidden`, `500 lookup_failed`/`auth_lookup_failed`
+- **Side effects**: none (read-only, no audit row — a list view isn't a per-user PII open).
+
+### `GET /api/admin/users/:id`
+One member's full detail: profile, email, memberships, trips driven/ridden, ledger history, kudos received.
+
+- **Auth**: `platform_admin`
+- **Request**: none
+- **Response**: `{ profile, memberships, tripsDriven, tripsRidden, ledger, kudosReceived }`
+- **Errors**: `401 unauthenticated`, `403 forbidden`, `404 not_found`, `500 lookup_failed`/`auth_lookup_failed`
+- **Side effects**: **always** inserts an `audit_log` row (`action: "view_user_detail"`) — G10's "every privileged PII read writes an audit_log row."
+
+### `PATCH /api/admin/users/:id/role`
+Promote/demote a user's `platform_role`. An admin can't demote their own account (must be done by another admin).
+
+- **Auth**: `platform_admin`
+- **Request**: `{ role: "member" | "platform_admin" }`
+- **Response**: `{ profile }`
+- **Errors**: `401 unauthenticated`, `403 forbidden`, `400 invalid_request` (self-demote or bad body), `404 not_found`, `500 update_failed`
+- **Side effects**: updates `profile.platform_role`; inserts an `audit_log` row (`action: "update_user_role"`, `before`/`after` capture the role change).
+
+### `GET /api/admin/groups`
+Every group with member count, trip count, code, and route.
+
+- **Auth**: `platform_admin`
+- **Request**: none
+- **Response**: `{ groups: [{ id, name, code, origin_label, dest_label, created_at, created_by, memberCount, tripCount }] }`
+- **Errors**: `401 unauthenticated`, `403 forbidden`, `500 lookup_failed`
+- **Side effects**: none.
+
+### `GET /api/admin/trips`
+Cross-group trip explorer. `?status=scheduled|started|closed|cancelled` filters; `?limit=`/`?offset=` paginate.
+
+- **Auth**: `platform_admin`
+- **Request**: none (query params only)
+- **Response**: `{ trips: [...], total, limit, offset }`
+- **Errors**: `401 unauthenticated`, `403 forbidden`, `500 lookup_failed`
+- **Side effects**: none.
+
+### `POST /api/admin/trips/:id/force-close`
+Safety-net close for a stuck trip. Never touches `points_ledger` — same rule as the cron auto-close, since nobody confirmed who actually rode.
+
+- **Auth**: `platform_admin`
+- **Request**: `{ reason: string (1-500 chars, required) }`
+- **Response**: `{ trip }`
+- **Errors**: `401 unauthenticated`, `403 forbidden`, `400 invalid_request`, `404 not_found`, `409 wrong_status` (already closed/cancelled), `500 update_failed`
+- **Side effects**: sets `trip.status = "closed"`/`closed_at`; inserts an `audit_log` row (`action: "force_close_trip"`, `after` includes the required reason).
+
+### `GET /api/admin/ledger`
+Full `points_ledger` browse. `?profileId=`/`?groupId=` filter; `?limit=`/`?offset=` paginate.
+
+- **Auth**: `platform_admin`
+- **Request**: none (query params only)
+- **Response**: `{ entries: [...], total, limit, offset }`
+- **Errors**: `401 unauthenticated`, `403 forbidden`, `500 lookup_failed`
+- **Side effects**: none.
+
+### `POST /api/admin/ledger/adjust`
+Manual, signed ledger correction. `points_ledger` is append-only (CLAUDE.md §3.5) — this always INSERTs a new `admin_adjust` row, never edits or removes history.
+
+- **Auth**: `platform_admin`
+- **Request**: `{ profileId: uuid, groupId: uuid, points: int (nonzero), reason: string (1-500 chars, required) }`
+- **Response**: `201 { entry }`
+- **Errors**: `401 unauthenticated`, `403 forbidden`, `400 invalid_request`, `404 not_found`, `500 ledger_write_failed`
+- **Side effects**: inserts a `points_ledger` row (`kind: "admin_adjust"`); inserts an `audit_log` row (`action: "admin_adjust_ledger"`).
+
+### `GET /api/admin/audit-log`
+The audit trail itself — read-only; `audit_log` has no UPDATE/DELETE path anywhere, including for admins (D-14). `?action=`/`?entityType=`/`?actorProfileId=` filter; `?limit=`/`?offset=` paginate.
+
+- **Auth**: `platform_admin`
+- **Request**: none (query params only)
+- **Response**: `{ entries: [...], total, limit, offset }`
+- **Errors**: `401 unauthenticated`, `403 forbidden`, `500 lookup_failed`
+- **Side effects**: none.
+
+### `GET /api/admin/health`
+Push delivery stats (subscription/failure/dead counts), recent cron auto-closes, and a placeholder for Maps health (`status: "not_applicable"` — Phase 6 isn't built yet).
+
+- **Auth**: `platform_admin`
+- **Request**: none
+- **Response**: `{ push: { totalSubscriptions, failingSubscriptions, deadSubscriptions }, recentCronAutoCloses, maps: { status, message } }`
+- **Errors**: `401 unauthenticated`, `403 forbidden`
+- **Side effects**: none.
+
 ## Planned surface
 
-In-app notification reads (the bell/sheet UI), Google Maps routing, and the admin console land in
-later phases per `02_IMPLEMENTATION_PLAN.md` §5 — documented here as each phase's routes are built.
+In-app notification reads (the bell/sheet UI) and Google Maps routing land in later phases per
+`02_IMPLEMENTATION_PLAN.md` §5 — documented here as each phase's routes are built.

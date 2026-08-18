@@ -33,7 +33,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           "id",
           memberships.map((m) => m.group_id),
         ),
-      supabase.from("profile").select("display_name").eq("id", userData.user.id).maybeSingle(),
+      supabase.from("profile").select("display_name, platform_role").eq("id", userData.user.id).maybeSingle(),
     ]);
 
   if (!group) redirect("/");
@@ -55,6 +55,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       otherGroups={otherGroups}
       trips={tripsResult.ok ? tripsResult.trips : []}
       viewerName={viewerProfile?.display_name ?? "You"}
+      isPlatformAdmin={viewerProfile?.platform_role === "platform_admin"}
     />
   );
 }
