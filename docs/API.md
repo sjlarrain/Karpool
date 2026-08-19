@@ -278,6 +278,31 @@ group leaderboard view is month-scoped, the ledger itself never resets).
 - **Errors**: `401 unauthenticated`
 - **Side effects**: none
 
+## Notifications
+
+The in-app bell. Rows are written by the trip lifecycle routes and the cron tick (see
+`src/lib/notify/tripNotify.ts`); these two routes are the read side.
+
+### `GET /api/notifications`
+The caller's own notification feed, newest first.
+
+- **Auth**: required
+- **Request**: `?limit=` (int, 1–50, default 30)
+- **Response**: `{ notifications: Array<{ id, type: "start"|"rate"|"change"|"comment"|"tip"|"reminder", title, body: string|null, tripId: string|null, read: boolean, createdAt: string }>, unreadCount: number }`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `500 notifications_load_failed`
+- **Side effects**: none
+
+### `POST /api/notifications/read`
+Mark notifications read, clearing the bell's unread dot. Opening the sheet calls this with no ids.
+
+- **Auth**: required
+- **Request**: `{ ids?: string[] (uuid, 1–50) }` — omit `ids` to mark every unread row read
+- **Response**: `{ updated: number }`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `500 notifications_update_failed`
+- **Side effects**: sets `notification.read_at` on the caller's own rows. Ownership is enforced by
+  RLS (`notification_own_update`, migration `0005`), not by the route — without that policy the
+  update silently affects zero rows rather than erroring.
+
 ## Push
 
 ### `POST /api/push/subscribe`

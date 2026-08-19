@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Database } from "@/types/database";
@@ -12,6 +12,7 @@ import { TripDetailOverlay } from "./TripDetailOverlay";
 import { PushSubscribe } from "./PushSubscribe";
 import { IosInstallPrompt } from "./IosInstallPrompt";
 import { RanksScreen } from "./RanksScreen";
+import { NotificationsSheet, type NotificationItem } from "./NotificationsSheet";
 
 type Group = Database["public"]["Tables"]["group"]["Row"];
 type PickupPlace = Database["public"]["Tables"]["pickup_place"]["Row"];
@@ -34,6 +35,42 @@ interface Props {
 export function AppShell({ group, role, memberCount, adminName, pickupPlaces, inviteLink, otherGroups, trips, viewerName, isPlatformAdmin }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("carpools");
+  const [notifsOpen, setNotifsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notifsLoading, setNotifsLoading] = useState(true);
+
+  // The bell's unread dot has to be right on first paint, so the feed loads on mount rather than on
+  // open. Opening the sheet marks everything read (POST /api/notifications/read) and clears the dot
+  // locally — no refetch, the response only confirms what we already show.
+  const loadNotifications = useCallback(async () => {
+    try {
+      const res = await fetch("/api/notifications");
+      if (!res.ok) return;
+      const body = await res.json();
+      setNotifications(body.notifications as NotificationItem[]);
+    } catch {
+      // A failed poll leaves the last known feed in place; the bell is not worth a visible error.
+    } finally {
+      setNotifsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadNotifications();
+  }, [loadNotifications]);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  async function openNotifications() {
+    setNotifsOpen(true);
+    if (unreadCount === 0) return;
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    try {
+      await fetch("/api/notifications/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    } catch {
+      // Marking read is best-effort; the next load re-reads the truth from the server.
+    }
+  }
   const [overlay, setOverlay] = useState<"create" | null>(null);
   const [openTripId, setOpenTripId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -84,6 +121,28 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
                   {group.origin_label} → {group.dest_label}
                 </div>
               </div>
+              <button
+                className="iconbtn"
+                onClick={openNotifications}
+                aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+                style={{ position: "relative", background: "var(--ink)", color: "var(--surface)", border: "none" }}
+              >
+                🔔
+                {unreadCount > 0 && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 8,
+                      right: 9,
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: "var(--coral)",
+                      border: "2px solid var(--ink)",
+                    }}
+                  />
+                )}
+              </button>
             </div>
           </div>
         )}
@@ -161,6 +220,18 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
           onChanged={(message) => {
             flash(message);
             router.refresh();
+          }}
+        />
+      )}
+
+      {notifsOpen && (
+        <NotificationsSheet
+          notifications={notifications}
+          loading={notifsLoading}
+          onClose={() => setNotifsOpen(false)}
+          onOpenTrip={(tripId) => {
+            setNotifsOpen(false);
+            setOpenTripId(tripId);
           }}
         />
       )}

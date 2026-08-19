@@ -43,4 +43,13 @@
   /* Sketch's default link colour, used nowhere else in the palette block. */
   --link: #5b46c9;
   --link-hover: #4636a8;
+
+  /* Notification rows (sketch's notifs mapping): each type gets a card tint and an icon-tile tint.
+     start -> --teal-soft, change -> --amber-soft, comment -> --surface/--chip already exist above;
+     these are the remaining values the sketch uses that the core palette doesn't cover. */
+  --notif-rate-bg: #f4f0ff;
+  --notif-rate-icon: #efeaff;
+  --notif-change-icon: #fff0d6;
+  --notif-tip-bg: #eef6ff;
+  --notif-tip-icon: #e3efff;
 }
