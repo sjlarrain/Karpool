@@ -27,14 +27,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const { data: group } = await supabase
     .from("group")
-    .select("drive_weight, pool_weight, kudos_weight")
+    .select("drive_weight, pool_weight, kudos_weight, pool_step")
     .eq("id", id)
     .maybeSingle();
   if (!group) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const { data: members } = await supabase.from("membership").select("profile_id").eq("group_id", id);
+  const { data: members } = await supabase
+    .from("membership")
+    .select("profile_id")
+    .eq("group_id", id);
   const memberIds = (members ?? []).map((m) => m.profile_id);
 
   const { data: profiles } = await supabase
@@ -53,17 +56,32 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .gte("created_at", monthStart)
     .lt("created_at", monthEnd);
 
-  const rows: LedgerRow[] = (ledgerRows ?? []).map((r) => ({ profileId: r.profile_id, kind: r.kind, points: r.points }));
+  const rows: LedgerRow[] = (ledgerRows ?? []).map((r) => ({
+    profileId: r.profile_id,
+    kind: r.kind,
+    points: r.points,
+  }));
   const stats = aggregateLedger(rows);
 
   const entries: LeaderboardEntry[] = (profiles ?? []).map((p) => {
     const s = stats.get(p.id) ?? { driven: 0, pooled: 0, kudos: 0, points: 0 };
-    return { profileId: p.id, name: p.display_name, initials: p.initials, color: p.avatar_color, ...s };
+    return {
+      profileId: p.id,
+      name: p.display_name,
+      initials: p.initials,
+      color: p.avatar_color,
+      ...s,
+    };
   });
 
   return NextResponse.json({
     entries: rankLeaderboard(entries),
-    formula: formatWeightsCaption({ driveWeight: group.drive_weight, poolWeight: group.pool_weight, kudosWeight: group.kudos_weight }),
+    formula: formatWeightsCaption({
+      driveWeight: group.drive_weight,
+      poolWeight: group.pool_weight,
+      poolStep: group.pool_step,
+      kudosWeight: group.kudos_weight,
+    }),
     viewerProfileId: user.id,
   });
 }

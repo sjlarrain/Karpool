@@ -3,7 +3,7 @@
 // and presents ledger rows that already carry the weight-derived points at the time each was
 // written (D-11: weights are per-group and can change over time without rewriting history).
 
-export type LedgerKind = "drive" | "pool" | "kudos" | "late_leave" | "admin_adjust";
+export type LedgerKind = "drive" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust";
 
 export interface LedgerRow {
   profileId: string;
@@ -54,6 +54,14 @@ export function rankLeaderboard(entries: LeaderboardEntry[]): RankedRow[] {
     .map(({ entry }, i) => ({ ...entry, rank: i + 1, medal: i < MEDALS.length ? MEDALS[i]! : null }));
 }
 
-export function formatWeightsCaption(weights: { driveWeight: number; poolWeight: number; kudosWeight: number }): string {
-  return `${weights.driveWeight}·drive + ${weights.poolWeight}·pool + ${weights.kudosWeight}·kudos`;
+// The caption sits in a 10.5px slot next to "Leaderboard", so it states the shape of the scoring
+// rather than the full formula: pooling escalates per seat, kudos scale with the car (D-19).
+export function formatWeightsCaption(weights: {
+  driveWeight: number;
+  poolWeight: number;
+  poolStep: number;
+  kudosWeight: number;
+}): string {
+  const pool = weights.poolStep === 0 ? `${weights.poolWeight}·pool` : `pool ${weights.poolWeight}+${weights.poolStep}/seat`;
+  return `${weights.driveWeight}·drive · ${pool} · ${weights.kudosWeight}·kudos×riders`;
 }

@@ -221,6 +221,7 @@ Driver only, `started→closed`. Confirms which currently-active registered ride
 - **Request**: `{ confirmedTripRiderIds?: string[] (uuid, trip_rider row ids — not profile ids — of active riders who rode; default []), guestNames?: string[] (1-80 chars each, max 20; default []) }`. Any id in `confirmedTripRiderIds` that isn't an active rider on this trip is silently ignored, not trusted.
 - **Response**: `{ trip, confirmedCount: number, noShowCount: number, pointsAwarded: number }`
 - **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `403 not_driver`, `409 wrong_status`, `500 confirm_failed` / `no_show_failed` / `guest_add_failed` / `ledger_write_failed` / `update_failed`
+- **Scoring (D-19)**: the driver gets one `drive` entry plus one `pool` entry per confirmed rider, escalating per seat (`pool_weight + (n-1)·pool_step` — 3, 5, 7 at the defaults). Each registered rider marked `no_show` is charged `group.no_show_penalty` (default −10) on **their own** profile, not the driver's; guests are never penalised.
 - **Side effects**: updates confirmed riders' `trip_rider.state` to `"confirmed"`, unconfirmed active riders to `"no_show"`; inserts a `trip_rider` row per guest (`state: "confirmed"`, `profile_id: null`); inserts `points_ledger` rows to the **driver** — one `drive` entry (`group.drive_weight`) plus one `pool` entry (`group.pool_weight`) per confirmed rider, registered or guest (guests have no profile to hold their own points, so their contribution always lands on the driver — matches the sketch's "guest riders still count toward your pooled score"); inserts a `rate`-type `notification` row for each confirmed *registered* rider; updates `trip.status` and `closed_at`.
 
 ### `POST /api/trips/:id/join`
@@ -255,6 +256,7 @@ kudos, once per trip. Awards the driver `group.kudos_weight` points.
 - **Request**: `{ comment?: string (max 500) }`
 - **Response**: `201 { kudos }`
 - **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `409 wrong_status` (not closed), `409 is_driver`, `403 not_confirmed_rider`, `429 rate_limited` (20/hour per caller), `409 already_given`, `500 kudos_failed`
+- **Scoring (D-19)**: the award is `group.kudos_weight × the trip's confirmed rider count` (guests included), so a kudos on a full car is worth more than one on a solo pickup. Floors at one rider.
 - **Side effects**: inserts a `kudos` row; inserts a `kind: "kudos"` `points_ledger` entry for the driver.
 
 ### `POST /api/trips/:id/kudos/decline`

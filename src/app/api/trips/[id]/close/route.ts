@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { transition, type TripTransitionErrorCode } from "@/domain/tripMachine";
-import { computeCloseAwards } from "@/domain/points";
+import { computeCloseAwards, computeNoShowPenalty } from "@/domain/points";
 import { notifyProfiles } from "@/lib/notify/tripNotify";
 
 const STATUS_BY_ERROR: Record<TripTransitionErrorCode, number> = {
@@ -59,7 +59,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { data: group } = await supabase
     .from("group")
-    .select("drive_weight, pool_weight")
+    .select("drive_weight, pool_weight, pool_step, no_show_penalty")
     .eq("id", trip.group_id)
     .maybeSingle();
   if (!group) {
@@ -117,9 +117,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ...insertedGuests.map((g) => g.guest_name ?? "Guest"),
   ];
 
-  const awards = computeCloseAwards(riderNames, { driveWeight: group.drive_weight, poolWeight: group.pool_weight });
-  const { error: ledgerError } = await admin.from("points_ledger").insert(
-    awards.map((award) => ({
+  const awards = computeCloseAwards(riderNames, {
+    driveWeight: group.drive_weight,
+    poolWeight: group.pool_weight,
+    poolStep: group.pool_step,
+  });
+
+  // The driver's awards and the no-show penalties go in as one append-only batch. Penalties are
+  // charged to the RIDER who booked and didn't ride, never to the driver, and only to registered
+  // riders — a guest has no profile to hold points and nobody booked a seat on their behalf.
+  const noShowProfileIds = noShowIds
+    .map((rid) => activeById.get(rid)?.profile_id)
+    .filter((pid): pid is string => !!pid);
+  const noShowPenalty = computeNoShowPenalty(group.no_show_penalty);
+
+  const { error: ledgerError } = await admin.from("points_ledger").insert([
+    ...awards.map((award) => ({
       profile_id: trip.driver_id,
       group_id: trip.group_id,
       trip_id: id,
@@ -127,7 +140,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       points: award.points,
       reason: award.reason,
     })),
-  );
+    ...noShowProfileIds.map((pid) => ({
+      profile_id: pid,
+      group_id: trip.group_id,
+      trip_id: id,
+      kind: noShowPenalty.kind,
+      points: noShowPenalty.points,
+      reason: noShowPenalty.reason,
+    })),
+  ]);
   if (ledgerError) {
     return NextResponse.json({ error: "ledger_write_failed", message: ledgerError.message }, { status: 500 });
   }

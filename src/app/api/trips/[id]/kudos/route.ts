@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { computeKudosAward } from "@/domain/points";
 
 const bodySchema = z.object({ comment: z.string().trim().max(500).optional() });
 
@@ -80,13 +81,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "kudos_failed", message: error?.message }, { status: 500 });
   }
 
+  // D-19: a kudos is worth more on a fuller car. Count the confirmed riders on this trip (guests
+  // included — they count toward pooling everywhere else too) and scale the award by it.
+  const { count: confirmedRiderCount } = await admin
+    .from("trip_rider")
+    .select("id", { count: "exact", head: true })
+    .eq("trip_id", id)
+    .eq("state", "confirmed");
+
+  const award = computeKudosAward(group.kudos_weight, confirmedRiderCount ?? 1);
+
   await admin.from("points_ledger").insert({
     profile_id: trip.driver_id,
     group_id: trip.group_id,
     trip_id: id,
-    kind: "kudos",
-    points: group.kudos_weight,
-    reason: "Received kudos",
+    kind: award.kind,
+    points: award.points,
+    reason: award.reason,
   });
 
   return NextResponse.json({ kudos }, { status: 201 });

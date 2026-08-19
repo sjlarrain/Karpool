@@ -59,11 +59,21 @@ describe("rankLeaderboard", () => {
 });
 
 describe("formatWeightsCaption", () => {
-  it("formats the group's configured weights", () => {
-    expect(formatWeightsCaption({ driveWeight: 10, poolWeight: 3, kudosWeight: 2 })).toBe("10·drive + 3·pool + 2·kudos");
+  it("states the shape of the scoring, not just the weights (D-19)", () => {
+    expect(formatWeightsCaption({ driveWeight: 10, poolWeight: 3, poolStep: 2, kudosWeight: 2 })).toBe(
+      "10·drive · pool 3+2/seat · 2·kudos×riders",
+    );
   });
 
   it("reflects non-default weights", () => {
-    expect(formatWeightsCaption({ driveWeight: 20, poolWeight: 5, kudosWeight: 1 })).toBe("20·drive + 5·pool + 1·kudos");
+    expect(formatWeightsCaption({ driveWeight: 20, poolWeight: 5, poolStep: 4, kudosWeight: 1 })).toBe(
+      "20·drive · pool 5+4/seat · 1·kudos×riders",
+    );
+  });
+
+  it("drops the per-seat wording when a group turns escalation off", () => {
+    expect(formatWeightsCaption({ driveWeight: 10, poolWeight: 3, poolStep: 0, kudosWeight: 2 })).toBe(
+      "10·drive · 3·pool · 2·kudos×riders",
+    );
   });
 });

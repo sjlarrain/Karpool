@@ -108,6 +108,8 @@ export type Database = {
           late_window_minutes: number
           name: string
           origin_label: string
+          no_show_penalty: number
+          pool_step: number
           pool_weight: number
         }
         Insert: {
@@ -123,6 +125,8 @@ export type Database = {
           late_window_minutes?: number
           name: string
           origin_label: string
+          no_show_penalty?: number
+          pool_step?: number
           pool_weight?: number
         }
         Update: {
@@ -138,6 +142,8 @@ export type Database = {
           late_window_minutes?: number
           name?: string
           origin_label?: string
+          no_show_penalty?: number
+          pool_step?: number
           pool_weight?: number
         }
         Relationships: [
@@ -332,7 +338,7 @@ export type Database = {
           created_at: string
           group_id: string
           id: string
-          kind: "drive" | "pool" | "kudos" | "late_leave" | "admin_adjust"
+          kind: "drive" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust"
           points: number
           profile_id: string
           reason: string | null
@@ -342,7 +348,7 @@ export type Database = {
           created_at?: string
           group_id: string
           id?: string
-          kind: "drive" | "pool" | "kudos" | "late_leave" | "admin_adjust"
+          kind: "drive" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust"
           points: number
           profile_id: string
           reason?: string | null
@@ -352,7 +358,7 @@ export type Database = {
           created_at?: string
           group_id?: string
           id?: string
-          kind?: "drive" | "pool" | "kudos" | "late_leave" | "admin_adjust"
+          kind?: "drive" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust"
           points?: number
           profile_id?: string
           reason?: string | null
