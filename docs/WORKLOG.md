@@ -1,5 +1,47 @@
 # Worklog
 
+## Shipped (D-18 kudos decline, D-19 scoring rework)
+- **D-18** (`370c60d`) — the kudos prompt had no "no thanks" path, so a rider who didn't want to
+  give kudos could never clear it off a closed trip. Decline is now *recorded*
+  (`trip_rider.kudos_declined_at`, migration `0006`) rather than dismissed client-side, so it stays
+  cleared on every device. Rate card rebuilt as the sketch's 💚 toggle ("Give kudos" / "Kudos given
+  ✓") with the submit switching between "Skip & close" and "Send kudos 💚".
+  Chose trip_rider over a `kudos.declined` flag deliberately: every `kudos` row drives a
+  points_ledger insert, so a declined row there would look like a kudos to anything counting them.
+- **D-19** (`25de1ee`) — scoring rework, developer picked all three options from costed choices:
+  pooling escalates per seat (`pool_weight + (n-1)·pool_step`, defaults 3/5/7 — a 3-rider trip goes
+  19 → 25); a kudos is worth `kudos_weight × confirmed riders` (so 2 → 6 on a full car); a no-show
+  costs the *rider* −10, worse than the −5 late cancellation. Migration `0007` adds
+  `group.pool_step` and `group.no_show_penalty` and widens the ledger kind constraint.
+  **Forward-only** — the ledger is append-only, so existing scores stand and nothing is recomputed.
+- Both migrations applied to the live project with authorization. Types regenerated, then
+  re-patched by hand to keep the CHECK-constraint literal unions the generator can't infer.
+- Verified live, not just unit-tested: a 3-rider close wrote 10+3+5+7=25; a kudos on it wrote 6
+  with reason "Received kudos (3 riders pooled)"; an unconfirmed rider was charged −10 on their own
+  profile, not the driver's.
+
+## In Progress
+- Nothing mid-flight.
+
+## Next
+- **`CLAUDE.md` §4 is now stale** and is immutable to the agent — the developer needs to replace
+  `10·driven + 3·pooled + 2·kudos` with `10·drive + pool 3+2/seat + 2·kudos×riders; no-show −10`.
+- Open question raised with the developer, not yet answered: three solo trips still out-earn one
+  full car (39 vs 25) because three trips means three `drive` awards. If a full car should win,
+  `drive_weight` has to fall or pooling escalate harder.
+
+## Blocked On
+- **D-03** — Maps, deferred until the app shows real traction (paid API).
+- **D-17** — the `comment` notification type renders in the bell but nothing can create one.
+- Vercel Hobby caps cron at once a day, degrading the 15-min reminder and 6-hour auto-close.
+
+## Gates Now Green
+- G1 (`pnpm verify`): green — typecheck, lint, 86/86 tests (points engine now 16, up from 11).
+- G4 (points engine correctness): escalation, kudos scaling, no-show and the late-leave window are
+  all pure functions with boundary tests; tests written before the implementation.
+- G8 (API docs): close and kudos routes both carry a "Scoring (D-19)" line; the decline route is
+  documented in the same commit that added it.
+
 ## Shipped (polish sweep — sketch vs deployed app; bell, invite link, You tab)
 - **Context correction**: the app is live on Vercel and push works. Every earlier entry claiming no
   deployment exists / `VAPID_SUBJECT` is invalid / G6 unsatisfiable is superseded. The live DB now
