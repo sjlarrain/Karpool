@@ -49,14 +49,13 @@ blob-report/
 .playwright/
 
 # ─── Internal planning docs — local only, not for the repo ────────────
-# Tracked docs: README.md, CLAUDE.md, docs/API.md.
-# Everything below is working material: plans, drafts, scratch, handoffs.
+# Tracked docs: README.md, CLAUDE.md, docs/API.md, docs/DECISIONS.md, docs/WORKLOG.md.
+# The decision register and the worklog are tracked so they survive a fresh
+# clone and reach anyone else who joins. Everything below is working material.
 docs/internal/
 docs/plans/
 docs/scratch/
 docs/drafts/
-docs/WORKLOG.md
-docs/DECISIONS.md
 *.draft.md
 *.local.md
 notes/
