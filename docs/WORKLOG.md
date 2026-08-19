@@ -1,5 +1,54 @@
 # Worklog
 
+## Shipped (polish sweep — sketch vs deployed app; bell, invite link, You tab)
+- **Context correction**: the app is live on Vercel and push works. Every earlier entry claiming no
+  deployment exists / `VAPID_SUBJECT` is invalid / G6 unsatisfiable is superseded. The live DB now
+  holds real user data (a real group alongside the seeded `e2e-*@carpool.test` accounts), so
+  migrations and writes there are production actions — get authorization first.
+- **Notification bell** (`77fa80b`) — existed as a backend with no front door. `notifyProfiles()`
+  has written `notification` rows since Phase 5 (start/close/edit + cron reminder) and nothing ever
+  read them. Added `GET /api/notifications`, `POST /api/notifications/read`, the sketch's bottom
+  sheet with its per-type tints, and the header bell + unread dot. `relativeTime()` is pure and
+  tested (the sketch's "now/2m/1h/1d" vocabulary, boundaries and future-clamp).
+- **Migration 0005** — `0001_init.sql` gave `notification` a SELECT policy but never an UPDATE one,
+  so mark-read silently updated zero rows under RLS (confirmed live: `{"updated":0}`). Written,
+  applied to the live project with the developer's authorization, re-verified: `{"updated":1}`,
+  unread 1 → 0.
+- **Invite link** (`3922b5a`) — `/j/:code` had never been built, so every invite link the app has
+  ever handed out 404'd. Route now joins-and-lands when signed in, and names the group + prefills
+  the code when signed out. Share also uses `navigator.share` on mobile and builds the URL from the
+  live origin rather than `NEXT_PUBLIC_APP_URL`.
+- **You tab** (`e8ab088`) — was a placeholder line. Both missing pieces already had backends:
+  `/api/me/points` (stat tiles) and `PATCH /api/memberships/:id` (pickup place, which no screen
+  anywhere could set, so every membership had `pickup_place_id` null). Plus a leaderboard empty
+  state for the state every new group starts in.
+- Pushed to `origin/main` with authorization (`a7aea29..3922b5a`, later `e8ab088`), which also
+  carried the previously-unpushed Phase 8 admin console.
+- `docs/DECISIONS.md` and `docs/WORKLOG.md` are now tracked in git (`5b73dbb`) — they were
+  gitignored, so the decision register and every handoff lived on one machine only.
+
+## In Progress
+- Nothing mid-flight.
+
+## Next
+- D-18 (kudos decline path) is the one thing blocking the kudos flow from matching the sketch.
+- Sketch-vs-app sweep found no other drift: Carpools, Ranks, Trip detail, Group profile, Create/
+  Close trip, Switch group, Create group, Leave confirm and the auth screens are all faithful ports.
+
+## Blocked On
+- **D-18** — kudos prompt has no "no thanks" path; a rider who doesn't want to give kudos can never
+  clear it off a closed trip. Needs a product call on whether a decline is recorded or dismissed.
+- **D-03** — Maps, deferred indefinitely on a business condition: not until the app shows real
+  traction, because it is a paid API.
+- **D-17** — the `comment` notification type now renders in the bell, but nothing can create one.
+- Vercel Hobby caps cron at once a day, degrading the 15-min reminder and 6-hour auto-close.
+
+## Gates Now Green
+- G1 (`pnpm verify`): green — typecheck, lint, 80/80 tests (5 new for `relativeTime`).
+- G7 (no hex outside tokens.css): held — the sketch's notification tints were added as tokens
+  rather than inlined.
+- G8 (API docs): `docs/API.md` documents both new notification routes in the same commit.
+
 ## Shipped (Phase 8 — admin console + audit log; D-07/D-14 resolved, only Phase 6/Maps left)
 - D-07 (admin scope) marked Applied — the `platform_admin`/`group_admin` split it recommended was
   already in the schema since Phase 1; just confirmed with the developer while unblocking Phase 8.
