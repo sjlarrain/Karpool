@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Database } from "@/types/database";
 import { avatarColorFor as colorFor } from "@/domain/avatarColor";
@@ -22,6 +22,14 @@ export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces,
   const router = useRouter();
   const [sheet, setSheet] = useState<"switch" | "create" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // The server builds the invite link from NEXT_PUBLIC_APP_URL. Once mounted, prefer the origin the
+  // visitor is actually on: a stale or missing env value in a deployment would otherwise hand out
+  // links pointing at the wrong host, and the person sharing has no way to notice.
+  const [shareUrl, setShareUrl] = useState(inviteLink);
+
+  useEffect(() => {
+    setShareUrl(`${window.location.origin}/j/${group.code}`);
+  }, [group.code]);
 
   function flash(message: string) {
     setToast(message);
@@ -35,8 +43,20 @@ export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces,
   }
 
   async function copyInvite() {
+    // On a phone this is a real share sheet (the PWA's whole point); everywhere else it falls back
+    // to the clipboard. A cancelled share is a deliberate user action, not a failure to report.
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: `Join ${group.name} on Carpool`, url: shareUrl });
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        // Anything else (no permission, unsupported payload) falls through to the clipboard.
+      }
+    }
+
     try {
-      await navigator.clipboard.writeText(inviteLink);
+      await navigator.clipboard.writeText(shareUrl);
       flash("Invite link copied 🔗");
     } catch {
       flash("Couldn't copy — copy it manually");
@@ -163,7 +183,7 @@ export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces,
               whiteSpace: "nowrap",
             }}
           >
-            {inviteLink}
+            {shareUrl}
           </div>
           <button
             onClick={copyInvite}

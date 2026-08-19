@@ -9,14 +9,16 @@ import { useRouter } from "next/navigation";
 type Mode = "signin" | "signup";
 type SignupStep = 1 | 2;
 
-export function AuthGate() {
+export function AuthGate({ presetCode, hideHero = false }: { presetCode?: string; hideHero?: boolean } = {}) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("signin");
   const [signupStep, setSignupStep] = useState<SignupStep>(1);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  // /j/:code arrives with the invite code already known — prefill it so an invited visitor never
+  // retypes what they just clicked.
+  const [code, setCode] = useState(presetCode ?? "");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -134,29 +136,35 @@ export function AuthGate() {
 
   return (
     <div style={{ padding: "26px 24px" }}>
-      <div
-        style={{
-          width: 60,
-          height: 60,
-          borderRadius: 19,
-          background: "linear-gradient(135deg, var(--green), var(--cyan))",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 30,
-          boxShadow: "0 10px 24px rgba(23,201,100,.35)",
-        }}
-      >
-        🚗
-      </div>
-      <h1 style={{ fontSize: 30, fontWeight: 800, color: "var(--ink)", margin: "22px 0 6px", lineHeight: 1.05 }}>
-        Ride together,
-        <br />
-        rank higher.
-      </h1>
-      <p style={{ font: "500 13.5px/1.5 var(--font-body)", color: "rgba(0,0,0,.5)", margin: "0 0 26px" }}>
-        Join your workplace carpool group to see rides, offer trips, and climb the leaderboard.
-      </p>
+      {/* An invite page (/j/:code) already leads with its own hero naming the group, so the generic
+          pitch would just repeat a second car and headline below it. */}
+      {!hideHero && (
+        <>
+          <div
+            style={{
+              width: 60,
+              height: 60,
+              borderRadius: 19,
+              background: "linear-gradient(135deg, var(--green), var(--cyan))",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 30,
+              boxShadow: "0 10px 24px rgba(23,201,100,.35)",
+            }}
+          >
+            🚗
+          </div>
+          <h1 style={{ fontSize: 30, fontWeight: 800, color: "var(--ink)", margin: "22px 0 6px", lineHeight: 1.05 }}>
+            Ride together,
+            <br />
+            rank higher.
+          </h1>
+          <p style={{ font: "500 13.5px/1.5 var(--font-body)", color: "rgba(0,0,0,.5)", margin: "0 0 26px" }}>
+            Join your workplace carpool group to see rides, offer trips, and climb the leaderboard.
+          </p>
+        </>
+      )}
 
       {notice && (
         <p
