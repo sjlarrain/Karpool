@@ -21,6 +21,7 @@ interface DetailResponse {
   cancelledReason: string | null;
   pickups: Pickup[];
   viewerGaveKudos: boolean;
+  viewerDeclinedKudos: boolean;
 }
 
 interface Props {
@@ -37,6 +38,8 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const [closing, setClosing] = useState(false);
   const [kudosComment, setKudosComment] = useState("");
+  // Sketch default: the toggle starts off, so the submit reads "Skip & close" until the rider opts in.
+  const [givingKudos, setGivingKudos] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -73,22 +76,26 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
     }
   }
 
-  async function giveKudos() {
+  // One submit for both halves of the sketch's rate overlay: give kudos, or close the prompt without
+  // giving any (D-18). Declining is recorded server-side so it stays cleared on every device.
+  async function submitRating() {
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch(`/api/trips/${tripId}/kudos`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ comment: kudosComment.trim() || undefined }),
-      });
+      const res = givingKudos
+        ? await fetch(`/api/trips/${tripId}/kudos`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ comment: kudosComment.trim() || undefined }),
+          })
+        : await fetch(`/api/trips/${tripId}/kudos/decline`, { method: "POST" });
       const body = await res.json();
       if (!res.ok) {
-        setError(body.message ?? "Couldn't send kudos.");
+        setError(body.message ?? (givingKudos ? "Couldn't send kudos." : "Couldn't close the prompt."));
         return;
       }
       await load();
-      onChanged("Kudos sent 💚");
+      onChanged(givingKudos ? "Kudos sent 💚" : "Ride closed");
     } catch {
       setError("Couldn't reach the server — check your connection and try again.");
     } finally {
@@ -387,12 +394,52 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
               >
                 💚 Kudos sent to {trip.driver}
               </div>
+            ) : data.viewerDeclinedKudos ? (
+              <div
+                style={{
+                  background: "var(--chip)",
+                  border: "1px solid rgba(0,0,0,.08)",
+                  borderRadius: 13,
+                  padding: 12,
+                  font: "600 12.5px var(--font-body)",
+                  color: "rgba(0,0,0,.5)",
+                }}
+              >
+                Ride closed — no kudos given.
+              </div>
             ) : (
               <div style={{ background: "var(--surface)", border: "1px solid rgba(0,0,0,.07)", borderRadius: 16, padding: 18, textAlign: "left" }}>
                 <h3 style={{ fontSize: 15, fontWeight: 800, color: "var(--ink)", margin: "0 0 4px", textAlign: "center" }}>Rate your ride</h3>
                 <p style={{ font: "500 11px var(--font-body)", color: "rgba(0,0,0,.45)", margin: "0 0 14px", textAlign: "center" }}>
                   Say thanks — it boosts {trip.driver}&apos;s score.
                 </p>
+
+                <button
+                  onClick={() => setGivingKudos((on) => !on)}
+                  aria-pressed={givingKudos}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 5,
+                    background: givingKudos ? "var(--green-soft)" : "var(--bg)",
+                    border: `1.5px solid ${givingKudos ? "rgba(23,201,100,.6)" : "rgba(0,0,0,.12)"}`,
+                    borderRadius: 16,
+                    padding: 20,
+                    cursor: "pointer",
+                    marginBottom: 18,
+                  }}
+                >
+                  <div style={{ fontSize: 38 }}>💚</div>
+                  <div style={{ font: "800 15px var(--font-display)", color: givingKudos ? "var(--green-ink)" : "rgba(0,0,0,.6)" }}>
+                    {givingKudos ? "Kudos given ✓" : "Give kudos"}
+                  </div>
+                  <div style={{ font: "500 11px var(--font-body)", color: "rgba(0,0,0,.45)" }}>
+                    One kudos per ride — you give it or you don&apos;t
+                  </div>
+                </button>
+
                 <label className="lbl">Comment (optional)</label>
                 <textarea
                   className="field"
@@ -402,8 +449,8 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
                   onChange={(e) => setKudosComment(e.target.value)}
                   style={{ resize: "none", fontFamily: "var(--font-body)", marginBottom: 12 }}
                 />
-                <button className="btnP" disabled={busy} onClick={giveKudos}>
-                  Send kudos 💚
+                <button className="btnP" disabled={busy} onClick={submitRating}>
+                  {givingKudos ? "Send kudos 💚" : "Skip & close"}
                 </button>
               </div>
             )}

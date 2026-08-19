@@ -257,6 +257,18 @@ kudos, once per trip. Awards the driver `group.kudos_weight` points.
 - **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `409 wrong_status` (not closed), `409 is_driver`, `403 not_confirmed_rider`, `429 rate_limited` (20/hour per caller), `409 already_given`, `500 kudos_failed`
 - **Side effects**: inserts a `kudos` row; inserts a `kind: "kudos"` `points_ledger` entry for the driver.
 
+### `POST /api/trips/:id/kudos/decline`
+The "no thanks" half of the kudos prompt (D-18). Records that the rider closed the prompt without
+giving kudos, so it stays cleared on every device instead of reappearing on the next load.
+
+- **Auth**: required. Caller must be a `confirmed` registered rider on the trip.
+- **Request**: none
+- **Response**: `{ declined: true }`
+- **Errors**: `401 unauthenticated`, `404 not_found`, `409 wrong_status` (trip not closed), `409 is_driver`, `409 already_given` (already gave kudos — nothing to decline), `403 not_confirmed_rider`, `500 decline_failed`
+- **Side effects**: sets `trip_rider.kudos_declined_at`. Deliberately writes **nothing** to `kudos` and
+  **nothing** to `points_ledger` — a decline is the absence of kudos, not a kind of kudos.
+  Idempotent: declining twice is still `200`.
+
 ### `GET /api/groups/:id/leaderboard`
 Calendar-month ranking (D-12 — the ledger itself stays all-time; only this view's window resets
 monthly), weighted per the group's own `drive_weight`/`pool_weight`/`kudos_weight` (D-11). Every

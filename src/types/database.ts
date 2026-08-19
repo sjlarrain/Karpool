@@ -550,6 +550,7 @@ export type Database = {
           guest_name: string | null
           id: string
           joined_at: string
+          kudos_declined_at: string | null
           left_at: string | null
           pickup_place_id: string | null
           profile_id: string | null
@@ -561,6 +562,7 @@ export type Database = {
           guest_name?: string | null
           id?: string
           joined_at?: string
+          kudos_declined_at?: string | null
           left_at?: string | null
           pickup_place_id?: string | null
           profile_id?: string | null
@@ -572,6 +574,7 @@ export type Database = {
           guest_name?: string | null
           id?: string
           joined_at?: string
+          kudos_declined_at?: string | null
           left_at?: string | null
           pickup_place_id?: string | null
           profile_id?: string | null

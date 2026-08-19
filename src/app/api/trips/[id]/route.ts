@@ -103,14 +103,23 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   });
 
   let viewerGaveKudos = false;
+  // D-18: a rider can also close the prompt without giving kudos. That decline is recorded on their
+  // trip_rider row, so the prompt stays cleared on every device rather than only where it was
+  // dismissed.
+  let viewerDeclinedKudos = false;
   if (trip.status === "closed" && trip.driver_id !== user.id) {
-    const { data: existingKudos } = await supabase
-      .from("kudos")
-      .select("id")
-      .eq("trip_id", id)
-      .eq("from_profile_id", user.id)
-      .maybeSingle();
+    const [{ data: existingKudos }, { data: seat }] = await Promise.all([
+      supabase.from("kudos").select("id").eq("trip_id", id).eq("from_profile_id", user.id).maybeSingle(),
+      supabase
+        .from("trip_rider")
+        .select("kudos_declined_at")
+        .eq("trip_id", id)
+        .eq("profile_id", user.id)
+        .eq("state", "confirmed")
+        .maybeSingle(),
+    ]);
     viewerGaveKudos = !!existingKudos;
+    viewerDeclinedKudos = !!seat?.kudos_declined_at;
   }
 
   return NextResponse.json({
@@ -120,6 +129,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     cancelledReason: trip.cancelled_reason,
     pickups,
     viewerGaveKudos,
+    viewerDeclinedKudos,
   });
 }
 
