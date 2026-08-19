@@ -85,6 +85,12 @@ export function RanksScreen({ groupId }: { groupId: string }) {
         <span style={{ font: "600 10.5px var(--font-body)", color: "rgba(0,0,0,.4)" }}>{data.formula}</span>
       </div>
 
+      {data.entries.length === 0 && (
+        <p style={{ font: "500 12.5px var(--font-body)", color: "rgba(0,0,0,.45)", margin: "4px 2px" }}>
+          No scores this month yet — points land here once a trip is closed.
+        </p>
+      )}
+
       {data.entries.map((r) => {
         const isMe = r.profileId === data.viewerProfileId;
         return (

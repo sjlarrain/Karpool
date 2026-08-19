@@ -2,16 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import type { Database } from "@/types/database";
 import type { TripView } from "@/domain/types";
 import { GroupScreen } from "./GroupScreen";
 import { CarpoolsScreen } from "./CarpoolsScreen";
 import { CreateTripOverlay } from "./CreateTripOverlay";
 import { TripDetailOverlay } from "./TripDetailOverlay";
-import { PushSubscribe } from "./PushSubscribe";
-import { IosInstallPrompt } from "./IosInstallPrompt";
 import { RanksScreen } from "./RanksScreen";
+import { YouScreen } from "./YouScreen";
 import { NotificationsSheet, type NotificationItem } from "./NotificationsSheet";
 
 type Group = Database["public"]["Tables"]["group"]["Row"];
@@ -26,13 +24,15 @@ interface Props {
   adminName: string | null;
   pickupPlaces: PickupPlace[];
   inviteLink: string;
+  membershipId: string;
+  pickupPlaceId: string | null;
   otherGroups: { id: string; name: string }[];
   trips: TripView[];
   viewerName: string;
   isPlatformAdmin: boolean;
 }
 
-export function AppShell({ group, role, memberCount, adminName, pickupPlaces, inviteLink, otherGroups, trips, viewerName, isPlatformAdmin }: Props) {
+export function AppShell({ group, role, memberCount, adminName, pickupPlaces, inviteLink, membershipId, pickupPlaceId, otherGroups, trips, viewerName, isPlatformAdmin }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("carpools");
   const [notifsOpen, setNotifsOpen] = useState(false);
@@ -168,22 +168,16 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
             />
           )}
           {tab === "you" && (
-            <div style={{ flex: 1, padding: "24px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
-              <div style={{ textAlign: "center", marginBottom: 4 }}>
-                <div style={{ fontSize: 40 }}>👤</div>
-                <h2 style={{ fontSize: 19, fontWeight: 800, color: "var(--ink)", margin: "12px 0 4px" }}>{viewerName}</h2>
-                <p style={{ font: "500 12.5px var(--font-body)", color: "rgba(0,0,0,.45)", margin: 0 }}>
-                  Your stats show up once trips start closing.
-                </p>
-              </div>
-              <IosInstallPrompt />
-              <PushSubscribe />
-              {isPlatformAdmin && (
-                <Link href="/admin" className="btnG" style={{ textAlign: "center", textDecoration: "none" }}>
-                  Admin console
-                </Link>
-              )}
-            </div>
+            <YouScreen
+              viewerName={viewerName}
+              groupName={group.name}
+              memberCount={memberCount}
+              membershipId={membershipId}
+              pickupPlaces={pickupPlaces}
+              pickupPlaceId={pickupPlaceId}
+              isPlatformAdmin={isPlatformAdmin}
+              onOpenGroup={() => setTab("group")}
+            />
           )}
         </div>
       </div>

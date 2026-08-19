@@ -12,14 +12,15 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
 
   const { data: memberships } = await supabase
     .from("membership")
-    .select("group_id, group_role")
+    .select("id, group_id, group_role, pickup_place_id")
     .eq("profile_id", userData.user.id)
     .order("joined_at", { ascending: true });
 
   if (!memberships || memberships.length === 0) redirect("/");
 
   const activeGroupId = g && memberships.some((m) => m.group_id === g) ? g : memberships[0]!.group_id;
-  const activeRole = memberships.find((m) => m.group_id === activeGroupId)?.group_role ?? "member";
+  const activeMembership = memberships.find((m) => m.group_id === activeGroupId);
+  const activeRole = activeMembership?.group_role ?? "member";
 
   const [{ data: group }, { data: pickupPlaces }, { count: memberCount }, { data: allGroupRows }, { data: viewerProfile }] =
     await Promise.all([
@@ -55,6 +56,8 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       otherGroups={otherGroups}
       trips={tripsResult.ok ? tripsResult.trips : []}
       viewerName={viewerProfile?.display_name ?? "You"}
+      membershipId={activeMembership?.id ?? ""}
+      pickupPlaceId={activeMembership?.pickup_place_id ?? null}
       isPlatformAdmin={viewerProfile?.platform_role === "platform_admin"}
     />
   );
