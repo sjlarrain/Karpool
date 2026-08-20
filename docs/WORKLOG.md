@@ -33,7 +33,9 @@
 ## Blocked On
 - **D-03** — Maps, deferred until the app shows real traction (paid API).
 - **D-17** — the `comment` notification type renders in the bell but nothing can create one.
-- Vercel Hobby caps cron at once a day, degrading the 15-min reminder and 6-hour auto-close.
+- Scheduled cron execution is deferred to Phase 10 until the Vercel project is moved to a paid
+  plan; `vercel.json` currently has no active cron schedule, while `/api/cron/tick` remains available
+  for CRON_SECRET-gated manual verification.
 
 ## Gates Now Green
 - G1 (`pnpm verify`): green — typecheck, lint, 86/86 tests (points engine now 16, up from 11).

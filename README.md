@@ -17,7 +17,8 @@ still open.
 ## Stack
 
 Next.js 15 (App Router, TypeScript) on Vercel, Supabase (Postgres + Auth + a Postgres function for
-the transactional trip-join), Web Push (VAPID, via the `web-push` package), Vercel Cron. Google Maps
+the transactional trip-join), Web Push (VAPID, via the `web-push` package), and deferred Vercel Cron.
+Google Maps
 Directions API lands last. Hand-written CSS with design tokens ported from the interaction sketch —
 no Tailwind, no component library. See `docs/Carpool_App_Infrastructure_Plan_1.md` for the full
 infrastructure plan.
@@ -82,9 +83,9 @@ the coding agent by design. Two groups worth knowing about:
   [Scripts](#scripts)) to decide which account becomes the first `platform_admin`.
 
 On Vercel, set the same App runtime variables in Project Settings → Environment Variables
-(Production and Preview). `vercel.json` schedules `/api/cron/tick` every 5 minutes — note that
-Vercel's **Hobby plan only runs cron jobs once a day**, which degrades the 15-minute departure
-reminders and 6-hour auto-close; a Pro plan is needed for cron to behave as designed.
+(Production and Preview). Scheduled execution of `/api/cron/tick` is disabled until Phase 10,
+after the project is moved to a paid Vercel plan. The endpoint remains available for manual
+verification with `CRON_SECRET`.
 
 ## Scripts
 
@@ -196,8 +197,8 @@ Chromium downloaded — `npx playwright install chromium` if `pnpm e2e` reports 
    then set it to the assigned domain and redeploy.
 4. In the Supabase dashboard → Authentication → URL Configuration, add the deployed domain to both
    **Site URL** and **Redirect URLs**, or sign-in redirects break.
-5. Decide on cron frequency (see the Hobby-plan note above), then confirm
-   `GET https://<domain>/api/cron/tick` with `Authorization: Bearer <CRON_SECRET>` returns 200.
+5. After completing Phase 10, confirm `GET https://<domain>/api/cron/tick` with
+  `Authorization: Bearer <CRON_SECRET>` returns 200 and verify both cron jobs.
 6. Run `pnpm admin:bootstrap` locally (it talks to Supabase directly, not through Vercel) once
    you've signed up on the deployed app with the email in `ADMIN_BOOTSTRAP_EMAIL`.
 

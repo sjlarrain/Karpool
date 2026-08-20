@@ -342,8 +342,9 @@ Remove a browser's `PushSubscription`. Scoped to the caller's own subscriptions.
 ## Cron
 
 ### `GET|POST /api/cron/tick`
-Vercel Cron target (`vercel.json`, every 5 minutes — Vercel Cron always sends `GET`; `POST` is kept
-for manual/local triggering with curl). Two jobs per tick: (1) departure reminders — any
+Manual/cron endpoint (`POST` is kept for local triggering with curl; scheduled execution is
+deferred until Phase 10). Once activated, Vercel Cron sends `GET` every 5 minutes. Two jobs per
+tick: (1) departure reminders — any
 `scheduled` trip departing within 15 minutes gets a `reminder`-type notification + push to its
 driver and active riders, deduped by checking for an existing reminder notification carrying that
 trip's id; (2) auto-close — any trip left `started` for 6+ hours is force-closed as a safety net
