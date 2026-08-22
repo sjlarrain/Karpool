@@ -112,6 +112,8 @@ test("core loop: publish, join, start, close, kudos, leaderboard", async ({ brow
     await rider.reload();
     await rider.locator(".card").first().click();
     await expect(rider.getByText("Rate your ride")).toBeVisible({ timeout: 10_000 });
+    // D-18: the 💚 toggle starts off, so the submit reads "Skip & close" until the rider opts in.
+    await rider.getByRole("button", { name: /Give kudos/ }).click();
     await rider.locator("button.btnP", { hasText: "Send kudos" }).click();
     await expect(rider.getByText("Kudos sent to")).toBeVisible({ timeout: 10_000 });
   });
