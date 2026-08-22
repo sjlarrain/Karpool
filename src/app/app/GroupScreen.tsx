@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Database } from "@/types/database";
 import { avatarColorFor as colorFor } from "@/domain/avatarColor";
+import { shareOrCopy } from "@/lib/share";
 
 type Group = Database["public"]["Tables"]["group"]["Row"];
 type PickupPlace = Database["public"]["Tables"]["pickup_place"]["Row"];
@@ -44,23 +45,10 @@ export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces,
 
   async function copyInvite() {
     // On a phone this is a real share sheet (the PWA's whole point); everywhere else it falls back
-    // to the clipboard. A cancelled share is a deliberate user action, not a failure to report.
-    if (typeof navigator.share === "function") {
-      try {
-        await navigator.share({ title: `Join ${group.name} on Carpool`, url: shareUrl });
-        return;
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        // Anything else (no permission, unsupported payload) falls through to the clipboard.
-      }
-    }
-
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      flash("Invite link copied 🔗");
-    } catch {
-      flash("Couldn't copy — copy it manually");
-    }
+    // to the clipboard. Shared by the ride share button in TripDetailOverlay.
+    const outcome = await shareOrCopy({ title: `Join ${group.name} on Carpool`, url: shareUrl });
+    if (outcome === "copied") flash("Invite link copied 🔗");
+    if (outcome === "failed") flash("Couldn't copy — copy it manually");
   }
 
   return (
