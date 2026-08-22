@@ -116,11 +116,14 @@ src/
     api/          Route handlers — every route: authenticate → authorize → validate (zod) → act
       admin/       Platform-admin-only routes (users, groups, trips, ledger, audit-log, health)
     app/           The authenticated app shell (tabs: Carpools/Ranks/Group/You) and its screens
+    j/[code]/      Group invite link — joins the group, then lands on it
+    t/[id]/        Ride share link — signed-in members only (D-20); opens the ride in the app
     admin/         The admin console UI (/admin) — gated to platform_admin, tabbed like the app shell
     styleguide/    Dev-only route comparing tokens/primitives against the sketch
   domain/          Pure domain logic (points, trip state machine, leaderboard, seat math) —
                    no I/O, unit-tested
   lib/
+    share.ts       shareOrCopy() — the OS share sheet, falling back to the clipboard
     supabase/      Server/admin Supabase client factories (D-04: writes always go through the
                     service-role client; RLS bounds the session client's reads as defense-in-depth)
     trips/         Shared trip-feed query, used by both the API route and the SSR page
@@ -137,7 +140,8 @@ scripts/
   bootstrap-admin.ts  Promotes ADMIN_BOOTSTRAP_EMAIL to platform_admin — see `pnpm admin:bootstrap`
 supabase/migrations/ Schema migrations, applied in order
 tests/
-  e2e/             Playwright core-loop test + seeded-account setup/cleanup
+  e2e/             Playwright core-loop + ride-share-link tests, shared journey helpers,
+                   seeded-account setup/cleanup
   rls/             Cross-group RLS isolation test (needs a running Postgres)
   admin/           Admin route G9/G10 integration test (needs a running `pnpm dev` server)
 docs/              Planning docs, decisions register, worklog, API reference

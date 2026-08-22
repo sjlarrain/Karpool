@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import type { DecoratedTrip } from "@/domain/decorateTrip";
+import { rideShareMessage, rideShareUrl } from "@/domain/tripShare";
+import { shareOrCopy } from "@/lib/share";
 import { CloseTripOverlay } from "./CloseTripOverlay";
 
 interface Pickup {
@@ -40,6 +42,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
   const [kudosComment, setKudosComment] = useState("");
   // Sketch default: the toggle starts off, so the submit reads "Skip & close" until the rider opts in.
   const [givingKudos, setGivingKudos] = useState(false);
+  const [shareToast, setShareToast] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -125,6 +128,18 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
 
   const { trip, isDriver, pickups } = data;
   const otherPickups = pickups.filter((p) => !p.isViewer);
+  // Only a ride someone could still act on is worth sharing — a closed or cancelled one would send
+  // the recipient to a dead end.
+  const shareable = trip.status === "scheduled" || trip.status === "started";
+
+  async function shareRide() {
+    // The link itself reveals nothing (D-20): /t/:id is gated on being signed in and in the group.
+    const { title, text } = rideShareMessage(trip);
+    const outcome = await shareOrCopy({ title, text, url: rideShareUrl(window.location.origin, tripId) });
+    if (outcome === "shared") return;
+    setShareToast(outcome === "copied" ? "Ride link copied 🔗" : "Couldn't copy — copy it manually");
+    setTimeout(() => setShareToast(null), 2200);
+  }
 
   return (
     <div className="ov">
@@ -135,6 +150,11 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
         <span className="pill" style={{ color: trip.badgeColor, background: trip.badgeBg }}>
           {trip.badge}
         </span>
+        {shareable && (
+          <button className="iconbtn" style={{ marginLeft: "auto" }} onClick={shareRide} aria-label="Share this ride">
+            🔗
+          </button>
+        )}
       </div>
       <div className="scroll" style={{ padding: "14px 18px 18px" }}>
         <div
@@ -469,6 +489,8 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
           }}
         />
       )}
+
+      {shareToast && <div className="toast" style={{ position: "fixed" }}>{shareToast}</div>}
     </div>
   );
 }

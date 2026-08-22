@@ -29,10 +29,11 @@ interface Props {
   otherGroups: { id: string; name: string }[];
   trips: TripView[];
   viewerName: string;
+  initialTripId: string | null;
   isPlatformAdmin: boolean;
 }
 
-export function AppShell({ group, role, memberCount, adminName, pickupPlaces, inviteLink, membershipId, pickupPlaceId, otherGroups, trips, viewerName, isPlatformAdmin }: Props) {
+export function AppShell({ group, role, memberCount, adminName, pickupPlaces, inviteLink, membershipId, pickupPlaceId, otherGroups, trips, viewerName, initialTripId, isPlatformAdmin }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("carpools");
   const [notifsOpen, setNotifsOpen] = useState(false);
@@ -72,12 +73,24 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
     }
   }
   const [overlay, setOverlay] = useState<"create" | null>(null);
-  const [openTripId, setOpenTripId] = useState<string | null>(null);
+  // A ride share link (/t/:id) lands here as /app?trip=<id> — open that ride straight away.
+  const [openTripId, setOpenTripId] = useState<string | null>(initialTripId);
   const [toast, setToast] = useState<string | null>(null);
 
   function flash(message: string) {
     setToast(message);
     setTimeout(() => setToast(null), 2200);
+  }
+
+  // Closing the overlay also drops ?trip= from the URL, so a later refresh or back-forward restore
+  // doesn't reopen a ride the viewer just dismissed.
+  function closeTrip() {
+    setOpenTripId(null);
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("trip")) return;
+    params.delete("trip");
+    const query = params.toString();
+    window.history.replaceState({}, "", query ? `/app?${query}` : "/app");
   }
 
   async function quickJoin(tripId: string) {
@@ -210,7 +223,7 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
       {openTripId && (
         <TripDetailOverlay
           tripId={openTripId}
-          onClose={() => setOpenTripId(null)}
+          onClose={closeTrip}
           onChanged={(message) => {
             flash(message);
             router.refresh();

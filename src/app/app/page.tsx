@@ -4,8 +4,10 @@ import { env } from "@/env";
 import { loadGroupTrips } from "@/lib/trips/loadGroupTrips";
 import { AppShell } from "./AppShell";
 
-export default async function AppHome({ searchParams }: { searchParams: Promise<{ g?: string }> }) {
-  const { g } = await searchParams;
+export default async function AppHome({ searchParams }: { searchParams: Promise<{ g?: string; trip?: string }> }) {
+  // ?trip= is how /t/:id (the ride share link) and, later, a notification tap open a specific ride:
+  // the shell renders normally and the trip detail overlay opens on top of it.
+  const { g, trip: initialTripId } = await searchParams;
   const supabase = await createSupabaseServerClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) redirect("/");
@@ -56,6 +58,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       otherGroups={otherGroups}
       trips={tripsResult.ok ? tripsResult.trips : []}
       viewerName={viewerProfile?.display_name ?? "You"}
+      initialTripId={initialTripId ?? null}
       membershipId={activeMembership?.id ?? ""}
       pickupPlaceId={activeMembership?.pickup_place_id ?? null}
       isPlatformAdmin={viewerProfile?.platform_role === "platform_admin"}

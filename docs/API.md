@@ -463,6 +463,33 @@ Push delivery stats (subscription/failure/dead counts), recent cron auto-closes,
 - **Errors**: `401 unauthenticated`, `403 forbidden`
 - **Side effects**: none.
 
+## Link entry points (pages, not API routes)
+
+Two URLs are meant to be pasted into a chat app, so they are documented here alongside the routes:
+they are the only surfaces where an unauthenticated stranger can arrive holding an identifier.
+
+### `GET /j/:code` — group invite link
+
+Auth: none required to view. Side effects: **joins the group** (idempotent `membership` insert) when
+the visitor is already signed in, then redirects to `/app?g=<groupId>`. A signed-out visitor sees the
+group's name and route with the auth form below it, the code prefilled; signing in re-runs the page
+and completes the join. Invalid code format or unknown code → a dead-end page, no group data.
+
+### `GET /t/:id` — ride share link (D-20)
+
+Auth: **required, and the viewer must be a member of the ride's group.** The link carries no
+information of its own:
+
+| Viewer | Result |
+|---|---|
+| Malformed id | "That ride link isn't valid" — no lookup performed |
+| Signed out | "Sign in to see this ride" + the auth form; nothing about the ride or its group |
+| Signed in, not a member | "This ride isn't available to you" — the `trip` select runs under the session client, so RLS (`is_member`) returns no row and the page cannot distinguish "no such ride" from "not yours" |
+| Signed in, member | `redirect` to `/app?g=<groupId>&trip=<tripId>`, which opens the trip detail overlay |
+
+No side effects, no writes. Unlike `/j/:code` it never grants access to anything — a forwarded ride
+link is useless to anyone the group hasn't already admitted by code.
+
 ## Planned surface
 
 In-app notification reads (the bell/sheet UI) and Google Maps routing land in later phases per
