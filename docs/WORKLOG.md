@@ -1,5 +1,54 @@
 # Worklog
 
+## Shipped (D-20 ride share link; e2e repair)
+- **D-20** (`4dccded`) — rides are shareable. The trip detail overlay gets a 🔗 button that opens
+  the OS share sheet (`navigator.share`, clipboard fallback), so a ride goes into WhatsApp the same
+  way the group invite already did. Developer's call on what the link may reveal: *"they must be
+  logged to get the information."* Built stricter than the recommendation — no teaser at all.
+  `/t/:id` selects the trip through the **session** client, so RLS is the gate: signed out → the auth
+  form, signed-in non-member → a dead end that can't distinguish "no such ride" from "not your
+  group", member → `redirect` to `/app?g=…&trip=…`, which opens the overlay and strips `?trip=` from
+  the URL on close. A forwarded link grants nothing; the 6-char group code stays the only door.
+  Share button hides on closed/cancelled rides (a recipient would land on a dead end).
+- Supporting slices, each its own commit: `shareOrCopy()` extracted from `GroupScreen` (`3b30354`),
+  the e2e journey helpers extracted from the core-loop spec (`b8d9c84`), pure `rideShareMessage`/
+  `rideShareUrl` with 7 tests (seat pluralisation, full car, first vs third person).
+- **Found and fixed a red gate:** `tests/e2e/core-loop.spec.ts` had been failing at "rider gives
+  kudos" since D-18 (`370c60d`) — the rate card's submit only reads "Send kudos" once the 💚 toggle
+  is on. G5 was red and nobody knew. Repaired in `0949e83`, re-run green.
+- Verified live, not just unit-tested: `tests/e2e/share-link.spec.ts` drives the whole journey
+  against the real project — driver shares (the captured share-sheet payload carries a real
+  `/t/<uuid>`), a signed-out context sees only "Sign in to see this ride" with no group name
+  anywhere on the page, a signed-in non-member is refused, then the same link opens the ride once
+  they join by code.
+
+## In Progress
+- Nothing mid-flight.
+
+## Next
+- **Onboarding fix, explicitly deferred by the developer (2026-08-22), not blocked:** signup never
+  survives email confirmation. `POST /api/auth/signup` passes no `emailRedirectTo` and there is no
+  `/auth/callback` route, so a visitor who clicks an invite, signs up and confirms their email lands
+  signed-out on `/` with the invite code lost. Fix is `emailRedirectTo` → `/auth/callback` doing
+  `exchangeCodeForSession` → `next=/j/CODE`, plus the code stashed in `user_metadata` as a fallback.
+  Needs one thing only the developer can do: add the callback URL to the Supabase dashboard's
+  redirect allow-list and set Site URL to the deployed origin.
+- `CLAUDE.md` §4 is still stale (D-19 scoring) — immutable to the agent, developer edit.
+
+## Blocked On
+- **D-03** — Maps, deferred until the app shows real traction (paid API).
+- **D-17** — the `comment` notification type renders in the bell but nothing can create one.
+- **D-21 (new)** — Vercel cron was removed, so `/api/cron/tick` has no caller: T-15min departure
+  reminders and the 6h auto-close of abandoned `started` trips do not run. Confirmed this session
+  that trip **start** notifications are unaffected — `POST /api/trips/:id/start` writes the
+  notification rows and pushes them inline. Options costed for the developer: Supabase `pg_cron` +
+  `pg_net` (free, inside the existing service list) or an external pinger.
+
+## Gates Now Green
+- G1 (`pnpm verify`): typecheck, lint, 93/93 tests (7 new for the share message).
+- G5 (core loop e2e): green again after the D-18 repair — and now joined by a second spec covering
+  the share link's access rules end to end.
+
 ## Shipped (D-18 kudos decline, D-19 scoring rework)
 - **D-18** (`370c60d`) — the kudos prompt had no "no thanks" path, so a rider who didn't want to
   give kudos could never clear it off a closed trip. Decline is now *recorded*
