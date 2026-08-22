@@ -1,58 +1,11 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { E2E_DRIVER_EMAIL, E2E_RIDER_EMAIL, E2E_PASSWORD } from "./global-setup";
+import { createGroup, getGroupCode, joinGroupByCode, signIn } from "./helpers";
 
 // G5 — the core loop, driven through the real UI (not the API directly): sign in, publish a trip,
 // a second account joins it, the driver starts and closes it, the rider gives kudos, and the
 // leaderboard reflects it. Uses the two fixed seeded accounts from global-setup.ts rather than
 // signing up fresh ones per run (Supabase's signup email rate limit makes that impractical).
-
-async function signIn(page: Page, email: string, password: string) {
-  await page.goto("/");
-  await page.getByPlaceholder("you@company.com").fill(email);
-  await page.getByPlaceholder("••••••••").fill(password);
-  await page.locator("button.btnP", { hasText: "Sign in" }).click();
-  // Post-signin lands on "/" either way — LockedGate (no group yet) or a redirect to /app (has a
-  // group) — wait for whichever settled destination actually renders.
-  await page.locator(".tabbar, h2:has-text('No group yet')").first().waitFor({ state: "visible", timeout: 10_000 });
-}
-
-async function createGroup(page: Page, groupName: string) {
-  const lockedCreateLink = page.getByText("Or create a new group →");
-  if (await lockedCreateLink.isVisible().catch(() => false)) {
-    await lockedCreateLink.click();
-  } else {
-    await page.locator(".tab", { hasText: "Group" }).click();
-    await page.getByText("+ Create a new group").click();
-  }
-  await page.getByPlaceholder("e.g. South Office Pool").fill(groupName);
-  await page.getByPlaceholder("Riverside").fill("Riverside");
-  await page.getByPlaceholder("HQ").fill("HQ");
-  await page.locator(".sheetc button.btnP", { hasText: "Create group" }).click();
-  await page.waitForURL(/\/app\?g=/, { timeout: 10_000 });
-}
-
-async function getGroupCode(page: Page): Promise<string> {
-  await page.locator(".tab", { hasText: "Group" }).click();
-  const codeText = await page.getByText(/^[A-Z0-9]{6}$/).first().innerText();
-  return codeText.trim();
-}
-
-async function joinGroupByCode(page: Page, code: string) {
-  const lockedEnterCode = page.getByText("Enter a code");
-  if (await lockedEnterCode.isVisible().catch(() => false)) {
-    await lockedEnterCode.click();
-    await page.getByPlaceholder("6-digit invite code").fill(code);
-    await page.locator("button.btnP", { hasText: "Join group & finish" }).click();
-  } else {
-    // Already has a group from a prior run — the header's own "▾" just switches tabs; only
-    // GroupScreen's internal dropdown (visible once on the Group tab) opens the switch-group sheet.
-    await page.locator(".tab", { hasText: "Group" }).click();
-    await page.locator("main button", { hasText: "▾" }).first().click();
-    await page.getByPlaceholder("Enter invite code").fill(code);
-    await page.getByRole("button", { name: "Join", exact: true }).click();
-  }
-  await page.waitForURL(/\/app/, { timeout: 10_000 });
-}
 
 test("core loop: publish, join, start, close, kudos, leaderboard", async ({ browser }) => {
   const driverContext = await browser.newContext();
