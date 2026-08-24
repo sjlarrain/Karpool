@@ -354,15 +354,16 @@ Remove a browser's `PushSubscription`. Scoped to the caller's own subscriptions.
 ## Cron
 
 ### `GET|POST /api/cron/tick`
-Manual/cron endpoint (`POST` is kept for local triggering with curl; scheduled execution is
-deferred until Phase 10). Once activated, Vercel Cron sends `GET` every 5 minutes. Two jobs per
+Called every 5 minutes by the `carpool-tick` pg_cron job in Supabase (D-21, migration `0008`),
+which posts here through `pg_net` with the `CRON_SECRET` header; `GET` is kept for triggering a tick
+by hand with curl. Two jobs per
 tick: (1) departure reminders — any
 `scheduled` trip departing within 15 minutes gets a `reminder`-type notification + push to its
 driver and active riders, deduped by checking for an existing reminder notification carrying that
 trip's id; (2) auto-close — any trip left `started` for 6+ hours is force-closed as a safety net
 (never touches `points_ledger` — no driver confirmed who actually rode).
 
-- **Auth**: `Authorization: Bearer <CRON_SECRET>` (Vercel Cron's own convention when `CRON_SECRET` is set on the project)
+- **Auth**: `Authorization: Bearer <CRON_SECRET>`. The scheduler reads both the URL and the secret from Supabase Vault (`carpool_tick_url`, `carpool_cron_secret`) at call time, so neither is in any tracked file; with either missing the job returns without calling anything.
 - **Request**: none
 - **Response**: `{ remindersSent: number, autoClosed: number }`
 - **Errors**: `401 unauthorized`
@@ -467,11 +468,13 @@ The audit trail itself — read-only; `audit_log` has no UPDATE/DELETE path anyw
 - **Side effects**: none.
 
 ### `GET /api/admin/health`
-Push delivery stats (subscription/failure/dead counts), recent cron auto-closes, and a placeholder for Maps health (`status: "not_applicable"` — Phase 6 isn't built yet).
+Push delivery stats (subscription/failure/dead counts), the scheduler's own pulse, recent cron auto-closes, and a placeholder for Maps health (`status: "not_applicable"` — Phase 6 isn't built yet).
+
+`scheduler` reads the `carpool-tick` pg_cron job through `public.carpool_cron_status()` (migration `0009`). It exists because an empty `recentCronAutoCloses` means either "nothing was abandoned" or "the scheduler is dead", and for weeks it silently meant the second (D-21). `scheduled: false` = the job was never created; `stale: true` = no successful run in the last 20 minutes (four missed ticks).
 
 - **Auth**: `platform_admin`
 - **Request**: none
-- **Response**: `{ push: { totalSubscriptions, failingSubscriptions, deadSubscriptions }, recentCronAutoCloses, maps: { status, message } }`
+- **Response**: `{ push: { totalSubscriptions, failingSubscriptions, deadSubscriptions }, scheduler: { scheduled, active, schedule, lastRunAt, lastStatus, stale }, recentCronAutoCloses, maps: { status, message } }`
 - **Errors**: `401 unauthenticated`, `403 forbidden`
 - **Side effects**: none.
 

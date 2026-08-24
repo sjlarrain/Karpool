@@ -617,6 +617,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      // Hand-added (0009): the generator can't see cron.* through the linked introspection, and
+      // this wrapper is the only way the app reads the scheduler's health.
+      carpool_cron_status: {
+        Args: Record<string, never>
+        Returns: {
+          jobname: string
+          schedule: string
+          active: boolean
+          last_run_at: string | null
+          last_status: string | null
+        }[]
+      }
       compute_initials: { Args: { full_name: string }; Returns: string }
       is_member: { Args: { p_group_id: string }; Returns: boolean }
       join_trip: {

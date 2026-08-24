@@ -222,8 +222,21 @@ token with the admin API rather than waiting for a real email, then drives the r
    That template can't carry the `?next=` the signup route sets, which is why the invite code is
    also stashed in `user_metadata.pending_group_code` — the callback falls back to it and still
    lands the visitor in the right group.
-5. After completing Phase 10, confirm `GET https://<domain>/api/cron/tick` with
-  `Authorization: Bearer <CRON_SECRET>` returns 200 and verify both cron jobs.
+5. **Turn the scheduler on.** Migrations `0008`/`0009` create the `carpool-tick` pg_cron job, which
+   posts to `/api/cron/tick` every 5 minutes — that is what sends T-15min departure reminders and
+   auto-closes trips abandoned in `started`. The job reads its target and its secret from Supabase
+   Vault and does nothing until both exist, so add them once per project (Dashboard → Project
+   Settings → Vault → *Add new secret*, or the SQL editor):
+
+   ```sql
+   select vault.create_secret('https://<domain>/api/cron/tick', 'carpool_tick_url');
+   select vault.create_secret('<the same value as CRON_SECRET on Vercel>', 'carpool_cron_secret');
+   ```
+
+   Never commit those values. To confirm it works, sign in as a `platform_admin` and read
+   `GET /api/admin/health` — `scheduler.lastStatus` should be `"succeeded"` and `scheduler.stale`
+   should be `false`. `stale: true` means the ticks stopped; on the Supabase Free plan the usual
+   cause is the project pausing after 7 days without activity.
 6. Run `pnpm admin:bootstrap` locally (it talks to Supabase directly, not through Vercel) once
    you've signed up on the deployed app with the email in `ADMIN_BOOTSTRAP_EMAIL`.
 
