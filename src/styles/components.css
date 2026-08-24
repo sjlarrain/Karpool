@@ -364,3 +364,29 @@ textarea:focus-visible {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Share: a full-width black bar directly above a ride's primary action. It replaced a 🔗 icon in
+   the overlay header, which read as decoration and went unnoticed. The arrow leaving an open tray
+   is the platform-standard "send this somewhere else" glyph, so the button says what it does
+   before the label is read. */
+.btnShare {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  background: var(--ink);
+  color: var(--surface);
+  border: none;
+  border-radius: var(--r-lg);
+  padding: 15px;
+  font: 800 15px var(--font-display);
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+.btnShare:active {
+  transform: scale(0.99);
+}
+.btnShare svg {
+  flex: none;
+}

@@ -1,5 +1,38 @@
 # Worklog
 
+## Shipped (share promoted to a black button above the ride's primary action)
+- Developer feedback on D-20: the 🔗 in the overlay header went unnoticed. Share is now a full-width
+  **black** (`--ink`) button carrying the platform-standard share glyph — an arrow rising out of an
+  open tray — sitting directly above whatever action the viewer came for: "Start trip", "End & close
+  trip", "Request to join", or the leave button for a rider already on board. Same D-20 access rules:
+  still hidden on closed/cancelled rides, the link itself still reveals nothing.
+- New `.btnShare` in `components.css` (no hex outside `tokens.css`; `--r-lg` radius like every other
+  button). The header icon is gone — one share affordance, not two.
+- Verified live in the browser: black `rgb(22,24,29)`, 48px tall, 10px above "Start trip · notify
+  riders", and a real click hands the share sheet the right title/text/URL. Full e2e suite green
+  (3/3) and `pnpm verify` green (109/109).
+
+## In Progress
+- Nothing mid-flight.
+
+## Next
+- **Developer action, still outstanding:** add `/auth/callback` to Supabase → Authentication → URL
+  Configuration → **Redirect URLs** for each origin (`https://karpool-nu.vercel.app`,
+  `http://localhost:3000`, `https://*.vercel.app`) and set **Site URL**. Until then the signup
+  confirmation email's link is rejected by Supabase before it reaches the app.
+- **D-21** — pick the scheduler. `pg_cron` + `pg_net` is free on every Supabase plan (extensions in
+  the project's own Postgres, not metered); the caveat is that a Free-plan project pauses after 7
+  days of inactivity and runs no jobs while paused.
+- `CLAUDE.md` §4 is still stale (D-19 scoring) — immutable to the agent, developer edit.
+
+## Blocked On
+- **D-03** — Maps, deferred until the app shows real traction (paid API).
+- **D-17** — the `comment` notification type renders in the bell but nothing can create one.
+
+## Gates Now Green
+- G1 (`pnpm verify`): typecheck, lint, 109/109.
+- G5: whole e2e suite green in one run (core loop, share link, signup confirmation).
+
 ## Shipped (onboarding: signup survives email confirmation; e2e suite green in a full run)
 - **The onboarding dead end is fixed** (`5a240b2`). `POST /api/auth/signup` sent no
   `emailRedirectTo` and no callback route existed, so anyone who clicked an invite, signed up and

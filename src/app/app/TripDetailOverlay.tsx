@@ -132,6 +132,26 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
   // the recipient to a dead end.
   const shareable = trip.status === "scheduled" || trip.status === "started";
 
+  // The arrow rising out of an open tray — the same glyph every phone uses for "send this
+  // elsewhere", so the button reads as shareable before anyone parses the label.
+  const shareArrow = (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.4}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 15V3" />
+      <path d="M8 7l4-4 4 4" />
+      <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
+    </svg>
+  );
+
   async function shareRide() {
     // The link itself reveals nothing (D-20): /t/:id is gated on being signed in and in the group.
     const { title, text } = rideShareMessage(trip);
@@ -140,6 +160,14 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
     setShareToast(outcome === "copied" ? "Ride link copied 🔗" : "Couldn't copy — copy it manually");
     setTimeout(() => setShareToast(null), 2200);
   }
+
+  // Sits directly above whichever action the viewer came here to take, so it can't be missed.
+  const shareButton = shareable ? (
+    <button className="btnShare" onClick={shareRide}>
+      {shareArrow}
+      Share this ride
+    </button>
+  ) : null;
 
   return (
     <div className="ov">
@@ -150,11 +178,6 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
         <span className="pill" style={{ color: trip.badgeColor, background: trip.badgeBg }}>
           {trip.badge}
         </span>
-        {shareable && (
-          <button className="iconbtn" style={{ marginLeft: "auto" }} onClick={shareRide} aria-label="Share this ride">
-            🔗
-          </button>
-        )}
       </div>
       <div className="scroll" style={{ padding: "14px 18px 18px" }}>
         <div
@@ -270,12 +293,16 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
             ))}
             <div style={{ height: 8 }} />
             {trip.status === "scheduled" && (
-              <button className="btnP" disabled={busy} onClick={() => act("start", "Trip started — riders notified 🚗")}>
-                Start trip · notify riders
-              </button>
+              <>
+                {shareButton}
+                <button className="btnP" disabled={busy} onClick={() => act("start", "Trip started — riders notified 🚗")}>
+                  Start trip · notify riders
+                </button>
+              </>
             )}
             {trip.status === "started" && (
               <>
+                {shareButton}
                 <div
                   style={{
                     background: "var(--teal-soft)",
@@ -314,6 +341,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
             >
               {trip.seatsLeft} seat{trip.seatsLeft === 1 ? "" : "s"} left — hop in and split the drive.
             </div>
+            {shareButton}
             <button className="btnP" disabled={busy} onClick={() => act("join", "Joined — added to your trips 🎉")}>
               Request to join
             </button>
@@ -366,6 +394,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
             >
               ⚠️ Drop out up to <b>1 hour before departure</b> for free — later cancellations cost points.
             </div>
+            {shareButton}
             <button
               className="btnG"
               style={{ background: "var(--surface)", color: "var(--danger)", border: "1px solid rgba(192,57,43,.3)" }}
