@@ -1,5 +1,61 @@
 # Worklog
 
+## Shipped (onboarding: signup survives email confirmation; e2e suite green in a full run)
+- **The onboarding dead end is fixed** (`5a240b2`). `POST /api/auth/signup` sent no
+  `emailRedirectTo` and no callback route existed, so anyone who clicked an invite, signed up and
+  confirmed their email landed signed **out** on `/` with the invite code gone — every real new-user
+  signup died there. `GET /auth/callback` now exchanges the token for a session and returns the
+  visitor to where they were heading (normally `/j/CODE`, which joins the group). Both link shapes
+  are handled: PKCE `?code=` (the default template) and `?token_hash=` (the `{{ .TokenHash }}`
+  template, which also works when the email is opened on a different device than the one that signed
+  up). The invite rides along as `next` **and** as `user_metadata.pending_group_code`, so a template
+  that drops the query string still lands the visitor in the right group. A dead or reused link
+  redirects to the auth screen with an explanation instead of a blank page.
+- `next` is sanitised by a pure `safeNextPath` (absolute, protocol-relative, backslash and
+  control-char forms all fall back to `/app`) so it cannot become an open redirect. The return
+  origin is the request's own when trusted — localhost in dev, `*.vercel.app` on a preview — instead
+  of always the production URL, which is what the first cut got wrong (locally it mailed a link that
+  bounced to the deployed site). 16 new unit tests.
+- Verified live, not just unit-tested: `tests/e2e/signup-confirm.spec.ts` (`814400f`) mints the real
+  confirmation token via the admin API and drives the real callback — invite via `next`, the metadata
+  fallback, and the dead-link message. Green.
+- **The e2e suite passed file by file but failed as a suite** (`84d9d9f`), for three separate reasons,
+  each of which makes a red gate look like a flake: Playwright fans spec *files* across workers even
+  with `fullyParallel: false` (two specs drove the same seeded rider at once — pinned to one worker);
+  `trip_create` allows 10/hour, so a few runs in a row made every spec fail at "YOU'RE DRIVING"
+  (global setup now clears `rate_limit_hit` for the two test accounts only); and `joinGroupByCode`
+  waited for `//app/`, which matched the page the rider was already on, so the spec raced past the
+  join and the next step saw a non-member. The share link itself was never broken — confirmed by hand
+  against the live project.
+
+## In Progress
+- Nothing mid-flight.
+
+## Next
+- **Developer action, and the fix is inert without it:** in the Supabase dashboard →
+  Authentication → URL Configuration, add `/auth/callback` to **Redirect URLs** for every origin
+  people sign up on (`https://<domain>/auth/callback`, `http://localhost:3000/auth/callback`,
+  `https://*.vercel.app/auth/callback`) and set **Site URL** to the deployed origin. Optionally
+  switch the "Confirm signup" template to the token-hash form for cross-device confirmation. Both
+  documented in `README.md`.
+- **Five commits are unpushed** (this session's three plus D-20's share link and its worklog), so the
+  deployed app does not have the ride share button or this fix. Pushing needs authorisation.
+- `CLAUDE.md` §4 is still stale (D-19 scoring) — immutable to the agent, developer edit.
+
+## Blocked On
+- **D-21** — Vercel cron was removed, so `/api/cron/tick` has no caller: T-15min departure reminders
+  and the 6h auto-close of abandoned `started` trips do not run. Supabase `pg_cron` + `pg_net` is
+  free on every plan (the extensions run inside the project's own Postgres and are not metered; the
+  only caveat is that a Free-plan project pauses after 7 days of inactivity and a paused project runs
+  no jobs). Still the developer's pick.
+- **D-03** — Maps, deferred until the app shows real traction (paid API).
+- **D-17** — the `comment` notification type renders in the bell but nothing can create one.
+
+## Gates Now Green
+- G1 (`pnpm verify`): typecheck, lint, 109/109 unit tests.
+- G5 (core loop e2e): green — and for the first time the **whole** suite is green in one run
+  (core loop, share link, signup confirmation), rather than only spec by spec.
+
 ## Shipped (D-20 ride share link; e2e repair)
 - **D-20** (`4dccded`) — rides are shareable. The trip detail overlay gets a 🔗 button that opens
   the OS share sheet (`navigator.share`, clipboard fallback), so a ride goes into WhatsApp the same
