@@ -1,5 +1,50 @@
 # Worklog
 
+## Shipped (D-21 scheduler on pg_cron; production signup verified)
+- **D-21 decided and built** (`505874a`). Developer picked Supabase `pg_cron` + `pg_net` over an
+  external pinger. Migration `0008` schedules `carpool-tick` every 5 minutes to post to
+  `/api/cron/tick`, which restores T-15min departure reminders and the 6h auto-close of abandoned
+  `started` trips. **Neither the URL nor the secret is in the repo** — both live in Supabase Vault
+  (`carpool_tick_url`, `carpool_cron_secret`), read at call time, and the job returns without
+  calling anything while either is missing, so a half-configured project never fires an
+  unauthenticated request at an unknown host. Both migrations are applied to the live project; the
+  job is scheduled, active, last run succeeded.
+- **Migration `0009` is the lesson from how D-21 broke:** an empty auto-close list means either
+  "nothing was abandoned" or "the scheduler is dead", and for weeks it meant the second with nothing
+  to show for it. `carpool_cron_status()` now surfaces the job — scheduled / active / last run /
+  last status — through `GET /api/admin/health`, with `stale: true` after four missed ticks.
+  Verified live: real admin session, real payload (`lastStatus: "succeeded"`, `stale: false`).
+  Admin suite green (14/14, G9/G10).
+- **The onboarding fix was verified against production**, not just locally: a real confirmation token
+  through the deployed `/auth/callback` set the session cookie, redirected `/j/CODE` → `/app?g=…`,
+  created the membership in the right group, and marked the email confirmed. The developer's
+  Redirect-URLs allow-list entry works — Supabase honoured our `redirect_to` rather than falling
+  back to the Site URL.
+
+## In Progress
+- Nothing mid-flight.
+
+## Next
+- **Developer action — the last mile of the signup fix is still unproven** (deliberately deferred,
+  2026-08-24): Supabase rejects made-up domains on public signup, so no agent-run test can prove a
+  real confirmation *email* arrives and its link works. Sign up on production with a real mailbox
+  once and confirm the link lands you inside the group. Everything either side of the email is
+  verified.
+- **Developer action:** create the two Vault secrets (`README.md` deploy step 5) or the scheduler
+  stays inert — `/api/admin/health` will show `scheduler.stale: true`.
+- `CLAUDE.md` §4 is still stale (D-19 scoring) — immutable to the agent, developer edit.
+
+## Blocked On
+- **D-03** — Maps, deferred until the app shows real traction (paid API).
+- **D-17** — the `comment` notification type renders in the bell but nothing can create one.
+
+## Gates Now Green
+- G1 (`pnpm verify`): typecheck, lint, 109/109.
+- G5: full e2e suite green in one run (core loop, share link, signup confirmation).
+- G9/G10 (admin auth + audit trail): 14/14 against the live project.
+- The scheduler that the reminder gate depends on is running again for the first time since Vercel
+  Cron was removed — subject to the Vault secrets being set.
+
 ## Shipped (share promoted to a black button above the ride's primary action)
 - Developer feedback on D-20: the 🔗 in the overlay header went unnoticed. Share is now a full-width
   **black** (`--ink`) button carrying the platform-standard share glyph — an arrow rising out of an
