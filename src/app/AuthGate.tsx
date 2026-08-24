@@ -9,7 +9,11 @@ import { useRouter } from "next/navigation";
 type Mode = "signin" | "signup";
 type SignupStep = 1 | 2;
 
-export function AuthGate({ presetCode, hideHero = false }: { presetCode?: string; hideHero?: boolean } = {}) {
+export function AuthGate({
+  presetCode,
+  hideHero = false,
+  initialNotice,
+}: { presetCode?: string; hideHero?: boolean; initialNotice?: string } = {}) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("signin");
   const [signupStep, setSignupStep] = useState<SignupStep>(1);
@@ -20,7 +24,8 @@ export function AuthGate({ presetCode, hideHero = false }: { presetCode?: string
   // retypes what they just clicked.
   const [code, setCode] = useState(presetCode ?? "");
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // /auth/callback bounces a dead confirmation link back to the auth screen with an explanation.
+  const [notice, setNotice] = useState<string | null>(initialNotice ?? null);
   const [busy, setBusy] = useState(false);
 
   async function submitStep1() {
@@ -31,7 +36,8 @@ export function AuthGate({ presetCode, hideHero = false }: { presetCode?: string
         const res = await fetch("/api/auth/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, displayName: name }),
+          // The invite code, when there is one, rides along so it survives the email round trip.
+          body: JSON.stringify({ email, password, displayName: name, groupCode: code || undefined }),
         });
         const body = await res.json();
         if (!res.ok) {
@@ -39,7 +45,11 @@ export function AuthGate({ presetCode, hideHero = false }: { presetCode?: string
           return;
         }
         if (body.needsEmailConfirmation) {
-          setNotice("Check your email to confirm your account, then sign in.");
+          setNotice(
+            code
+              ? "Check your email to confirm your account — the link brings you straight into the group."
+              : "Check your email to confirm your account — the link signs you in.",
+          );
           setMode("signin");
           return;
         }

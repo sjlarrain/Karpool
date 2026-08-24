@@ -3,7 +3,14 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AuthGate } from "./AuthGate";
 import { LockedGate } from "./LockedGate";
 
-export default async function RootPage() {
+// /auth/callback sends a confirmation link it couldn't use back here, with the reason.
+const AUTH_NOTICES: Record<string, string> = {
+  link_expired: "That confirmation link has expired or was already used. Sign in below — or sign up again if you never finished.",
+  link_invalid: "That confirmation link didn't work. Try signing in, and ask for a fresh link if you still can't get in.",
+};
+
+export default async function RootPage({ searchParams }: { searchParams: Promise<{ auth?: string }> }) {
+  const { auth } = await searchParams;
   const supabase = await createSupabaseServerClient();
   const { data: userData } = await supabase.auth.getUser();
 
@@ -11,7 +18,7 @@ export default async function RootPage() {
     return (
       <main style={{ minHeight: "100vh" }}>
         <div style={{ maxWidth: 430, margin: "0 auto" }}>
-          <AuthGate />
+          <AuthGate initialNotice={auth ? AUTH_NOTICES[auth] : undefined} />
         </div>
       </main>
     );

@@ -189,7 +189,10 @@ pnpm e2e            # Playwright — starts the dev server itself, seeds two fix
 ```
 
 `pnpm e2e` needs `.env.local` filled in (it talks to the real dev Supabase project) and Playwright's
-Chromium downloaded — `npx playwright install chromium` if `pnpm e2e` reports it's missing.
+Chromium downloaded — `npx playwright install chromium` if `pnpm e2e` reports it's missing. The specs
+are the core loop (publish → join → start → close → kudos), the ride share link's access rules, and
+the signup email-confirmation round trip (`signup-confirm.spec.ts`, which mints the confirmation
+token with the admin API rather than waiting for a real email, then drives the real callback).
 
 ## Deploying to Vercel
 
@@ -200,7 +203,25 @@ Chromium downloaded — `npx playwright install chromium` if `pnpm e2e` reports 
 3. Deploy. If this is the first deploy, `NEXT_PUBLIC_APP_URL` won't be known yet — deploy once,
    then set it to the assigned domain and redeploy.
 4. In the Supabase dashboard → Authentication → URL Configuration, add the deployed domain to both
-   **Site URL** and **Redirect URLs**, or sign-in redirects break.
+   **Site URL** and **Redirect URLs**, or sign-in redirects break. The **Redirect URLs** allow-list
+   must include the confirmation callback for every origin people sign up on, or the link in the
+   signup email is rejected and the account can never be confirmed:
+   - `https://<domain>/auth/callback`
+   - `http://localhost:3000/auth/callback` (local development)
+   - `https://*.vercel.app/auth/callback` (preview deployments, if you use them)
+
+   Optionally, in Authentication → Email Templates → "Confirm signup", switch the link to the
+   token-hash form so a confirmation opened on a **different device** than the one that signed up
+   still works (the default `{{ .ConfirmationURL }}` uses PKCE, which is tied to the original
+   browser). Both shapes are handled by `/auth/callback`:
+
+   ```
+   <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup">Confirm your account</a>
+   ```
+
+   That template can't carry the `?next=` the signup route sets, which is why the invite code is
+   also stashed in `user_metadata.pending_group_code` — the callback falls back to it and still
+   lands the visitor in the right group.
 5. After completing Phase 10, confirm `GET https://<domain>/api/cron/tick` with
   `Authorization: Bearer <CRON_SECRET>` returns 200 and verify both cron jobs.
 6. Run `pnpm admin:bootstrap` locally (it talks to Supabase directly, not through Vercel) once

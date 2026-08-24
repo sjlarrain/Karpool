@@ -18,10 +18,22 @@ Create an account. Step 1 of the sketch's two-step signup — the group-code ste
 to `POST /api/groups/join` once the account exists.
 
 - **Auth**: none
-- **Request**: `{ email: string, password: string (min 8), displayName: string (1-80 chars) }`
+- **Request**: `{ email: string, password: string (min 8), displayName: string (1-80 chars), groupCode?: string (≤16 chars) }`
 - **Response**: `{ user: { id, email } | null, needsEmailConfirmation: boolean }`
 - **Errors**: `400 invalid_request` (zod issues), `400 signup_failed` (Supabase auth error, e.g. email already registered)
 - **Side effects**: creates `auth.users` row; `handle_new_user()` trigger creates the matching `profile` row. No ledger/audit writes.
+- **Email confirmation**: sets `emailRedirectTo` to `<origin>/auth/callback?next=…` so the confirmation link returns a signed-in session instead of dropping the visitor back on `/`. `groupCode`, when it is a valid 6-char code, sets `next=/j/CODE` and is also stashed in `user_metadata.pending_group_code` as a fallback; an invalid code is ignored rather than failing the signup. `<origin>` is the request's own origin when it is trusted (the configured `NEXT_PUBLIC_APP_URL` host, localhost, or a `*.vercel.app` preview), else `NEXT_PUBLIC_APP_URL` — see `src/domain/authRedirect.ts`.
+
+### `GET /auth/callback`
+The destination of the confirmation link in the signup email. Not under `/api` — Supabase redirects a
+browser here, and the response is a redirect, not JSON.
+
+- **Auth**: none (this is what establishes the session)
+- **Request**: query params — `code` (PKCE, the default `{{ .ConfirmationURL }}` template) **or** `token_hash` + `type` (the `{{ .TokenHash }}` template); optional `next` (in-app path); Supabase's own `error`/`error_code` when the link already failed on its side
+- **Response**: `307` redirect — to `next` on success (`/app` when absent, or `/j/CODE` from `user_metadata.pending_group_code`), else to `/?auth=link_expired` or `/?auth=link_invalid`, which the auth screen renders as an explanation
+- **Errors**: never a status code — every failure is a redirect carrying `?auth=…`
+- **Side effects**: exchanges the token for a session and sets the Supabase session cookie. No ledger/audit writes.
+- **Security**: `next` is sanitised by `safeNextPath` — absolute URLs, protocol-relative paths, backslash variants and control characters all fall back to `/app`, so the parameter can't be used as an open redirect.
 
 ### `POST /api/auth/signin`
 Sign in with email + password.
