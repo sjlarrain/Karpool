@@ -45,8 +45,8 @@ export default async function globalSetup() {
   }
 
   const driverId = await ensureUser(E2E_DRIVER_EMAIL, "E2E Driver");
-  await ensureUser(E2E_RIDER_EMAIL, "E2E Rider");
+  const riderId = await ensureUser(E2E_RIDER_EMAIL, "E2E Rider");
   // Every prior run's group/trip data is stale by the time a new run starts — clear it so
   // ".card first()"-style selectors in the spec aren't picking up leftovers from earlier runs.
-  await cleanupE2eData(driverId);
+  await cleanupE2eData(driverId, [riderId]);
 }

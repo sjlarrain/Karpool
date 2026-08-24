@@ -36,6 +36,10 @@ export async function getGroupCode(page: Page): Promise<string> {
 }
 
 export async function joinGroupByCode(page: Page, code: string) {
+  // The switch-group sheet joins in the background and then pushes /app?g=<new id>. Waiting for a
+  // bare /\/app/ matched the page the rider was *already* on, so the spec raced ahead of the join
+  // and the next step saw a non-member. Remember where we started so we can wait for the move.
+  const urlBefore = page.url();
   const lockedEnterCode = page.getByText("Enter a code");
   if (await lockedEnterCode.isVisible().catch(() => false)) {
     await lockedEnterCode.click();
@@ -49,5 +53,5 @@ export async function joinGroupByCode(page: Page, code: string) {
     await page.getByPlaceholder("Enter invite code").fill(code);
     await page.getByRole("button", { name: "Join", exact: true }).click();
   }
-  await page.waitForURL(/\/app/, { timeout: 10_000 });
+  await page.waitForURL((url) => /\/app/.test(url.href) && url.href !== urlBefore, { timeout: 10_000 });
 }

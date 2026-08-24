@@ -16,9 +16,15 @@ function loadEnvLocal(): Record<string, string> {
 // Deletes every group the e2e driver created (and everything cascading from it — trips, riders,
 // kudos, ledger entries, memberships) so repeated local test runs don't accumulate stale data that
 // makes ".card first()"-style selectors unreliable across runs.
-export async function cleanupE2eData(driverId: string) {
+export async function cleanupE2eData(driverId: string, otherIds: string[] = []) {
   const env = loadEnvLocal();
   const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!);
+
+  // The seeded accounts publish a trip per spec, and `trip_create` allows 10 per hour — so a few
+  // suite runs in quick succession make publishing 429 and the specs fail for a reason that has
+  // nothing to do with the code under test. Clearing the counters for the *test* accounts only
+  // keeps a red gate meaningful; the limit itself is untouched for everyone else.
+  await admin.from("rate_limit_hit").delete().in("profile_id", [driverId, ...otherIds]);
 
   const { data: groups } = await admin.from("group").select("id").eq("created_by", driverId);
   const groupIds = (groups ?? []).map((g) => g.id);
