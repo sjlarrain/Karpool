@@ -22,8 +22,30 @@
 - README: new deploy step 5 (custom SMTP, and raising the mail rate limit afterwards), and step 4
   now says plainly that Site URL is the origin and nothing more.
 
+- **D-22 decided: email confirmation is off.** Rather than wait on SMTP, the developer disabled
+  *Confirm email* so signup returns a session immediately. Nothing in the app broke — the
+  confirmation email is the only email it sends (there is no password-reset flow anywhere in the
+  codebase), and `AuthGate` already branched on `needsEmailConfirmation`.
+- **Invited visitors now skip the group-code step** (`5fb19f2`). Someone arriving on `/j/CODE` had
+  already chosen their group, and that route joins them itself once a session exists — step 2 was
+  asking them to confirm a code they never typed. They now refresh straight back into `/j/CODE` and
+  land in the group. Anyone registering from `/` still sees step 2; it is the only place a code can
+  be entered.
+- **Caught live while testing: the Email provider's master toggle had been switched off** instead of
+  the *Confirm email* sub-toggle, which locks out registration *and* every existing user's sign-in.
+  The classifier missed it — Supabase says "Email signups are disabled" / "Email logins are
+  disabled", neither matching the "signups not allowed" it looked for — so the most damaging
+  misconfiguration available fell through to a generic 400. Fixed and tested (`ba970a4`); it is a
+  403 now, verified against the running app.
+
 ## In Progress
-- Nothing mid-flight.
+- **Blocked on the developer, and production is currently down for all sign-ins:** the Supabase
+  Email provider is still disabled (`POST /api/auth/signup` on production answers "Email signups
+  are disabled" as of this session's end). Authentication → Sign In / Providers → Email: turn
+  **Enable Email provider** back on, leave **Confirm email** off.
+- **Nothing from this session is deployed.** Four commits sit on local `main`; Vercel still serves
+  the old flat-400 signup and the old step-2 flow. The invited-visitor auto-join and every improved
+  error message are local-only until someone pushes.
 
 ## Next
 - **Developer action, and registration stays broken for everyone else until it happens:** configure
