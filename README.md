@@ -229,16 +229,40 @@ token with the admin API rather than waiting for a real email, then drives the r
    That template can't carry the `?next=` the signup route sets, which is why the invite code is
    also stashed in `user_metadata.pending_group_code` — the callback falls back to it and still
    lands the visitor in the right group.
-5. **Configure custom SMTP before anyone else signs up.** Authentication → Emails → SMTP Settings.
-   Supabase's built-in sender is for demos only: it delivers **only to members of the Supabase
-   project's own team** and allows **2 messages per hour across the whole project**. The owner's own
-   signup therefore works and everyone else's fails — the confirmation email is never sent, and the
-   person signing up sees "Too many confirmation emails have gone out in the last hour" (or, in the
-   raw Supabase wording under `detail`, `email rate limit exceeded`). Any SMTP provider works;
-   Resend, Postmark, SendGrid and AWS SES all have free or near-free tiers at this app's volume.
-   Once a real sender is configured, raise Authentication → Rate Limits → *Rate limit for sending
-   emails* from the built-in 2/hour to something a workday of signups won't hit. Sender credentials
-   live in the Supabase dashboard only — never in this repo or in `.env.local`.
+5. **Configure custom SMTP before anyone else signs up — without it, nobody but you can register.**
+   Supabase's built-in sender is a demo facility, not an email service: it delivers **only to members
+   of the Supabase project's own team**, and it allows **2 send attempts per hour across the whole
+   project** (retries of a failed signup count). So the project owner signs up successfully, uses up
+   the allowance, and every colleague gets `429 email_send_rate_limited` — "Too many confirmation
+   emails have gone out in the last hour" — for an email that was never going to be delivered to
+   them anyway. That limit cannot be raised while the built-in sender is in use.
+
+   Any SMTP provider fixes both restrictions at once. **Which one to pick depends on whether you own
+   a domain:**
+
+   - **With a domain** — [Resend](https://resend.com) (3,000/month, 100/day free). Add the domain,
+     paste the DNS records it gives you at your registrar, generate an SMTP key.
+   - **Without a domain** — [Brevo](https://www.brevo.com/free-smtp-server/) (300/day, free forever).
+     It is the one major provider that still offers *single-sender verification*: add your own
+     address (a Gmail address is fine) under Senders, confirm the 6-digit code it emails you, and you
+     can send to anyone. SendGrid's free plan ended in May 2025 and Mailjet expects a domain, so
+     Brevo is effectively the only free no-domain option left. Its SMTP credentials are under
+     **SMTP & API → SMTP**: host `smtp-relay.brevo.com`, port `587`, and the login + SMTP key shown
+     on that page (the login is not always your account email — copy the one displayed).
+
+   Then in Supabase → Authentication → Emails → **SMTP Settings**, enable custom SMTP and enter the
+   host, port, username and password. **Sender email must be exactly the address you verified** with
+   the provider, or it rejects the message; sender name is what employees see ("Karpool").
+
+   Finally, raise Authentication → **Rate Limits** → *Rate limit for sending emails* — it stays at
+   the built-in 2/hour until you change it, custom SMTP or not.
+
+   Deliverability note if you went the no-domain route: `gmail.com` cannot be DKIM/DMARC-authenticated
+   by a third-party sender, so confirmation emails are likelier to land in spam. Fine for a small
+   internal tool; tell the first few people to check their spam folder. Moving to a real domain later
+   is a provider-side change plus a new sender address in Supabase — no code change.
+
+   SMTP credentials live in the Supabase dashboard only — never in this repo or in `.env.local`.
 6. **Turn the scheduler on.** Migrations `0008`/`0009` create the `carpool-tick` pg_cron job, which
    posts to `/api/cron/tick` every 5 minutes — that is what sends T-15min departure reminders and
    auto-closes trips abandoned in `started`. The job reads its target and its secret from Supabase
