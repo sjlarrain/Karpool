@@ -53,6 +53,15 @@ export function AuthGate({
           setMode("signin");
           return;
         }
+        // An invited visitor picked their group by clicking the link, and /j/:code joins them itself
+        // as soon as a session exists — so step 2 would only ask them to confirm a code they never
+        // typed, on a screen with no decision on it. Refreshing hands straight back to that route,
+        // which completes the join and lands them in the group. Everyone else still needs step 2:
+        // it is the only place a code can be entered.
+        if (presetCode) {
+          router.refresh();
+          return;
+        }
         setSignupStep(2);
       } else {
         const res = await fetch("/api/auth/signin", {
