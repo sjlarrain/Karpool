@@ -202,10 +202,17 @@ token with the admin API rather than waiting for a real email, then drives the r
    be the deployed domain **with its `https://` protocol** — a bare domain fails the build.
 3. Deploy. If this is the first deploy, `NEXT_PUBLIC_APP_URL` won't be known yet — deploy once,
    then set it to the assigned domain and redeploy.
-4. In the Supabase dashboard → Authentication → URL Configuration, add the deployed domain to both
-   **Site URL** and **Redirect URLs**, or sign-in redirects break. The **Redirect URLs** allow-list
-   must include the confirmation callback for every origin people sign up on, or the link in the
-   signup email is rejected and the account can never be confirmed:
+4. In the Supabase dashboard → Authentication → URL Configuration, set both fields — they take
+   **different** values, and sign-in redirects break if they don't:
+
+   **Site URL** is the deployed **origin and nothing more** — `https://<domain>`, no path. It is the
+   fallback Supabase redirects to when a link carries no allow-listed `redirect_to`, and it is what
+   `{{ .SiteURL }}` expands to in the email templates below. Putting a path here (`.../auth/callback`)
+   silently doubles it in those templates and produces dead confirmation links.
+
+   **Redirect URLs** is the allow-list, and it must include the confirmation callback for every
+   origin people sign up on, or the link in the signup email is rejected and the account can never
+   be confirmed:
    - `https://<domain>/auth/callback`
    - `http://localhost:3000/auth/callback` (local development)
    - `https://*.vercel.app/auth/callback` (preview deployments, if you use them)
@@ -222,7 +229,17 @@ token with the admin API rather than waiting for a real email, then drives the r
    That template can't carry the `?next=` the signup route sets, which is why the invite code is
    also stashed in `user_metadata.pending_group_code` — the callback falls back to it and still
    lands the visitor in the right group.
-5. **Turn the scheduler on.** Migrations `0008`/`0009` create the `carpool-tick` pg_cron job, which
+5. **Configure custom SMTP before anyone else signs up.** Authentication → Emails → SMTP Settings.
+   Supabase's built-in sender is for demos only: it delivers **only to members of the Supabase
+   project's own team** and allows **2 messages per hour across the whole project**. The owner's own
+   signup therefore works and everyone else's fails — the confirmation email is never sent, and the
+   person signing up sees "Too many confirmation emails have gone out in the last hour" (or, in the
+   raw Supabase wording under `detail`, `email rate limit exceeded`). Any SMTP provider works;
+   Resend, Postmark, SendGrid and AWS SES all have free or near-free tiers at this app's volume.
+   Once a real sender is configured, raise Authentication → Rate Limits → *Rate limit for sending
+   emails* from the built-in 2/hour to something a workday of signups won't hit. Sender credentials
+   live in the Supabase dashboard only — never in this repo or in `.env.local`.
+6. **Turn the scheduler on.** Migrations `0008`/`0009` create the `carpool-tick` pg_cron job, which
    posts to `/api/cron/tick` every 5 minutes — that is what sends T-15min departure reminders and
    auto-closes trips abandoned in `started`. The job reads its target and its secret from Supabase
    Vault and does nothing until both exist, so add them once per project (Dashboard → Project
@@ -237,7 +254,7 @@ token with the admin API rather than waiting for a real email, then drives the r
    `GET /api/admin/health` — `scheduler.lastStatus` should be `"succeeded"` and `scheduler.stale`
    should be `false`. `stale: true` means the ticks stopped; on the Supabase Free plan the usual
    cause is the project pausing after 7 days without activity.
-6. Run `pnpm admin:bootstrap` locally (it talks to Supabase directly, not through Vercel) once
+7. Run `pnpm admin:bootstrap` locally (it talks to Supabase directly, not through Vercel) once
    you've signed up on the deployed app with the email in `ADMIN_BOOTSTRAP_EMAIL`.
 
 ## Testing push notifications on a real device

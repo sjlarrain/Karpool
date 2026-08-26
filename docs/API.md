@@ -20,7 +20,21 @@ to `POST /api/groups/join` once the account exists.
 - **Auth**: none
 - **Request**: `{ email: string, password: string (min 8), displayName: string (1-80 chars), groupCode?: string (≤16 chars) }`
 - **Response**: `{ user: { id, email } | null, needsEmailConfirmation: boolean }`
-- **Errors**: `400 invalid_request` (zod issues), `400 signup_failed` (Supabase auth error, e.g. email already registered)
+- **Errors**: `400 invalid_request` (zod issues). Supabase auth failures are classified by
+  `src/domain/authError.ts` rather than flattened into one status, and every one of them answers
+  `{ error, message, detail }` — `message` is the copy the form shows, `detail` is Supabase's own
+  wording, kept for debugging:
+  - `429 email_send_rate_limited` — the confirmation email was refused by the mail provider's hourly
+    cap. **Project-wide, not per user:** Supabase's built-in mailer allows 2 messages an hour for the
+    whole project, so one signup blocks everyone else until custom SMTP is configured (`README.md` →
+    Deploying to Vercel, step 5).
+  - `502 email_not_authorized` — the mailer refused the recipient (the built-in sender only delivers
+    to the Supabase project's team members).
+  - `502 email_delivery_failed` — the send failed upstream for any other reason.
+  - `403 signups_disabled` — new signups are switched off on the Supabase project.
+  - `409 email_taken` — the email already has an account.
+  - `400 email_invalid` / `400 weak_password` — genuinely the submitted form's fault.
+  - `400 signup_failed` — anything unrecognised, carrying Supabase's message unchanged.
 - **Side effects**: creates `auth.users` row; `handle_new_user()` trigger creates the matching `profile` row. No ledger/audit writes.
 - **Email confirmation**: sets `emailRedirectTo` to `<origin>/auth/callback?next=…` so the confirmation link returns a signed-in session instead of dropping the visitor back on `/`. `groupCode`, when it is a valid 6-char code, sets `next=/j/CODE` and is also stashed in `user_metadata.pending_group_code` as a fallback; an invalid code is ignored rather than failing the signup. `<origin>` is the request's own origin when it is trusted (the configured `NEXT_PUBLIC_APP_URL` host, localhost, or a `*.vercel.app` preview), else `NEXT_PUBLIC_APP_URL` — see `src/domain/authRedirect.ts`.
 

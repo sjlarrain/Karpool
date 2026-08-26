@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { classifySignupError } from "@/domain/authError";
 import { appOriginFor, emailConfirmRedirectUrl, groupInvitePath } from "@/domain/authRedirect";
 import { env } from "@/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -52,7 +53,13 @@ export async function POST(request: Request) {
   });
 
   if (error) {
-    return NextResponse.json({ error: "signup_failed", message: error.message }, { status: 400 });
+    // Not every signup failure is the visitor's fault — the shared mailer's hourly cap and a
+    // refused delivery are ours, and answering both with a flat 400 hid a real outage for weeks.
+    const failure = classifySignupError(error);
+    return NextResponse.json(
+      { error: failure.error, message: failure.message, detail: failure.detail },
+      { status: failure.status },
+    );
   }
 
   return NextResponse.json({
