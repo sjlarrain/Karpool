@@ -1,5 +1,48 @@
 # Worklog
 
+## Shipped (signup 400 traced to Supabase's built-in mailer)
+- **The production signup failure is diagnosed and reproduced.** A real user's registration returned
+  400 with `email rate limit exceeded` under the form. Root cause: no custom SMTP, so the project is
+  still on Supabase's built-in sender, which delivers **only to the Supabase project's team members**
+  and allows **2 messages an hour project-wide**. The developer's own signup worked and ate the
+  allowance — which is exactly why this looked like "works for me".
+- **The developer's URL Configuration was not the cause** (they asked): the Redirect-URLs entry is
+  the one verified working on 2026-08-24. Two real defects there anyway, both one step later than the
+  400 — **Site URL is set to `https://karpool-nu.vercel.app/auth/callback`** and must be the bare
+  origin (a path doubles inside the `{{ .SiteURL }}` template into `/auth/callback/auth/callback`),
+  and the allow-list is still missing `http://localhost:3000/auth/callback` and
+  `https://*.vercel.app/auth/callback`.
+- **Fixed the part that was ours** (`adb95de`): `POST /api/auth/signup` answered every Supabase
+  error with a flat `400 signup_failed` carrying Supabase's internal wording to the UI, so a
+  project-wide mail outage was indistinguishable from a typo — that is how this went unexplained.
+  New pure `src/domain/authError.ts` classifies: 429 rate-limited, 502 not-authorized / delivery
+  failed, 403 signups disabled, 409 email taken, 400 only for a genuinely bad email or password.
+  Human copy in `message`, Supabase's original in `detail`. 11 new tests; `docs/API.md` lists every
+  code. Verified live in the browser — the form now reads "That email address doesn't look valid."
+- README: new deploy step 5 (custom SMTP, and raising the mail rate limit afterwards), and step 4
+  now says plainly that Site URL is the origin and nothing more.
+
+## In Progress
+- Nothing mid-flight.
+
+## Next
+- **Developer action, and registration stays broken for everyone else until it happens:** configure
+  custom SMTP in Supabase → Authentication → Emails → SMTP Settings (`README.md` deploy step 5), then
+  raise Authentication → Rate Limits → *Rate limit for sending emails* above the built-in 2/hour.
+- **Developer action:** fix Site URL to `https://karpool-nu.vercel.app` and add the localhost and
+  `*.vercel.app` callbacks to the Redirect-URLs allow list.
+- **Developer action, still outstanding:** the two Vault secrets, or the scheduler stays inert.
+- Once SMTP is live, the real-mailbox signup round trip finally becomes testable — that is the last
+  unproven step of the onboarding fix.
+- `CLAUDE.md` §4 is still stale (D-19 scoring) — immutable to the agent, developer edit.
+
+## Blocked On
+- **D-03** — Maps, deferred until the app shows real traction (paid API).
+- **D-17** — the `comment` notification type renders in the bell but nothing can create one.
+
+## Gates Now Green
+- G1 (`pnpm verify`): typecheck, lint, 120/120.
+
 ## Shipped (D-21 scheduler on pg_cron; production signup verified)
 - **D-21 decided and built** (`505874a`). Developer picked Supabase `pg_cron` + `pg_net` over an
   external pinger. Migration `0008` schedules `carpool-tick` every 5 minutes to post to
