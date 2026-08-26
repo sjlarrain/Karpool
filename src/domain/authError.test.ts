@@ -37,6 +37,14 @@ describe("classifySignupError", () => {
     expect(failure).toMatchObject({ status: 403, error: "signups_disabled" });
   });
 
+  // Seen for real: reaching for "Confirm email" and hitting the Email provider's master toggle
+  // instead, which locks out existing users too and reports itself in different words.
+  it("recognises the Email provider's own master switch being off", () => {
+    for (const message of ["Email signups are disabled", "Email logins are disabled"]) {
+      expect(classifySignupError({ message })).toMatchObject({ status: 403, error: "signups_disabled" });
+    }
+  });
+
   it("points an existing account at the sign-in tab", () => {
     const failure = classifySignupError({ message: "User already registered", status: 422 });
     expect(failure).toMatchObject({ status: 409, error: "email_taken" });

@@ -69,7 +69,16 @@ export function classifySignupError(error: SupabaseAuthErrorLike): SignupFailure
     };
   }
 
-  if (code === "signup_disabled" || text.includes("signups not allowed")) {
+  // Two different switches land here: "Allow new users to sign up", and the Email provider's own
+  // master toggle — which is easy to flip by mistake while reaching for "Confirm email", and which
+  // silently locks out existing users too. Supabase words each of them differently.
+  if (
+    code === "signup_disabled" ||
+    code === "email_provider_disabled" ||
+    text.includes("signups not allowed") ||
+    text.includes("signups are disabled") ||
+    text.includes("logins are disabled")
+  ) {
     return {
       status: 403,
       error: "signups_disabled",
