@@ -16,10 +16,10 @@ self.addEventListener("push", (event) => {
   try {
     payload = event.data.json();
   } catch {
-    payload = { title: "Carpool", body: event.data.text() };
+    payload = { title: "Karpool", body: event.data.text() };
   }
 
-  const title = payload.title || "Carpool";
+  const title = payload.title || "Karpool";
   const options = {
     body: payload.body || "",
     icon: "/icons/icon.svg",

@@ -1,6 +1,6 @@
 {
-  "name": "Carpool",
-  "short_name": "Carpool",
+  "name": "Karpool",
+  "short_name": "Karpool",
   "description": "Workplace commute carpooling with light gamification",
   "start_url": "/app",
   "scope": "/",

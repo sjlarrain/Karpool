@@ -1,4 +1,4 @@
-# Carpool
+# Karpool
 
 A workplace commute carpool PWA with light gamification. Employees join a group tied to a fixed
 route, publish and join trips, and earn points (Driven / Pooled / Kudos) on a leaderboard.
@@ -119,9 +119,10 @@ src/
     j/[code]/      Group invite link — joins the group, then lands on it
     t/[id]/        Ride share link — signed-in members only (D-20); opens the ride in the app
     admin/         The admin console UI (/admin) — gated to platform_admin, tabbed like the app shell
+                   (Overview/Users/Groups/Trips/Ledger/Feedback/Audit log/Health)
     styleguide/    Dev-only route comparing tokens/primitives against the sketch
-  domain/          Pure domain logic (points, trip state machine, leaderboard, seat math) —
-                   no I/O, unit-tested
+  domain/          Pure domain logic (points, trip state machine, leaderboard, seat math,
+                   install-platform detection) — no I/O, unit-tested
   lib/
     share.ts       shareOrCopy() — the OS share sheet, falling back to the clipboard
     supabase/      Server/admin Supabase client factories (D-04: writes always go through the
@@ -264,8 +265,9 @@ token with the admin API rather than waiting for a real email, then drives the r
 
    SMTP credentials live in the Supabase dashboard only — never in this repo or in `.env.local`.
 6. **Turn the scheduler on.** Migrations `0008`/`0009` create the `carpool-tick` pg_cron job, which
-   posts to `/api/cron/tick` every 5 minutes — that is what sends T-15min departure reminders and
-   auto-closes trips abandoned in `started`. The job reads its target and its secret from Supabase
+   posts to `/api/cron/tick` every 5 minutes — that is what sends T-15min departure reminders,
+   auto-closes trips abandoned in `started`, and expires trips nobody ever started (D-23: 24h
+   after departure they move to Past). Without it, those three things simply never happen. The job reads its target and its secret from Supabase
    Vault and does nothing until both exist, so add them once per project (Dashboard → Project
    Settings → Vault → *Add new secret*, or the SQL editor):
 

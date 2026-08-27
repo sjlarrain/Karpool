@@ -22,7 +22,7 @@ export default function GlobalLayoutError({ reset }: { error: Error & { digest?:
         >
           <div style={{ fontSize: 46 }}>⚠️</div>
           <h1 style={{ fontSize: 21, fontWeight: 800, color: "var(--ink)", margin: "16px 0 6px", fontFamily: "var(--font-display)" }}>
-            Carpool hit a snag
+            Karpool hit a snag
           </h1>
           <p style={{ font: "500 13px/1.5 var(--font-body)", color: "rgba(0,0,0,.5)", margin: "0 0 22px", maxWidth: 260 }}>
             Reloading usually fixes it.

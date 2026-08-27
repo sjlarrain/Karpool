@@ -32,7 +32,7 @@ function Dead({ icon, title, body }: { icon: string; title: string; body: string
         <h1 style={{ font: "800 22px var(--font-display)", color: "var(--ink)", margin: "14px 0 6px" }}>{title}</h1>
         <p style={{ font: "500 13px/1.5 var(--font-body)", color: "var(--muted)", margin: "0 0 20px" }}>{body}</p>
         <Link href="/" className="btnG" style={{ display: "block", textDecoration: "none" }}>
-          Go to Carpool
+          Go to Karpool
         </Link>
       </div>
     </Shell>

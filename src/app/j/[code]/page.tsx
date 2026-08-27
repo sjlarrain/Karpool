@@ -38,7 +38,7 @@ export default async function JoinByCodePage({ params }: { params: Promise<{ cod
             Ask whoever shared it to send a fresh one.
           </p>
           <Link href="/" className="btnG" style={{ display: "block", textDecoration: "none" }}>
-            Go to Carpool
+            Go to Karpool
           </Link>
         </div>
       </Shell>
@@ -66,7 +66,7 @@ export default async function JoinByCodePage({ params }: { params: Promise<{ cod
             The group may have been renamed or removed.
           </p>
           <Link href="/" className="btnG" style={{ display: "block", textDecoration: "none" }}>
-            Go to Carpool
+            Go to Karpool
           </Link>
         </div>
       </Shell>

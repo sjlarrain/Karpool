@@ -46,7 +46,7 @@ export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces,
   async function copyInvite() {
     // On a phone this is a real share sheet (the PWA's whole point); everywhere else it falls back
     // to the clipboard. Shared by the ride share button in TripDetailOverlay.
-    const outcome = await shareOrCopy({ title: `Join ${group.name} on Carpool`, url: shareUrl });
+    const outcome = await shareOrCopy({ title: `Join ${group.name} on Karpool`, url: shareUrl });
     if (outcome === "copied") flash("Invite link copied 🔗");
     if (outcome === "failed") flash("Couldn't copy — copy it manually");
   }

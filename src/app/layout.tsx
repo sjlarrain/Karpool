@@ -2,13 +2,13 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Carpool",
+  title: "Karpool",
   description: "Workplace commute carpool with light gamification.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Carpool",
+    title: "Karpool",
   },
   icons: {
     icon: "/icons/icon.svg",
