@@ -116,8 +116,8 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
   );
 
   return (
-    <main style={{ minHeight: "100vh", position: "relative", display: "flex", flexDirection: "column" }}>
-      <div style={{ maxWidth: 430, margin: "0 auto", width: "100%", flex: 1, display: "flex", flexDirection: "column" }}>
+    <main className="appshell">
+      <div style={{ maxWidth: 430, margin: "0 auto", width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {tab !== "group" && (
           <div style={{ padding: "16px 20px 10px", flex: "none" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -183,6 +183,7 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
           {tab === "you" && (
             <YouScreen
               viewerName={viewerName}
+              groupId={group.id}
               groupName={group.name}
               memberCount={memberCount}
               membershipId={membershipId}

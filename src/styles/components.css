@@ -106,7 +106,8 @@ a:hover {
   display: flex;
   justify-content: space-around;
   align-items: center;
-  padding: 11px 8px 22px;
+  /* Bottom padding clears the iOS home indicator when installed to the Home Screen. */
+  padding: 11px 8px calc(22px + env(safe-area-inset-bottom));
   background: var(--surface);
   border-top: 1px solid rgba(0, 0, 0, 0.06);
   flex: none;
@@ -389,4 +390,17 @@ textarea:focus-visible {
 }
 .btnShare svg {
   flex: none;
+}
+
+/* The app shell is exactly one viewport tall so the tab bar sits on the bottom edge and the
+   content scrolls inside it — not the page. Without this the shell was min-height:100vh, so a
+   long trip list grew the document and pushed the tab bar off the bottom of the screen.
+   100dvh first falls back to 100vh where dynamic viewport units aren't supported. */
+.appshell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }

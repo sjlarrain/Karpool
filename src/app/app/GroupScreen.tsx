@@ -52,8 +52,8 @@ export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces,
   }
 
   return (
-    <div style={{ position: "relative", flex: 1 }}>
-      <div style={{ maxWidth: 430, margin: "0 auto", padding: "8px 20px 40px" }}>
+    <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div className="scroll" style={{ maxWidth: 430, margin: "0 auto", width: "100%", padding: "8px 20px 40px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0 10px" }}>
           <button
             onClick={() => setSheet("switch")}
