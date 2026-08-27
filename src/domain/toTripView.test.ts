@@ -106,3 +106,32 @@ describe("toTripView", () => {
     expect(view.returnTime).toBe("17:30");
   });
 });
+
+describe("departure state (D-23)", () => {
+  const view = (departAt: string, extra: Partial<TripRowInput> = {}) =>
+    toTripView({
+      trip: { ...trip, departAt, ...extra },
+      driver,
+      activeRiders: [],
+      viewerId: "someone-else",
+      originLabel: "Riverside",
+      destLabel: "HQ",
+      now: NOW,
+    });
+
+  it("marks a trip whose departure time has passed", () => {
+    // NOW is 12:00; this trip left at 07:45.
+    expect(view("2026-08-17T07:45:00").departed).toBe(true);
+  });
+
+  it("leaves a trip that hasn't left yet un-departed", () => {
+    expect(view("2026-08-17T17:45:00").departed).toBe(false);
+  });
+
+  it("carries the cancellation reason through so the UI can tell expiry from a driver cancelling", () => {
+    expect(view("2026-08-17T07:45:00", { status: "cancelled", cancelledReason: "not_started" }).cancelledReason).toBe(
+      "not_started",
+    );
+    expect(view("2026-08-17T07:45:00").cancelledReason).toBeNull();
+  });
+});

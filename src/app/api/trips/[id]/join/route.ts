@@ -10,6 +10,7 @@ const STATUS_BY_ERROR: Record<string, number> = {
   wrong_status: 409,
   already_joined: 409,
   full: 409,
+  departed: 409,
 };
 
 const MESSAGE_BY_ERROR: Record<string, string> = {
@@ -17,6 +18,7 @@ const MESSAGE_BY_ERROR: Record<string, string> = {
   wrong_status: "This trip isn't open to join.",
   already_joined: "You're already riding this trip.",
   full: "That trip just filled up.",
+  departed: "This ride has already left — ask the driver to add you.",
 };
 
 // POST /api/trips/:id/join — join an open seat. Calls join_trip() (supabase/migrations/0002),

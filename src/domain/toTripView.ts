@@ -24,6 +24,7 @@ export interface TripRowInput {
   capacity: number;
   status: TripStatus;
   driverId: string;
+  cancelledReason?: string | null;
 }
 
 export interface DriverInput {
@@ -78,6 +79,8 @@ export function toTripView(params: {
     capacity: trip.capacity,
     returnTime: trip.returnAt ? formatTripTime(new Date(trip.returnAt)) : null,
     status: trip.status,
+    departed: departDate.getTime() <= now.getTime(),
+    cancelledReason: trip.cancelledReason ?? null,
     riders: activeRiders.map(riderView),
   };
 }

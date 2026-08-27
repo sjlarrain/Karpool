@@ -94,6 +94,51 @@ export type Database = {
           },
         ]
       }
+      feedback: {
+        Row: {
+          category: "bug" | "idea" | "praise" | "other"
+          created_at: string
+          group_id: string | null
+          id: string
+          message: string
+          profile_id: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          category: "bug" | "idea" | "praise" | "other"
+          created_at?: string
+          group_id?: string | null
+          id?: string
+          message: string
+          profile_id?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          category?: "bug" | "idea" | "praise" | "other"
+          created_at?: string
+          group_id?: string | null
+          id?: string
+          message?: string
+          profile_id?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feedback_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "group"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feedback_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group: {
         Row: {
           code: string
@@ -553,6 +598,7 @@ export type Database = {
       }
       trip_rider: {
         Row: {
+          added_by_profile_id: string | null
           guest_name: string | null
           id: string
           joined_at: string
@@ -565,6 +611,7 @@ export type Database = {
           trip_id: string
         }
         Insert: {
+          added_by_profile_id?: string | null
           guest_name?: string | null
           id?: string
           joined_at?: string
@@ -577,6 +624,7 @@ export type Database = {
           trip_id: string
         }
         Update: {
+          added_by_profile_id?: string | null
           guest_name?: string | null
           id?: string
           joined_at?: string
@@ -589,6 +637,13 @@ export type Database = {
           trip_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "trip_rider_added_by_profile_id_fkey"
+            columns: ["added_by_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "trip_rider_pickup_place_id_fkey"
             columns: ["pickup_place_id"]
@@ -631,9 +686,32 @@ export type Database = {
       }
       compute_initials: { Args: { full_name: string }; Returns: string }
       is_member: { Args: { p_group_id: string }; Returns: boolean }
+      // Hand-added (0010): D-24's driver-seats-a-member counterpart to join_trip, same row lock.
+      add_trip_rider: {
+        Args: { p_added_by: string; p_profile_id: string; p_trip_id: string }
+        Returns: {
+          added_by_profile_id: string | null
+          guest_name: string | null
+          id: string
+          joined_at: string
+          left_at: string | null
+          pickup_place_id: string | null
+          profile_id: string | null
+          state: "joined" | "left" | "confirmed" | "no_show"
+          stop_order: number | null
+          trip_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "trip_rider"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       join_trip: {
         Args: { p_profile_id: string; p_trip_id: string }
         Returns: {
+          added_by_profile_id: string | null
           guest_name: string | null
           id: string
           joined_at: string

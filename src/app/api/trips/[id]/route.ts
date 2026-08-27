@@ -77,6 +77,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     capacity: trip.capacity,
     status: trip.status,
     driverId: trip.driver_id,
+    cancelledReason: trip.cancelled_reason,
   };
 
   const view = toTripView({

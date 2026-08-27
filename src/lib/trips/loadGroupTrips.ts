@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import { PAST_TRIPS_WINDOW_DAYS } from "@/domain/constants";
 import { toTripView } from "@/domain/toTripView";
 import type { TripRiderRowInput, TripRowInput } from "@/domain/toTripView";
 import type { TripView } from "@/domain/types";
@@ -18,16 +19,17 @@ export async function loadGroupTrips(
     return { ok: false, error: "not_found" };
   }
 
-  // Live trips, plus anything closed in the last 24h — a closed trip needs to stay reachable for a
-  // while so a rider can actually open it and give kudos; otherwise it vanishes from the feed the
-  // instant the driver closes it and the "Rate your ride" prompt (in the trip detail overlay)
-  // becomes unreachable (caught by the Phase 9 E2E test — there was no card left to click).
-  const recentCutoff = new Date(now.getTime() - 24 * 3_600_000).toISOString();
+  // Live trips, plus everything that finished inside the Past window (D-27). A finished trip used
+  // to fall out of the feed 24h after closing, which also took the "Rate your ride" prompt with it —
+  // the only way to reach that prompt is the trip's own card. Past trips are filtered on depart_at
+  // rather than closed_at so a cancelled or expired trip (neither has a closed_at) is covered by the
+  // same window.
+  const pastCutoff = new Date(now.getTime() - PAST_TRIPS_WINDOW_DAYS * 24 * 3_600_000).toISOString();
   const { data: trips, error: tripsError } = await supabase
     .from("trip")
-    .select("id, direction, depart_at, return_at, capacity, status, driver_id")
+    .select("id, direction, depart_at, return_at, capacity, status, driver_id, cancelled_reason")
     .eq("group_id", groupId)
-    .or(`status.in.(scheduled,started),and(status.eq.closed,closed_at.gte.${recentCutoff})`)
+    .or(`status.in.(scheduled,started),and(status.in.(closed,cancelled),depart_at.gte.${pastCutoff})`)
     .order("depart_at", { ascending: true });
   if (tripsError) {
     return { ok: false, error: "lookup_failed" };
@@ -87,6 +89,7 @@ export async function loadGroupTrips(
       capacity: trip.capacity,
       status: trip.status,
       driverId: trip.driver_id,
+      cancelledReason: trip.cancelled_reason,
     };
 
     return toTripView({

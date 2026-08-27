@@ -33,5 +33,11 @@ export interface TripView {
   capacity: number;
   returnTime: string | null;
   status: TripStatus;
+  // D-23: past its departure time. Seats stop being self-servable here even while the driver can
+  // still start the trip late.
+  departed: boolean;
+  // Set when the scheduler ended a trip nobody started (cancelled_reason 'not_started'), which the
+  // UI must present as "Past", not as a driver cancelling on people.
+  cancelledReason: string | null;
   riders: TripRiderView[];
 }

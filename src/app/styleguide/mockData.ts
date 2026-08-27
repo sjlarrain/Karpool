@@ -14,6 +14,8 @@ export const mockTrips: TripView[] = [
     capacity: 4,
     returnTime: "17:30",
     status: "scheduled",
+    departed: false,
+    cancelledReason: null,
     riders: [
       { name: "Alex Morgan", initials: "AM", color: "var(--purple)" },
       { name: "Jordan Silva", initials: "JS", color: "var(--amber)" },
@@ -30,6 +32,8 @@ export const mockTrips: TripView[] = [
     capacity: 4,
     returnTime: "17:15",
     status: "scheduled",
+    departed: false,
+    cancelledReason: null,
     riders: [
       { name: "Dana Kim", initials: "DK", color: "var(--teal)" },
       { name: "You", initials: "AM", color: "var(--purple)" },
@@ -47,6 +51,8 @@ export const mockTrips: TripView[] = [
     capacity: 3,
     returnTime: "17:30",
     status: "scheduled",
+    departed: false,
+    cancelledReason: null,
     riders: [{ name: "Marco Lee", initials: "ML", color: "var(--cyan)" }],
   },
   {
@@ -60,6 +66,8 @@ export const mockTrips: TripView[] = [
     capacity: 4,
     returnTime: "17:00",
     status: "scheduled",
+    departed: false,
+    cancelledReason: null,
     riders: [
       { name: "Priya Rao", initials: "PR", color: "var(--pink)" },
       { name: "Tom H", initials: "TH", color: "var(--purple)" },
@@ -77,6 +85,8 @@ export const mockTrips: TripView[] = [
     capacity: 4,
     returnTime: null,
     status: "scheduled",
+    departed: false,
+    cancelledReason: null,
     riders: [
       { name: "Sam West", initials: "SW", color: "var(--green)" },
       { name: "Ivy P", initials: "IP", color: "var(--purple)" },
