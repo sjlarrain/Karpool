@@ -1,5 +1,65 @@
 # Worklog
 
+## Shipped (2026-08-26 — seven fixes from the developer, five new decisions)
+- **The tab bar stays on the bottom edge** (`6fef957`). The shell was `min-height:100vh` with the bar
+  in normal flow, so a long trip list grew the document and pushed the bar off screen. The shell is
+  now exactly one viewport tall (`.appshell`, `100dvh` with a `100vh` fallback) and the content
+  scrolls inside it. The Group tab needed its own `.scroll` wrapper — it was the one screen relying
+  on the document to scroll for it. Tab-bar padding now clears the iOS home indicator.
+- **Renamed to Karpool** (`3e5f5be`, D-26) across every visible string, the manifest, the service
+  worker's push fallback title and the README. `package.json`, the repo folder, doc filenames and
+  internal keys (the install prompt's `localStorage` entry) deliberately unchanged.
+- **Install flow rebuilt** (`e619e5d`). Was iPhone-only and text-only. Now `src/domain/installPlatform.ts`
+  (pure, 8 tests over real UA strings incl. the iPad that claims to be a Mac) names the device, and
+  `InstallCard` offers a real one-tap Install where `beforeinstallprompt` exists (Android Chrome/Edge,
+  desktop Chromium) plus an ⓘ with per-device steps everywhere. **iOS can never have the button** —
+  Apple exposes no install API — so there the steps are the feature.
+- **Unstarted trips expire; finished trips collect under Past** (`9b63fb4`, D-23/D-27). Joining stops at
+  `depart_at`; the driver keeps the trip 24h longer (start it, close it, add passengers); still
+  unstarted at +24h and the scheduler ends it `cancelled`/`not_started`, notifies everyone, audits it,
+  and awards nothing. Reads "PAST · NEVER STARTED", never "CANCELLED". The Carpools tab's new Past
+  section (last 30 days) also fixes the kudos prompt becoming unreachable 24h after a close.
+- **Drivers can seat a group member** (`a91ce0f`, D-24) from a picker, through `add_trip_rider()` with
+  the same row lock as `join_trip()`. The seat counts against capacity, the member is notified, and
+  leaving a seat they never booked costs them nothing. The driver can only take back seats they added.
+- **Feedback form + admin tab** (`37c9cd7`, D-25). Profile tab → sheet → `POST /api/feedback` → Postgres
+  → new admin Feedback tab. Not email: no SMTP exists (D-22).
+- **Onboarding and share link re-checked** (the developer asked): `pnpm e2e` green (3/3), plus a manual
+  pass — signed-out `/j/CODE` shows the group and prefills the code, signing in joins and lands in the
+  group, and `/t/:id` redirects a member into the trip overlay.
+
+## In Progress
+- Nothing mid-flight.
+
+## Next
+- **Deploy.** Nothing from this session (or the four commits before it) is on Vercel; pushing needs
+  authorisation. Migrations `0010`/`0011` are already applied to the live Supabase project, so the
+  database is ahead of the deployed app — harmless (both are additive) but worth closing.
+- Edge cases raised with the developer and not yet decided: driver-declared points are unverifiable
+  (a driver can confirm no-shows and invent guest names, both of which raise their own score); a
+  cron auto-closed trip awards its honest driver nothing; a driver cancelling on ten riders pays no
+  penalty while a rider leaving late pays −5; a driver leaving the group with live trips; the last
+  group admin leaving; day grouping computed in the browser's timezone vs cron in the server's.
+
+## Blocked On
+- D-03 (Maps) — deferred indefinitely, business precondition, do not re-propose.
+- D-17 (comment notification type) — still open, still no UI to build.
+
+## Gates Green
+- `pnpm verify`: typecheck + lint + **135 tests** (12 suites; 6 new this session across
+  `installPlatform`, `decorateTrip`, `toTripView`). Same pre-existing `next lint` font warning.
+- `pnpm e2e`: 3/3 (core loop, share link, signup confirmation).
+- Live-verified against the real database and the running app: tab-bar pinning under a full feed and
+  on the Group tab; device detection + ⓘ steps; feedback POST (201); add/remove passenger; the
+  expiry sweep (25h-old trip expired, 2h-old survived, audit row written, both parties notified);
+  the departure guard; driver-add-after-departure; and both link entry points.
+- **Not verified live:** the admin console's Feedback tab — checking it needs a platform-admin
+  session, and promoting a test account was blocked by this environment's permissions. The route
+  follows `/api/admin/audit-log` exactly and typechecks; it wants one look from the developer.
+- Note for the record: the tab-bar commit (`6fef957`) carries one stray line of the feedback wiring
+  (`AppShell` passing `groupId`), so that one commit's tree does not typecheck in isolation. HEAD is
+  green; commits are never rewritten here (`CLAUDE.md` §3.2), so it stands as a known blemish.
+
 ## Shipped (signup 400 traced to Supabase's built-in mailer)
 - **The production signup failure is diagnosed and reproduced.** A real user's registration returned
   400 with `email rate limit exceeded` under the form. Root cause: no custom SMTP, so the project is

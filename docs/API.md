@@ -182,8 +182,11 @@ each route: `scheduled→started` (driver only, not before T-2h per D-16), `star
 only), `scheduled→cancelled` (driver only). Every other transition is rejected.
 
 ### `GET /api/trips?groupId=&scope=all|mine`
-Live trip feed for a group — `scheduled`/`started` trips only; closed/cancelled trips don't appear
-here.
+Trip feed for a group: all `scheduled`/`started` trips, plus every `closed`/`cancelled` trip that
+departed within the last 30 days (`PAST_TRIPS_WINDOW_DAYS`), for the Carpools tab's Past section
+(D-27). Each `TripView` carries `departed` (past its departure time — D-23) and `cancelledReason`
+(`"not_started"` marks a trip the scheduler expired, which the UI renders as "Past", not
+"Cancelled").
 
 - **Auth**: required, caller must be a member of `groupId`
 - **Request**: query params `groupId` (required), `scope` (`all` default, or `mine` — trips where the caller is driving or an active rider)
@@ -207,9 +210,10 @@ Trip detail overlay: decorated summary plus the driver's pickup list in route or
 
 - **Auth**: required, caller must be a member of the trip's group
 - **Request**: none
-- **Response**: `{ trip: DecoratedTrip, driverId, isDriver: boolean, cancelledReason: string | null, pickups: { id, name, initials?, color?, pickupLabel: string | null, stopOrder: number | null, isViewer: boolean }[] }`
+- **Response**: `{ trip: DecoratedTrip, driverId, isDriver: boolean, cancelledReason: string | null, seatsLeft: number, pickups: { id, name, initials?, color?, pickupLabel: string | null, stopOrder: number | null, isViewer: boolean, addedByDriver: boolean }[], addableMembers: { id, name, initials, color }[] }`
 - **Errors**: `401 unauthenticated`, `404 not_found`
 - **Side effects**: none
+- **Notes**: `addableMembers` (D-24) is the passenger picker's list — group members not already on the trip. Empty unless the caller is the driver and the trip is `scheduled`/`started`. `pickups[].addedByDriver` marks a seat the driver booked for someone.
 
 ### `PATCH /api/trips/:id`
 Edit a trip. Driver only, and only while `status: "scheduled"` — a started or closed trip's plan is
@@ -259,7 +263,7 @@ live database with concurrent requests on a 1-seat trip.
 - **Auth**: required, caller must be a member of the trip's group and not its driver
 - **Request**: none
 - **Response**: `201 { tripRider }`
-- **Errors**: `401 unauthenticated`, `404 not_found`, `429 rate_limited` (20/10min per caller), `409 is_driver`, `409 wrong_status` (not scheduled), `409 already_joined`, `409 full`
+- **Errors**: `401 unauthenticated`, `404 not_found`, `429 rate_limited` (20/10min per caller), `409 is_driver`, `409 wrong_status` (not scheduled), `409 already_joined`, `409 full`, `409 departed` (D-23 — departure time has passed; only the driver can seat anyone after that)
 - **Side effects**: inserts a `trip_rider` row (`state: "joined"`). No ledger writes on join — pooled points are awarded on close.
 
 ### `POST /api/trips/:id/leave`
@@ -269,7 +273,30 @@ Drop a seat you're holding.
 - **Request**: none
 - **Response**: `{ tripRider, latePenalty: number | null }`
 - **Errors**: `401 unauthenticated`, `404 not_found` (trip missing or caller isn't riding it), `409 wrong_status` (trip already closed/cancelled), `500 leave_failed`
-- **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`). If the leave falls inside the group's configured cancellation window (`group.late_window_minutes`, default 60 — from `windowMinutes` before departure through any time after), inserts a `late_leave` `points_ledger` entry (`group.late_penalty`, default -5) for the leaving rider.
+- **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`). If the leave falls inside the group's configured cancellation window (`group.late_window_minutes`, default 60 — from `windowMinutes` before departure through any time after), inserts a `late_leave` `points_ledger` entry (`group.late_penalty`, default -5) for the leaving rider. **Exception (D-24):** a seat the driver added (`trip_rider.added_by_profile_id` set) is never penalised — the rider never booked it.
+
+### `POST /api/trips/:id/riders`
+Driver seats a group member who asked for the ride in person (D-24). Calls `add_trip_rider()`
+(`supabase/migrations/0010`), which takes the same row lock as `join_trip()` — a driver adding
+someone while a rider self-joins is exactly that race. Unlike joining, this still works after
+departure, for as long as the trip is alive (D-23's 24h grace window).
+
+- **Auth**: required, caller must be the trip's driver
+- **Request**: `{ profileId: string (uuid) }`
+- **Response**: `201 { tripRider }`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `403 not_driver`, `409 is_driver`, `409 wrong_status` (trip closed/cancelled), `409 not_member` (not in the trip's group), `409 already_joined`, `409 full`
+- **Side effects**: inserts a `trip_rider` row (`state: "joined"`, `added_by_profile_id` = caller); notifies the added member (`type: "change"`) + push; writes an `audit_log` row (`trip_rider_added_by_driver`).
+
+### `DELETE /api/trips/:id/riders/:riderId`
+Driver takes back a seat they booked for someone (D-24). Limited to seats the driver added — a
+rider who joined of their own accord gives up their seat through `POST /leave`, and a driver must
+not be able to bump them.
+
+- **Auth**: required, caller must be the trip's driver
+- **Request**: none
+- **Response**: `{ tripRider }`
+- **Errors**: `401 unauthenticated`, `404 not_found` (trip missing, or that rider isn't on it), `403 not_driver`, `403 not_added_by_driver`, `409 wrong_status`, `500 remove_failed`
+- **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`); notifies the removed member + push; writes an `audit_log` row (`trip_rider_removed_by_driver`). No ledger writes — a driver undoing their own action isn't a late cancellation.
 
 ## Kudos & scores
 
@@ -375,13 +402,30 @@ tick: (1) departure reminders — any
 `scheduled` trip departing within 15 minutes gets a `reminder`-type notification + push to its
 driver and active riders, deduped by checking for an existing reminder notification carrying that
 trip's id; (2) auto-close — any trip left `started` for 6+ hours is force-closed as a safety net
-(never touches `points_ledger` — no driver confirmed who actually rode).
+(never touches `points_ledger` — no driver confirmed who actually rode); (3) expiry (D-23) — any
+trip still `scheduled` 24 hours (`UNSTARTED_GRACE_HOURS`) after its departure time is ended as
+`cancelled` with `cancelled_reason: "not_started"`. No points and no penalties: an expiry is the
+absence of a trip, not anyone's fault. That update is re-guarded on `status = 'scheduled'`, so a
+trip started between the read and the write is left alone.
 
 - **Auth**: `Authorization: Bearer <CRON_SECRET>`. The scheduler reads both the URL and the secret from Supabase Vault (`carpool_tick_url`, `carpool_cron_secret`) at call time, so neither is in any tracked file; with either missing the job returns without calling anything.
 - **Request**: none
-- **Response**: `{ remindersSent: number, autoClosed: number }`
+- **Response**: `{ remindersSent: number, autoClosed: number, expired: number }`
 - **Errors**: `401 unauthorized`
-- **Side effects**: inserts `notification` rows (`type: "reminder"`) + sends push; updates stale trips' `status`/`closed_at`; inserts an `audit_log` row per auto-close (`actor_profile_id: null` marks it as system-acted, `action: "cron_auto_close"`).
+- **Side effects**: inserts `notification` rows (`type: "reminder"` for departures, `type: "change"` for expiries) + sends push; updates stale trips' `status`/`closed_at` and expired trips' `status`/`cancelled_reason`; inserts an `audit_log` row per auto-close (`cron_auto_close`) and per expiry (`cron_expire_unstarted`), both with `actor_profile_id: null` marking them system-acted.
+
+## Feedback
+
+### `POST /api/feedback`
+In-app feedback from the Profile tab (D-25). Stored in Postgres and read from the admin console —
+deliberately not emailed, since the project has no custom SMTP (D-22), and feedback that depends on
+mail delivery is feedback that silently doesn't arrive.
+
+- **Auth**: required
+- **Request**: `{ category: "bug" | "idea" | "praise" | "other", message: string (1-2000), groupId?: string (uuid) }`
+- **Response**: `201 { feedback: { id, created_at } }`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `429 rate_limited` (10/hour per caller), `500 feedback_failed`
+- **Side effects**: inserts a `feedback` row. The sender comes from the session, never from the body; `groupId` is verified against the caller's own memberships and dropped if it isn't one of theirs. The request's `user-agent` is stored — a bug report without it is usually unactionable.
 
 ## Admin
 
@@ -480,6 +524,17 @@ The audit trail itself — read-only; `audit_log` has no UPDATE/DELETE path anyw
 - **Response**: `{ entries: [...], total, limit, offset }`
 - **Errors**: `401 unauthenticated`, `403 forbidden`, `500 lookup_failed`
 - **Side effects**: none.
+
+### `GET /api/admin/feedback?category=&limit=&offset=`
+Everything submitted through the feedback form, newest first, with sender and group names resolved.
+Read-only: feedback is a record of what someone said, so there is no edit or delete path — the same
+reasoning as the audit log (D-14).
+
+- **Auth**: platform admin
+- **Request**: query params `category` (`bug`/`idea`/`praise`/`other`; anything else is ignored), `limit` (1-200, default 50), `offset`
+- **Response**: `{ entries: { id, category, message, userAgent, createdAt, senderName, groupName }[], total, limit, offset }`
+- **Errors**: `401 unauthenticated`, `403 forbidden`, `500 lookup_failed`
+- **Side effects**: none. A deleted account's feedback survives (`profile_id` goes null) and reads as "Deleted account".
 
 ### `GET /api/admin/health`
 Push delivery stats (subscription/failure/dead counts), the scheduler's own pulse, recent cron auto-closes, and a placeholder for Maps health (`status: "not_applicable"` — Phase 6 isn't built yet).
