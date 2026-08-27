@@ -19,14 +19,29 @@ export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, 
   const [mode, setMode] = useState<Mode>("round");
   const [leg, setLeg] = useState<Leg>("out");
   const [capacity, setCapacity] = useState<number>(SEATS.default);
+  // Local YYYY-MM-DD, which is what <input type="date"> speaks. toISOString() would shift the day
+  // for anyone west of UTC.
+  function isoDate(d: Date) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  const today = isoDate(new Date());
+
+  const [departDate, setDepartDate] = useState(today);
   const [departTime, setDepartTime] = useState("07:45");
   const [returnTime, setReturnTime] = useState("17:30");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function todayAt(time: string) {
+  // The form used to publish "today at HH:MM" and nothing else, which meant the evening commute
+  // could never be planned the evening before — and once D-23 stopped people joining a ride whose
+  // departure has passed, publishing after that time produced a trip nobody could take. The day is
+  // now a field. The API has always accepted a full ISO datetime, and the feed has always grouped
+  // by day; only this form was stuck on today.
+  function at(date: string, time: string) {
+    const [y, mo, day] = date.split("-").map(Number);
     const [h, m] = time.split(":").map(Number);
     const d = new Date();
+    d.setFullYear(y ?? d.getFullYear(), (mo ?? 1) - 1, day ?? d.getDate());
     d.setHours(h ?? 0, m ?? 0, 0, 0);
     return d.toISOString();
   }
@@ -42,8 +57,8 @@ export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, 
         body: JSON.stringify({
           groupId,
           direction,
-          departAt: todayAt(departTime),
-          returnAt: mode === "round" ? todayAt(returnTime) : undefined,
+          departAt: at(departDate, departTime),
+          returnAt: mode === "round" ? at(departDate, returnTime) : undefined,
           capacity,
         }),
       });
@@ -199,6 +214,17 @@ export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, 
           >
             +
           </button>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label className="lbl">Day</label>
+          <input
+            className="field"
+            type="date"
+            value={departDate}
+            min={today}
+            onChange={(e) => setDepartDate(e.target.value || today)}
+          />
         </div>
 
         <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>

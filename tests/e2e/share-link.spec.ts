@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { E2E_DRIVER_EMAIL, E2E_RIDER_EMAIL, E2E_PASSWORD } from "./global-setup";
-import { createGroup, getGroupCode, joinGroupByCode, signIn } from "./helpers";
+import { createGroup, getGroupCode, joinGroupByCode, signIn, publishTrip } from "./helpers";
 
 // D-20 — the ride share link. The point of the feature is that the link survives a paste into
 // WhatsApp, and the point of the decision is that it carries nothing with it: only a signed-in
@@ -43,10 +43,7 @@ test("ride share link: shares a real URL, and reveals nothing to anyone outside 
   await test.step("driver signs in, creates a group and publishes a trip", async () => {
     await signIn(driver, E2E_DRIVER_EMAIL, E2E_PASSWORD);
     await createGroup(driver, groupName);
-    await driver.locator(".tab", { hasText: "Carpools" }).click();
-    await driver.locator(".fab").click();
-    await driver.locator("input[type=time]").first().fill("07:45");
-    await driver.locator("button.btnP", { hasText: "Publish to" }).click();
+    await publishTrip(driver);
     await expect(driver.getByText("YOU'RE DRIVING")).toBeVisible({ timeout: 10_000 });
   });
 

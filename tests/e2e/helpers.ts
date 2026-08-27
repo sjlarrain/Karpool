@@ -55,3 +55,23 @@ export async function joinGroupByCode(page: Page, code: string) {
   }
   await page.waitForURL((url) => /\/app/.test(url.href) && url.href !== urlBefore, { timeout: 10_000 });
 }
+
+// Publishes a trip departing `minutesFromNow` from now, deriving BOTH the day and the time from
+// the same instant so a run near midnight rolls onto tomorrow instead of publishing into the past.
+//
+// The fixed "07:45 today" this replaces was only ever accidentally valid: any run after 07:45 was
+// publishing a trip whose departure had passed. Nothing complained until D-23 stopped people
+// joining a ride that has already left — the specs were relying on a bug. The default of 60 minutes
+// keeps the trip inside the T-2h start window (D-16) and still ahead of now, so the same trip is
+// both joinable and startable.
+export async function publishTrip(page: Page, minutesFromNow = 60) {
+  const depart = new Date(Date.now() + minutesFromNow * 60_000);
+  const date = `${depart.getFullYear()}-${String(depart.getMonth() + 1).padStart(2, "0")}-${String(depart.getDate()).padStart(2, "0")}`;
+  const time = `${String(depart.getHours()).padStart(2, "0")}:${String(depart.getMinutes()).padStart(2, "0")}`;
+
+  await page.locator(".tab", { hasText: "Carpools" }).click();
+  await page.locator(".fab").click();
+  await page.locator("input[type=date]").first().fill(date);
+  await page.locator("input[type=time]").first().fill(time);
+  await page.locator("button.btnP", { hasText: "Publish to" }).click();
+}
