@@ -7,7 +7,7 @@ import type { Database } from "@/types/database";
 import { avatarColorFor } from "@/domain/avatarColor";
 import { initialsFor } from "@/domain/initials";
 import { CreateGroupSheet } from "./GroupScreen";
-import { IosInstallPrompt } from "./IosInstallPrompt";
+import { InstallCard } from "./InstallCard";
 import { PushSubscribe } from "./PushSubscribe";
 
 type PickupPlace = Database["public"]["Tables"]["pickup_place"]["Row"];
@@ -198,7 +198,7 @@ export function YouScreen({
         {tile(stats?.kudos ?? 0, "Kudos earned", "var(--green)")}
       </div>
 
-      <IosInstallPrompt />
+      <InstallCard />
       <PushSubscribe />
 
       {isPlatformAdmin && (
