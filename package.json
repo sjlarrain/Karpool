@@ -18,6 +18,7 @@
     "db:types:linked": "supabase gen types typescript --linked > src/types/database.ts",
     "db:diff": "supabase db diff",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
+    "db:reset-data": "tsx scripts/reset-data.ts",
     "verify": "pnpm typecheck && pnpm lint && pnpm test"
   },
   "dependencies": {

@@ -1,5 +1,29 @@
 # Worklog
 
+## Shipped (2026-08-26 — activity data cleared, reset script added)
+- **Cleared the live project's activity data** at the developer's request. Gone: `kudos` (1),
+  `points_ledger` (3), `trip_rider` (3), `trip` (5), `notification` (12), `audit_log` (6),
+  `feedback` (1), `rate_limit_hit` (8). Kept, on the developer's explicit choice: `auth.users`,
+  `profile` (9), `"group"` (4), `membership` (8), `pickup_place` (0), `push_subscription` (2) —
+  so every account stays signed up to its group and push stays registered.
+- **`scripts/reset-data.ts` + `pnpm db:reset-data`** does it repeatably. Service-role client reading
+  `.env.local` (same shape as `bootstrap-admin.ts`), deletes ledger-before-trip because
+  `points_ledger.trip_id` has no `on delete cascade`, refuses to run without `--yes`, and `--dry-run`
+  prints the row counts without touching anything. README's scripts table and structure block updated.
+
+## In Progress
+- Nothing.
+
+## Next
+- Phase 6 (Maps) remains the only unshipped phase; otherwise polish.
+
+## Blocked On
+- The manual items in `docs/DECISIONS.md` that need a real person: custom SMTP (D-22 — registration
+  mail is broken without it), the Supabase URL config, and the scheduler's Vault secrets.
+
+## Gates Green
+- G1 (`pnpm verify`): green — typecheck, lint, 135/135 tests.
+
 ## Shipped (2026-08-26 — seven fixes from the developer, five new decisions)
 - **The tab bar stays on the bottom edge** (`6fef957`). The shell was `min-height:100vh` with the bar
   in normal flow, so a long trip list grew the document and pushed the bar off screen. The shell is
