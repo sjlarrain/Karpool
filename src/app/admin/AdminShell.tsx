@@ -8,9 +8,10 @@ import { AdminGroupsTab } from "./AdminGroupsTab";
 import { AdminTripsTab } from "./AdminTripsTab";
 import { AdminLedgerTab } from "./AdminLedgerTab";
 import { AdminAuditLogTab } from "./AdminAuditLogTab";
+import { AdminFeedbackTab } from "./AdminFeedbackTab";
 import { AdminHealthTab } from "./AdminHealthTab";
 
-type Tab = "overview" | "users" | "groups" | "trips" | "ledger" | "audit" | "health";
+type Tab = "overview" | "users" | "groups" | "trips" | "ledger" | "feedback" | "audit" | "health";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -18,6 +19,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "groups", label: "Groups" },
   { id: "trips", label: "Trips" },
   { id: "ledger", label: "Ledger" },
+  { id: "feedback", label: "Feedback" },
   { id: "audit", label: "Audit log" },
   { id: "health", label: "Health" },
 ];
@@ -51,6 +53,7 @@ export function AdminShell({ adminName }: { adminName: string }) {
         {tab === "groups" && <AdminGroupsTab />}
         {tab === "trips" && <AdminTripsTab />}
         {tab === "ledger" && <AdminLedgerTab />}
+        {tab === "feedback" && <AdminFeedbackTab />}
         {tab === "audit" && <AdminAuditLogTab />}
         {tab === "health" && <AdminHealthTab />}
       </div>

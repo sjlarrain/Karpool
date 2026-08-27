@@ -7,6 +7,7 @@ import type { Database } from "@/types/database";
 import { avatarColorFor } from "@/domain/avatarColor";
 import { initialsFor } from "@/domain/initials";
 import { CreateGroupSheet } from "./GroupScreen";
+import { FeedbackSheet } from "./FeedbackSheet";
 import { InstallCard } from "./InstallCard";
 import { PushSubscribe } from "./PushSubscribe";
 
@@ -21,6 +22,7 @@ type Stats = { driven: number; pooled: number; kudos: number; points: number };
 
 interface Props {
   viewerName: string;
+  groupId: string;
   groupName: string;
   memberCount: number;
   membershipId: string;
@@ -32,6 +34,7 @@ interface Props {
 
 export function YouScreen({
   viewerName,
+  groupId,
   groupName,
   memberCount,
   membershipId,
@@ -44,7 +47,7 @@ export function YouScreen({
   const [stats, setStats] = useState<Stats | null>(null);
   const [pickup, setPickup] = useState<string | null>(pickupPlaceId);
   const [savingPickup, setSavingPickup] = useState(false);
-  const [sheet, setSheet] = useState<"create" | null>(null);
+  const [sheet, setSheet] = useState<"create" | "feedback" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -211,7 +214,34 @@ export function YouScreen({
         </Link>
       )}
 
-      <button className="btnP" style={{ marginTop: 8, marginBottom: 10 }} onClick={() => setSheet("create")}>
+      <button
+        onClick={() => setSheet("feedback")}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          background: "var(--surface)",
+          border: "1px solid var(--hairline)",
+          borderRadius: 16,
+          padding: "13px 14px",
+          marginTop: 10,
+          marginBottom: 10,
+          cursor: "pointer",
+          textAlign: "left",
+        }}
+      >
+        <span style={{ fontSize: 18 }}>💬</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ font: "800 14px var(--font-display)", color: "var(--ink)" }}>Send feedback</div>
+          <div style={{ font: "600 11px var(--font-body)", color: "rgba(0,0,0,.45)" }}>
+            A bug, an idea, or anything that annoys you
+          </div>
+        </div>
+        <span style={{ color: "rgba(0,0,0,.3)", fontSize: 15 }}>→</span>
+      </button>
+
+      <button className="btnP" style={{ marginBottom: 10 }} onClick={() => setSheet("create")}>
         + Create a new group
       </button>
       <button className="btnG" onClick={signOut}>
@@ -219,6 +249,17 @@ export function YouScreen({
       </button>
 
       {sheet === "create" && <CreateGroupSheet onClose={() => setSheet(null)} />}
+      {sheet === "feedback" && (
+        <FeedbackSheet
+          groupId={groupId}
+          onClose={() => setSheet(null)}
+          onSent={(message) => {
+            setSheet(null);
+            setToast(message);
+            setTimeout(() => setToast(null), 2600);
+          }}
+        />
+      )}
       {toast && <div className="toast" style={{ position: "fixed" }}>{toast}</div>}
     </div>
   );
