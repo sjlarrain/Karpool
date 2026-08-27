@@ -24,6 +24,12 @@
   leaving a seat they never booked costs them nothing. The driver can only take back seats they added.
 - **Feedback form + admin tab** (`37c9cd7`, D-25). Profile tab → sheet → `POST /api/feedback` → Postgres
   → new admin Feedback tab. Not email: no SMTP exists (D-22).
+- **Drivers can pick the day of a trip** (`8a486ba`). Found by the e2e suite going red: the create form
+  only ever sent "today at HH:MM", so tomorrow morning's commute could not be published the evening
+  before. Harmless while past-dated trips stayed joinable; a dead trip once D-23 landed. The specs
+  were leaning on the same bug (a fixed "07:45 today", in the past on any run after 07:45) and now
+  publish 60 minutes out through a shared `publishTrip()` helper that rolls onto tomorrow near
+  midnight.
 - **Onboarding and share link re-checked** (the developer asked): `pnpm e2e` green (3/3), plus a manual
   pass — signed-out `/j/CODE` shows the group and prefills the code, signing in joins and lands in the
   group, and `/t/:id` redirects a member into the trip overlay.
