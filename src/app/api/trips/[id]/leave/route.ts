@@ -7,6 +7,10 @@ import { computeLateLeavePenalty } from "@/domain/points";
 // POST /api/trips/:id/leave — drop a seat you're holding. Marks the seat left and, if inside the
 // group's cancellation window (D-10/LATE_LEAVE, per-group configurable), writes a late_leave
 // penalty entry to points_ledger for the leaving rider.
+//
+// D-24 exception: a seat the driver booked for you (added_by_profile_id set) is never penalised.
+// You didn't take that seat, so declining it isn't a late cancellation — charging for it would let
+// one person put a points risk on another without asking.
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
@@ -29,7 +33,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   const { data: seat } = await supabase
     .from("trip_rider")
-    .select("id")
+    .select("id, added_by_profile_id")
     .eq("trip_id", id)
     .eq("profile_id", user.id)
     .in("state", ["joined", "confirmed"])
@@ -44,9 +48,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .eq("id", trip.group_id)
     .maybeSingle();
 
-  const penalty = group
-    ? computeLateLeavePenalty(new Date(trip.depart_at), new Date(), group.late_window_minutes, group.late_penalty)
-    : null;
+  const bookedThemselves = seat.added_by_profile_id === null;
+  const penalty =
+    group && bookedThemselves
+      ? computeLateLeavePenalty(new Date(trip.depart_at), new Date(), group.late_window_minutes, group.late_penalty)
+      : null;
 
   const admin = createSupabaseAdminClient();
   const { data: updated, error } = await admin

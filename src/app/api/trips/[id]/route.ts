@@ -33,7 +33,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     supabase.from("profile").select("id, display_name, initials, avatar_color").eq("id", trip.driver_id).maybeSingle(),
     supabase
       .from("trip_rider")
-      .select("id, profile_id, guest_name, pickup_place_id, stop_order, state")
+      .select("id, profile_id, guest_name, pickup_place_id, stop_order, state, added_by_profile_id")
       .eq("trip_id", id)
       .in("state", ["joined", "confirmed"])
       .order("stop_order", { ascending: true, nullsFirst: false }),
@@ -100,6 +100,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       pickupLabel: r.pickup_place_id ? (pickupLabelById.get(r.pickup_place_id) ?? null) : null,
       stopOrder: r.stop_order,
       isViewer: r.profile_id === user.id,
+      // D-24: a seat the driver booked on this member's behalf. The driver may take it back; a
+      // seat someone booked themselves is theirs to give up.
+      addedByDriver: r.added_by_profile_id !== null,
     };
   });
 
@@ -123,12 +126,45 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     viewerDeclinedKudos = !!seat?.kudos_declined_at;
   }
 
+  // D-24: the driver's passenger picker. Group members who aren't already on this trip, resolved
+  // here rather than in a second round trip so the client never has to ask "who is in my group" —
+  // a question RLS should answer on the server.
+  const isDriver = trip.driver_id === user.id;
+  let addableMembers: { id: string; name: string; initials: string; color: string }[] = [];
+  if (isDriver && (trip.status === "scheduled" || trip.status === "started")) {
+    const { data: memberships } = await supabase
+      .from("membership")
+      .select("profile_id")
+      .eq("group_id", trip.group_id);
+    const seated = new Set(
+      (riderRows ?? []).map((r) => r.profile_id).filter((v): v is string => !!v),
+    );
+    const candidateIds = (memberships ?? [])
+      .map((m) => m.profile_id)
+      .filter((pid) => pid !== trip.driver_id && !seated.has(pid));
+    if (candidateIds.length > 0) {
+      const { data: candidates } = await supabase
+        .from("profile")
+        .select("id, display_name, initials, avatar_color")
+        .in("id", candidateIds)
+        .order("display_name", { ascending: true });
+      addableMembers = (candidates ?? []).map((c) => ({
+        id: c.id,
+        name: c.display_name,
+        initials: c.initials ?? "?",
+        color: c.avatar_color ?? "var(--purple)",
+      }));
+    }
+  }
+
   return NextResponse.json({
     trip: decorateTrip(view),
     driverId: trip.driver_id,
-    isDriver: trip.driver_id === user.id,
+    isDriver,
     cancelledReason: trip.cancelled_reason,
     pickups,
+    addableMembers,
+    seatsLeft: trip.capacity - (riderRows ?? []).length,
     viewerGaveKudos,
     viewerDeclinedKudos,
   });

@@ -14,6 +14,15 @@ interface Pickup {
   pickupLabel: string | null;
   stopOrder: number | null;
   isViewer: boolean;
+  // D-24: this seat was booked by the driver, so the driver can take it back.
+  addedByDriver: boolean;
+}
+
+interface AddableMember {
+  id: string;
+  name: string;
+  initials: string;
+  color: string;
 }
 
 interface DetailResponse {
@@ -22,6 +31,10 @@ interface DetailResponse {
   isDriver: boolean;
   cancelledReason: string | null;
   pickups: Pickup[];
+  // Group members not already on this trip — empty unless the viewer is the driver and the trip is
+  // still active.
+  addableMembers: AddableMember[];
+  seatsLeft: number;
   viewerGaveKudos: boolean;
   viewerDeclinedKudos: boolean;
 }
@@ -43,6 +56,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
   // Sketch default: the toggle starts off, so the submit reads "Skip & close" until the rider opts in.
   const [givingKudos, setGivingKudos] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
+  const [addingPassenger, setAddingPassenger] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -126,7 +140,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
     );
   }
 
-  const { trip, isDriver, pickups } = data;
+  const { trip, isDriver, pickups, addableMembers, seatsLeft } = data;
   const otherPickups = pickups.filter((p) => !p.isViewer);
   // Only a ride someone could still act on is worth sharing — a closed or cancelled one would send
   // the recipient to a dead end.
@@ -151,6 +165,52 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
       <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
     </svg>
   );
+
+  // D-24: only the driver reaches these two. The seat counts against capacity like any other, and
+  // the person is notified either way — being moved on and off someone's trip silently would be
+  // the worst version of this feature.
+  async function addPassenger(profileId: string, name: string) {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/riders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileId }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.message ?? "Couldn't add that passenger.");
+        return;
+      }
+      setAddingPassenger(false);
+      await load();
+      onChanged(`${name} added to this ride`);
+    } catch {
+      setError("Couldn't reach the server — check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removePassenger(riderId: string, name: string) {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/riders/${riderId}`, { method: "DELETE" });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.message ?? "Couldn't remove that passenger.");
+        return;
+      }
+      await load();
+      onChanged(`${name} removed from this ride`);
+    } catch {
+      setError("Couldn't reach the server — check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function shareRide() {
     // The link itself reveals nothing (D-20): /t/:id is gated on being signed in and in the group.
@@ -286,11 +346,54 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
                 <div style={{ flex: 1 }}>
                   <div style={{ font: "700 13px var(--font-body)", color: "var(--ink)" }}>{p.name}</div>
                   <div style={{ font: "600 11px var(--font-body)", color: "rgba(0,0,0,.5)" }}>
-                    📍 {p.pickupLabel ?? "No pickup place set"}
+                    {p.addedByDriver ? "Added by you" : `📍 ${p.pickupLabel ?? "No pickup place set"}`}
                   </div>
                 </div>
+                {p.addedByDriver && trip.status !== "closed" && trip.status !== "cancelled" && (
+                  <button
+                    onClick={() => removePassenger(p.id, p.name)}
+                    disabled={busy}
+                    aria-label={`Remove ${p.name}`}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "rgba(0,0,0,.35)",
+                      font: "700 11px var(--font-body)",
+                      cursor: "pointer",
+                      padding: 4,
+                      flex: "none",
+                    }}
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
             ))}
+
+            {(trip.status === "scheduled" || trip.status === "started") && (
+              <button
+                onClick={() => setAddingPassenger(true)}
+                disabled={busy || seatsLeft <= 0 || addableMembers.length === 0}
+                style={{
+                  width: "100%",
+                  background: "var(--purple-soft)",
+                  border: "1px dashed rgba(124,92,255,.5)",
+                  borderRadius: 15,
+                  padding: "11px 12px",
+                  font: "700 12.5px var(--font-body)",
+                  color: "var(--purple)",
+                  cursor: seatsLeft > 0 && addableMembers.length > 0 ? "pointer" : "not-allowed",
+                  opacity: seatsLeft > 0 && addableMembers.length > 0 ? 1 : 0.55,
+                  marginBottom: 8,
+                }}
+              >
+                {seatsLeft <= 0
+                  ? "No seats left to add anyone"
+                  : addableMembers.length === 0
+                    ? "Everyone in the group is already on this ride"
+                    : "+ Add a passenger"}
+              </button>
+            )}
             <div style={{ height: 8 }} />
             {trip.status === "scheduled" && (
               <>
@@ -517,6 +620,52 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
             onChanged(message);
           }}
         />
+      )}
+
+      {addingPassenger && (
+        <div className="sheet" onClick={() => setAddingPassenger(false)}>
+          <div className="sheetc" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ font: "800 17px var(--font-display)", color: "var(--ink)", margin: "0 0 2px" }}>
+              Add a passenger
+            </h3>
+            <p style={{ font: "500 11.5px var(--font-body)", color: "rgba(0,0,0,.5)", margin: "0 0 14px" }}>
+              {seatsLeft} seat{seatsLeft === 1 ? "" : "s"} left. They&apos;ll be notified, and they can leave without
+              losing points.
+            </p>
+            <div style={{ maxHeight: 280, overflowY: "auto" }}>
+              {addableMembers.map((m) => (
+                <button
+                  key={m.id}
+                  disabled={busy}
+                  onClick={() => addPassenger(m.id, m.name)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 11,
+                    width: "100%",
+                    background: "var(--surface)",
+                    border: "1px solid rgba(0,0,0,.07)",
+                    borderRadius: 15,
+                    padding: "11px 12px",
+                    marginBottom: 8,
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
+                  <span className="av" style={{ background: m.color }}>
+                    {m.initials}
+                  </span>
+                  <span style={{ flex: 1, font: "700 13px var(--font-body)", color: "var(--ink)" }}>{m.name}</span>
+                  <span style={{ color: "var(--purple)", font: "800 13px var(--font-body)" }}>+</span>
+                </button>
+              ))}
+            </div>
+            {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "8px 2px 0" }}>{error}</p>}
+            <button className="btnG" style={{ marginTop: 10 }} onClick={() => setAddingPassenger(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       {shareToast && <div className="toast" style={{ position: "fixed" }}>{shareToast}</div>}
