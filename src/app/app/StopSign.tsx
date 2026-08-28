@@ -82,32 +82,36 @@ export function StopMention({ notices }: { notices: StopNotice[] }) {
         display: "flex",
         flexDirection: "column",
         alignItems: "flex-end",
-        gap: 3,
+        gap: 7,
         marginLeft: "auto",
         paddingLeft: 8,
         flex: "none",
       }}
     >
       {notices.map((n) => (
-        <span key={n.leg} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+        // The place carries the meaning, so it gets the size; the leg is a qualifier and stays
+        // quiet underneath it.
+        <span key={n.leg} style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
           <span
             title={n.stop.address}
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: 4,
+              gap: 5,
               background: "var(--amber-soft)",
               color: "var(--amber-ink)",
-              padding: "1.5px 7px",
+              padding: "2px 9px",
               borderRadius: 20,
-              font: "700 10.5px var(--font-body)",
+              font: "700 13px var(--font-body)",
               whiteSpace: "nowrap",
             }}
           >
-            <StopGlyph icon={n.stop.icon} size={12} />
+            <StopGlyph icon={n.stop.icon} size={15} />
             {n.stop.label}
           </span>
-          <span style={{ font: "600 10.5px var(--font-body)", color: "rgba(0,0,0,.45)" }}>{n.when}</span>
+          <span style={{ font: "600 10.5px var(--font-body)", color: "rgba(0,0,0,.45)", lineHeight: 1.2 }}>
+            {n.when}
+          </span>
         </span>
       ))}
     </div>
