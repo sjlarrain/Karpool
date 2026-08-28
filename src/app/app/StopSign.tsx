@@ -1,4 +1,4 @@
-import type { RouteLeg } from "@/domain/decorateTrip";
+import type { StopNotice } from "@/domain/decorateTrip";
 import type { StopIcon, TripStopView } from "@/domain/types";
 
 // D-29. The sign a stop shows on a trip card. Drawn rather than typed: an emoji renders differently
@@ -67,44 +67,51 @@ export function StopSign({ stop, small = false }: { stop: TripStopView; small?: 
   );
 }
 
-// One rendered route line, with the stop sitting between origin and destination — the detour is
-// part of the route, not a badge bolted beside it, so one read tells you it exists and where it
-// falls. `muted` is the round trip's return line.
-export function RouteLine({ leg, muted = false }: { leg: RouteLeg; muted?: boolean }) {
-  const arrow = muted ? "rgba(0,0,0,.25)" : "rgba(0,0,0,.3)";
+// The heads-up itself: this ride is not direct. Stated as its own notice rather than woven into
+// the route line, so a rider scanning the feed reads it as a warning about the ride instead of
+// having to spot an extra place name inside "A -> B".
+export function StopWarning({ notices }: { notices: StopNotice[] }) {
+  if (notices.length === 0) return null;
   return (
     <div
-      className={muted ? undefined : "route"}
-      style={
-        muted
-          ? {
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              flexWrap: "wrap",
-              marginTop: 5,
-              font: "600 13px var(--font-body)",
-              color: "rgba(0,0,0,.45)",
-            }
-          : { display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }
-      }
+      role="note"
+      style={{
+        display: "flex",
+        gap: 8,
+        alignItems: "flex-start",
+        background: "var(--amber-soft)",
+        border: "1px solid rgba(255,176,32,.45)",
+        borderRadius: 11,
+        padding: "8px 10px",
+        marginTop: 9,
+        color: "var(--amber-ink)",
+      }}
     >
-      {muted && <span className="sr-only">Return: </span>}
-      {muted && (
-        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: "none" }}>
-          <path d="M9 14L4 9l5-5" />
-          <path d="M4 9h11a5 5 0 0 1 0 10h-3" />
-        </svg>
-      )}
-      <span>{leg.from}</span>
-      <span style={{ color: arrow }}>→</span>
-      {leg.stop && (
-        <>
-          <StopSign stop={leg.stop} small={muted} />
-          <span style={{ color: arrow }}>→</span>
-        </>
-      )}
-      <span>{leg.to}</span>
+      <svg
+        width={15}
+        height={15}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        style={{ flex: "none", marginTop: 1 }}
+      >
+        <path d="M12 3.5L22 20H2z" />
+        <path d="M12 10v4" />
+        <path d="M12 17.2v.1" />
+      </svg>
+      <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+        {notices.map((n) => (
+          <span key={n.leg} style={{ display: "flex", alignItems: "center", gap: 5, font: "700 11.5px var(--font-body)" }}>
+            <StopGlyph icon={n.stop.icon} size={14} />
+            Stopping at {n.stop.label}
+            <span style={{ font: "600 11.5px var(--font-body)", opacity: 0.75 }}>{n.when}</span>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

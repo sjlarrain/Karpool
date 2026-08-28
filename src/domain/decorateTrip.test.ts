@@ -84,51 +84,39 @@ describe("decorateTrip", () => {
   });
 });
 
-describe("routeLegs (D-29)", () => {
+describe("stopNotices (D-29)", () => {
   const gym = { id: "p1", label: "Gym", icon: "gym" as const, address: "Fitness Park" };
   const shop = { id: "p2", label: "Shop", icon: "shop" as const, address: "Market St" };
 
-  it("puts an outbound stop on the single line of a one-way out trip", () => {
+  it("warns about an outbound stop on a one-way out trip, unqualified", () => {
+    // One-way: there is only one "way", so the wording needs no there/back qualifier.
     const d = decorateTrip({ ...base, direction: "out", outStop: gym });
-    expect(d.route).toEqual({ from: "Riverside", to: "HQ", stop: gym });
-    expect(d.returnRoute).toBeNull();
+    expect(d.stopNotices).toEqual([{ stop: gym, leg: "out", when: "on the way" }]);
   });
 
-  it("puts a return stop inline on a one-way back trip, with no second line", () => {
-    // toTripView() has already swapped from/to for a 'back' trip, so its one line *is* the return
-    // leg — drawing a second would read as two separate detours.
+  it("warns about a return stop on a one-way back trip", () => {
     const d = decorateTrip({ ...base, direction: "back", from: "HQ", to: "Riverside", backStop: gym });
-    expect(d.route).toEqual({ from: "HQ", to: "Riverside", stop: gym });
-    expect(d.returnRoute).toBeNull();
+    expect(d.stopNotices).toEqual([{ stop: gym, leg: "back", when: "on the way back" }]);
   });
 
-  it("gives a round trip's return stop its own reversed line", () => {
-    const d = decorateTrip({ ...base, direction: "round", backStop: gym });
-    expect(d.route).toEqual({ from: "Riverside", to: "HQ", stop: null });
-    expect(d.returnRoute).toEqual({ from: "HQ", to: "Riverside", stop: gym });
-  });
-
-  it("carries a stop on each leg of a round trip independently", () => {
-    const d = decorateTrip({ ...base, direction: "round", outStop: gym, backStop: shop });
-    expect(d.route.stop).toEqual(gym);
-    expect(d.returnRoute?.stop).toEqual(shop);
-  });
-
-  it("draws no second line for a round trip that only stops on the way out", () => {
+  it("qualifies the direction on a round trip", () => {
     const d = decorateTrip({ ...base, direction: "round", outStop: gym });
-    expect(d.route.stop).toEqual(gym);
-    expect(d.returnRoute).toBeNull();
+    expect(d.stopNotices).toEqual([{ stop: gym, leg: "out", when: "on the way there" }]);
   });
 
-  it("leaves both lines unmarked when the trip has no stops", () => {
-    const d = decorateTrip({ ...base, direction: "round" });
-    expect(d.route.stop).toBeNull();
-    expect(d.returnRoute).toBeNull();
+  it("lists both stops of a round trip in travel order", () => {
+    const d = decorateTrip({ ...base, direction: "round", outStop: gym, backStop: shop });
+    expect(d.stopNotices.map((n) => n.leg)).toEqual(["out", "back"]);
+    expect(d.stopNotices[1]).toEqual({ stop: shop, leg: "back", when: "on the way back" });
   });
 
-  it("ignores a back stop on an out-only trip", () => {
-    const d = decorateTrip({ ...base, direction: "out", backStop: gym });
-    expect(d.returnRoute).toBeNull();
-    expect(d.route.stop).toBeNull();
+  it("says nothing for a direct ride", () => {
+    expect(decorateTrip({ ...base, direction: "round" }).stopNotices).toEqual([]);
+  });
+
+  it("ignores a stop on a leg the trip never travels", () => {
+    // The DB blocks this combination too, but a stale value must not become a false warning.
+    expect(decorateTrip({ ...base, direction: "out", backStop: gym }).stopNotices).toEqual([]);
+    expect(decorateTrip({ ...base, direction: "back", outStop: gym }).stopNotices).toEqual([]);
   });
 });

@@ -278,15 +278,11 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
           {trip.from} → {trip.to}
         </h2>
 
-        {(trip.route.stop || trip.returnRoute?.stop) && (
+        {trip.stopNotices.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 11 }}>
-            {trip.route.stop && (
-              <StopRow
-                leg={trip.direction === "back" ? "On the way back" : trip.direction === "round" ? "Going" : "On the way"}
-                stop={trip.route.stop}
-              />
-            )}
-            {trip.returnRoute?.stop && <StopRow leg="Coming back" stop={trip.returnRoute.stop} />}
+            {trip.stopNotices.map((n) => (
+              <StopRow key={n.leg} leg={n.when} stop={n.stop} />
+            ))}
           </div>
         )}
 

@@ -1,5 +1,39 @@
 # Worklog
 
+## Shipped (2026-08-27 — D-29 presentation reworked: the stop is a warning, not a route segment)
+- **The sign moved out of the route line.** It was built as `Riverside → [Gym] → HQ`; the developer
+  rejected that and asked for "a **warning** mention that they will be going to the gym". A stop is
+  now its own amber notice under the route — warning triangle, the stop's icon, *Stopping at Gym on
+  the way there* — and the route line is plain `from → to` again.
+- `routeLegs()` / `RouteLeg` / `route` / `returnRoute` are gone, replaced by `stopNotices()` and
+  `StopNotice[]` on `DecoratedTrip`. The round trip's second (reversed, dimmed) route line went with
+  them: it existed only to show *where* a return stop fell, which the notice now says in words.
+  Wording is qualified only when the ride has two legs to tell apart — `on the way` for a one-way,
+  `on the way there` / `on the way back` for a round trip.
+- `RouteLine` → `StopWarning` in `StopSign.tsx`; the trip detail overlay reads `stopNotices` too.
+  Tests rewritten to match (14 in `decorateTrip.test.ts`, 144 total — one fewer than before because
+  the two route-line placement cases collapsed into one wording case).
+- Verified live on `/styleguide` against real mock data: all five cards render `Riverside → HQ`, and
+  the two trips with stops carry `Stopping at Gym on the way there` / `Stopping at Pool on the way
+  back` as separate notices. No server errors.
+
+## In Progress
+- Nothing.
+
+## Next
+- Developer review of the new presentation, then apply migration `0012`.
+
+## Blocked On
+- **Migration `0012` is still not applied.** `supabase db push --linked` was denied by the sandbox's
+  permission classifier last session and has not been retried since. Everything above is inert until
+  it runs — the columns don't exist on the live project, so the trip feed's selects will error.
+- Unchanged: custom SMTP (D-22), the Supabase URL config, the scheduler's Vault secrets.
+
+## Gates Green
+- G1 (`pnpm verify`): green — typecheck, lint, 144/144 tests.
+- G8 (API docs): `docs/API.md` updated for the `stopNotices` shape.
+
+
 ## Shipped (2026-08-27 — D-29 trip stopovers, with the sign on the card)
 - **Migration `0012_trip_stops.sql`** — `pickup_place` gains `kind` (`pickup` | `stop`) and `icon`
   (fixed 8-value vocabulary, non-null exactly when `kind = 'stop'`); `trip` gains `out_stop_id` and

@@ -195,7 +195,7 @@ departed within the last 30 days (`PAST_TRIPS_WINDOW_DAYS`), for the Carpools ta
 
 - **Auth**: required, caller must be a member of `groupId`
 - **Request**: query params `groupId` (required), `scope` (`all` default, or `mine` — trips where the caller is driving or an active rider)
-- **Response**: `{ trips: TripView[] }` (role/badge/day-label already derived for the caller; see `src/domain/types.ts`). Each carries `direction` and `outStop`/`backStop` — the D-29 stop on each leg, or `null`
+- **Response**: `{ trips: TripView[] }` (role/badge/day-label already derived for the caller; see `src/domain/types.ts`). Each carries `direction` and `outStop`/`backStop` — the D-29 stop on each leg, or `null`; the decorated form adds `stopNotices`, the same stops in travel order with their leg wording
 - **Errors**: `401 unauthenticated`, `400 invalid_request` (missing groupId), `404 not_found` (not a member), `500 trip_lookup_failed` / `rider_lookup_failed` / `driver_lookup_failed`
 - **Side effects**: none
 
@@ -222,7 +222,7 @@ Trip detail overlay: decorated summary plus the driver's pickup list in route or
 - **Response**: `{ trip: DecoratedTrip, driverId, isDriver: boolean, cancelledReason: string | null, seatsLeft: number, pickups: { id, name, initials?, color?, pickupLabel: string | null, stopOrder: number | null, isViewer: boolean, addedByDriver: boolean }[], addableMembers: { id, name, initials, color }[] }`
 - **Errors**: `401 unauthenticated`, `404 not_found`
 - **Side effects**: none
-- **Notes**: `trip.route` and `trip.returnRoute` (D-29) are the rendered route lines with any stop already placed on the correct leg; `returnRoute` is non-null only for a round trip that stops on the way home. `addableMembers` (D-24) is the passenger picker's list — group members not already on the trip. Empty unless the caller is the driver and the trip is `scheduled`/`started`. `pickups[].addedByDriver` marks a seat the driver booked for someone.
+- **Notes**: `trip.stopNotices` (D-29) is the ride's stops in travel order, each with its `leg` (`out`/`back`) and the `when` wording the UI shows (`"on the way"`, `"on the way there"`, `"on the way back"`). Empty for a direct ride. `addableMembers` (D-24) is the passenger picker's list — group members not already on the trip. Empty unless the caller is the driver and the trip is `scheduled`/`started`. `pickups[].addedByDriver` marks a seat the driver booked for someone.
 
 ### `PATCH /api/trips/:id`
 Edit a trip. Driver only, and only while `status: "scheduled"` — a started or closed trip's plan is
