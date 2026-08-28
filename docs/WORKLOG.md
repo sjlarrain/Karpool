@@ -1,5 +1,33 @@
 # Worklog
 
+## Shipped (2026-08-26 — analytics raised, recorded as D-28, nothing built)
+- **D-28 opened** in `docs/DECISIONS.md`: the developer asked whether PostHog could be used for
+  product analytics. Answer is yes on feasibility — Next 15 App Router + Vercel + PWA is a supported
+  combination, `next.config.mjs` has no CSP to amend, `public/sw.js` has no `fetch` handler to fight,
+  and the free tier is far above this app's volume. **Deliberately not built:** an analytics SDK is
+  a new third-party service, which `00_DEV_ENVIRONMENT_SETUP.md` forbids by default and
+  `02_IMPLEMENTATION_PLAN.md` §7 lists as out of scope. No packages installed, no code touched.
+- The entry records the full implementation shape so it can be picked up cold, plus the three
+  sub-questions that are the developer's call and not an engineering one: **region** (EU vs US is
+  permanent per project, and this data is colleagues' home pickup locations), **session replay**
+  (records real coworkers' screens — a consent conversation), and **scope** (client-only capture
+  undercounts, because a PWA on a commute drops events).
+
+## In Progress
+- Nothing.
+
+## Next
+- Nothing queued. D-28 stays open until the developer answers it; Phase 6 (Maps) remains deferred
+  behind D-03's traction precondition.
+
+## Blocked On
+- D-28 — needs a yes/no plus the region and replay calls before any analytics code can be written.
+- The manual items that need a real person: custom SMTP (D-22 — registration mail is broken without
+  it), the Supabase URL config, and the scheduler's Vault secrets.
+
+## Gates Green
+- G1 (`pnpm verify`): untouched this session — docs-only change, no code modified.
+
 ## Shipped (2026-08-26 — activity data cleared, reset script added)
 - **Cleared the live project's activity data** at the developer's request. Gone: `kudos` (1),
   `points_ledger` (3), `trip_rider` (3), `trip` (5), `notification` (12), `audit_log` (6),
