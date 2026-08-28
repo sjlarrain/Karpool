@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { decorateTrip } from "@/domain/decorateTrip";
 import { dayOrder, mockTrips } from "./mockData";
+import { RouteLine } from "../app/StopSign";
 
 // Dev-only: Phase 0 deliverable per 02_IMPLEMENTATION_PLAN.md §4 (Phase 0). Verified by comparing
 // this route to docs/Carpool App.dc.html's phone frame — not a real product route.
@@ -135,9 +136,8 @@ export default function StyleguidePage() {
                           {t.time}
                         </span>
                       </div>
-                      <div className="route">
-                        {t.from} <span style={{ color: "rgba(0,0,0,.3)" }}>→</span> {t.to}
-                      </div>
+                      <RouteLine leg={t.route} />
+                      {t.returnRoute && <RouteLine leg={t.returnRoute} muted />}
                       <div
                         style={{
                           font: "600 12px var(--font-body)",
