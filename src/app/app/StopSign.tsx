@@ -67,9 +67,40 @@ export function StopSign({ stop, small = false }: { stop: TripStopView; small?: 
   );
 }
 
+// The leg, drawn. Straight ahead for the outbound stop, doubling back for the return one — the
+// pair only has to be told apart from each other, which two arrow directions do at a glance.
+function LegArrow({ leg }: { leg: "out" | "back" }) {
+  return (
+    <svg
+      width={13}
+      height={13}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ flex: "none", opacity: 0.8 }}
+    >
+      {leg === "out" ? (
+        <>
+          <path d="M4 12h15" />
+          <path d="M13 6l6 6-6 6" />
+        </>
+      ) : (
+        <>
+          <path d="M20 12H5" />
+          <path d="M11 6l-6 6 6 6" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 // What the car does before it arrives. No box, no border, no alert glyph — a bordered block read
-// as "something is wrong with this ride", and nothing is. The tinted chip carries the name, the
-// trailing text carries the timing.
+// as "something is wrong with this ride", and nothing is. One tag per stop carries the whole fact:
+// the place, and an arrow for the leg.
 //
 // It sits at the right end of the route row, opposite the origin -> destination it qualifies, so
 // the card keeps one horizontal band per fact instead of growing a row. Two stops stack rather
@@ -89,29 +120,28 @@ export function StopMention({ notices }: { notices: StopNotice[] }) {
       }}
     >
       {notices.map((n) => (
-        // The place carries the meaning, so it gets the size; the leg is a qualifier and stays
-        // quiet underneath it.
-        <span key={n.leg} style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
-          <span
-            title={n.stop.address}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 5,
-              background: "var(--amber-soft)",
-              color: "var(--amber-ink)",
-              padding: "2px 9px",
-              borderRadius: 20,
-              font: "700 13px var(--font-body)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            <StopGlyph icon={n.stop.icon} size={15} />
-            {n.stop.label}
-          </span>
-          <span style={{ font: "600 10.5px var(--font-body)", color: "rgba(0,0,0,.45)", lineHeight: 1.2 }}>
-            {n.when}
-          </span>
+        // One tag per stop: place, then the leg as an arrow rather than words. The arrow says
+        // outbound or homebound in the space a couple of characters take, which is what lets the
+        // name carry the size. `when` still reaches screen readers, and the trip detail spells it.
+        <span
+          key={n.leg}
+          title={`${n.stop.label} — ${n.when}`}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            background: "var(--amber-soft)",
+            color: "var(--amber-ink)",
+            padding: "2px 9px",
+            borderRadius: 20,
+            font: "700 13px var(--font-body)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <StopGlyph icon={n.stop.icon} size={15} />
+          {n.stop.label}
+          <span className="sr-only">{n.when}</span>
+          <LegArrow leg={n.leg} />
         </span>
       ))}
     </div>
