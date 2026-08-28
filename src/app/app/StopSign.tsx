@@ -67,31 +67,35 @@ export function StopSign({ stop, small = false }: { stop: TripStopView; small?: 
   );
 }
 
-// The leg, drawn. Straight ahead for the outbound stop, doubling back for the return one — the
-// pair only has to be told apart from each other, which two arrow directions do at a glance.
+// The leg, drawn, sitting under the place name. Straight on for the outbound stop; for the return
+// one a U-turn rotated -90deg, so it reads as doubling back rather than merely pointing the other
+// way — two opposed straight arrows are easy to mistake for each other at this size.
 function LegArrow({ leg }: { leg: "out" | "back" }) {
   return (
     <svg
-      width={13}
-      height={13}
+      width={15}
+      height={15}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={2.6}
+      strokeWidth={2.4}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
-      style={{ flex: "none", opacity: 0.8 }}
+      style={{ flex: "none", opacity: 0.85 }}
     >
       {leg === "out" ? (
         <>
           <path d="M4 12h15" />
-          <path d="M13 6l6 6-6 6" />
+          <path d="M13.5 6.5L19 12l-5.5 5.5" />
         </>
       ) : (
+        // The same U-turn laid on its side: out along the top, round, and back the way it came.
+        // Turned so the head finishes pointing left — rotated the other way it finishes pointing
+        // right, which is the direction the outbound arrow already owns.
         <>
-          <path d="M20 12H5" />
-          <path d="M11 6l-6 6 6 6" />
+          <path d="M5 7h8a5 5 0 0 1 0 10h-6" />
+          <path d="M10.4 13.6L7 17l3.4 3.4" />
         </>
       )}
     </svg>
@@ -128,18 +132,21 @@ export function StopMention({ notices }: { notices: StopNotice[] }) {
           title={`${n.stop.label} — ${n.when}`}
           style={{
             display: "inline-flex",
+            flexDirection: "column",
             alignItems: "center",
-            gap: 5,
+            gap: 0,
             background: "var(--amber-soft)",
             color: "var(--amber-ink)",
-            padding: "2px 9px",
-            borderRadius: 20,
+            padding: "3px 10px 2px",
+            borderRadius: 14,
             font: "700 13px var(--font-body)",
             whiteSpace: "nowrap",
           }}
         >
-          <StopGlyph icon={n.stop.icon} size={15} />
-          {n.stop.label}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <StopGlyph icon={n.stop.icon} size={15} />
+            {n.stop.label}
+          </span>
           <span className="sr-only">{n.when}</span>
           <LegArrow leg={n.leg} />
         </span>
