@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { SEATS } from "@/domain/constants";
 import { loadGroupTrips } from "@/lib/trips/loadGroupTrips";
+import { resolveTripStops } from "@/lib/trips/resolveStops";
 import { checkRateLimit } from "@/lib/rateLimit";
 
 // GET /api/trips?groupId=&scope=all|mine — live trip feed for a group (scheduled/started only;
@@ -53,10 +54,21 @@ const createTripSchema = z
     departAt: isoDate,
     returnAt: isoDate.optional(),
     capacity: z.number().int().min(SEATS.min).max(SEATS.max),
+    // D-29: at most one stop per leg, referencing the group's own stop list.
+    outStopId: z.string().uuid().nullish(),
+    backStopId: z.string().uuid().nullish(),
   })
   .refine((data) => (data.direction === "round" ? !!data.returnAt : !data.returnAt), {
     message: "returnAt is required for round trips and not allowed otherwise",
     path: ["returnAt"],
+  })
+  .refine((data) => (data.direction === "back" ? !data.outStopId : true), {
+    message: "outStopId is not allowed on a return-only trip",
+    path: ["outStopId"],
+  })
+  .refine((data) => (data.direction === "out" ? !data.backStopId : true), {
+    message: "backStopId is not allowed on an outbound-only trip",
+    path: ["backStopId"],
   });
 
 export async function POST(request: Request) {
@@ -89,6 +101,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "rate_limited", message: "Too many trips published — try again in a bit." }, { status: 429 });
   }
 
+  const stops = await resolveTripStops(
+    admin,
+    parsed.data.groupId,
+    parsed.data.direction,
+    parsed.data.outStopId,
+    parsed.data.backStopId,
+  );
+  if (!stops.ok) {
+    return stops.error === "unknown_stop"
+      ? NextResponse.json({ error: "unknown_stop", message: "That stop isn't on this group's list." }, { status: 400 })
+      : NextResponse.json({ error: "lookup_failed" }, { status: 500 });
+  }
+
   const { data: trip, error } = await admin
     .from("trip")
     .insert({
@@ -98,6 +123,8 @@ export async function POST(request: Request) {
       depart_at: parsed.data.departAt,
       return_at: parsed.data.returnAt ?? null,
       capacity: parsed.data.capacity,
+      out_stop_id: stops.outStopId,
+      back_stop_id: stops.backStopId,
     })
     .select()
     .single();

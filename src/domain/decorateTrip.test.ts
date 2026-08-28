@@ -15,6 +15,9 @@ const base: TripView = {
   status: "scheduled",
   departed: false,
   cancelledReason: null,
+  direction: "round",
+  outStop: null,
+  backStop: null,
   riders: [{ name: "Marco Lee", initials: "ML", color: "#0ea5b0" }],
 };
 
@@ -78,5 +81,54 @@ describe("decorateTrip", () => {
     expect(d.avatars).toHaveLength(4);
     expect(d.avatars[0]?.dashed).toBeUndefined();
     expect(d.avatars[1]?.dashed).toBe(true);
+  });
+});
+
+describe("routeLegs (D-29)", () => {
+  const gym = { id: "p1", label: "Gym", icon: "gym" as const, address: "Fitness Park" };
+  const shop = { id: "p2", label: "Shop", icon: "shop" as const, address: "Market St" };
+
+  it("puts an outbound stop on the single line of a one-way out trip", () => {
+    const d = decorateTrip({ ...base, direction: "out", outStop: gym });
+    expect(d.route).toEqual({ from: "Riverside", to: "HQ", stop: gym });
+    expect(d.returnRoute).toBeNull();
+  });
+
+  it("puts a return stop inline on a one-way back trip, with no second line", () => {
+    // toTripView() has already swapped from/to for a 'back' trip, so its one line *is* the return
+    // leg — drawing a second would read as two separate detours.
+    const d = decorateTrip({ ...base, direction: "back", from: "HQ", to: "Riverside", backStop: gym });
+    expect(d.route).toEqual({ from: "HQ", to: "Riverside", stop: gym });
+    expect(d.returnRoute).toBeNull();
+  });
+
+  it("gives a round trip's return stop its own reversed line", () => {
+    const d = decorateTrip({ ...base, direction: "round", backStop: gym });
+    expect(d.route).toEqual({ from: "Riverside", to: "HQ", stop: null });
+    expect(d.returnRoute).toEqual({ from: "HQ", to: "Riverside", stop: gym });
+  });
+
+  it("carries a stop on each leg of a round trip independently", () => {
+    const d = decorateTrip({ ...base, direction: "round", outStop: gym, backStop: shop });
+    expect(d.route.stop).toEqual(gym);
+    expect(d.returnRoute?.stop).toEqual(shop);
+  });
+
+  it("draws no second line for a round trip that only stops on the way out", () => {
+    const d = decorateTrip({ ...base, direction: "round", outStop: gym });
+    expect(d.route.stop).toEqual(gym);
+    expect(d.returnRoute).toBeNull();
+  });
+
+  it("leaves both lines unmarked when the trip has no stops", () => {
+    const d = decorateTrip({ ...base, direction: "round" });
+    expect(d.route.stop).toBeNull();
+    expect(d.returnRoute).toBeNull();
+  });
+
+  it("ignores a back stop on an out-only trip", () => {
+    const d = decorateTrip({ ...base, direction: "out", backStop: gym });
+    expect(d.returnRoute).toBeNull();
+    expect(d.route.stop).toBeNull();
   });
 });

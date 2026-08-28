@@ -345,7 +345,9 @@ export type Database = {
           address: string
           created_at: string
           group_id: string
+          icon: "gym" | "pool" | "run" | "sport" | "shop" | "coffee" | "school" | "medical" | null
           id: string
+          kind: "pickup" | "stop"
           label: string
           sort_order: number
           typical_time: string | null
@@ -354,7 +356,9 @@ export type Database = {
           address: string
           created_at?: string
           group_id: string
+          icon?: "gym" | "pool" | "run" | "sport" | "shop" | "coffee" | "school" | "medical" | null
           id?: string
+          kind?: "pickup" | "stop"
           label: string
           sort_order?: number
           typical_time?: string | null
@@ -363,7 +367,9 @@ export type Database = {
           address?: string
           created_at?: string
           group_id?: string
+          icon?: "gym" | "pool" | "run" | "sport" | "shop" | "coffee" | "school" | "medical" | null
           id?: string
+          kind?: "pickup" | "stop"
           label?: string
           sort_order?: number
           typical_time?: string | null
@@ -538,6 +544,7 @@ export type Database = {
       }
       trip: {
         Row: {
+          back_stop_id: string | null
           cancelled_reason: string | null
           capacity: number
           closed_at: string | null
@@ -547,11 +554,13 @@ export type Database = {
           driver_id: string
           group_id: string
           id: string
+          out_stop_id: string | null
           return_at: string | null
           started_at: string | null
           status: "scheduled" | "started" | "closed" | "cancelled"
         }
         Insert: {
+          back_stop_id?: string | null
           cancelled_reason?: string | null
           capacity: number
           closed_at?: string | null
@@ -561,11 +570,13 @@ export type Database = {
           driver_id: string
           group_id: string
           id?: string
+          out_stop_id?: string | null
           return_at?: string | null
           started_at?: string | null
           status?: "scheduled" | "started" | "closed" | "cancelled"
         }
         Update: {
+          back_stop_id?: string | null
           cancelled_reason?: string | null
           capacity?: number
           closed_at?: string | null
@@ -575,6 +586,7 @@ export type Database = {
           driver_id?: string
           group_id?: string
           id?: string
+          out_stop_id?: string | null
           return_at?: string | null
           started_at?: string | null
           status?: "scheduled" | "started" | "closed" | "cancelled"
@@ -585,6 +597,20 @@ export type Database = {
             columns: ["driver_id"]
             isOneToOne: false
             referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_out_stop_id_fkey"
+            columns: ["out_stop_id"]
+            isOneToOne: false
+            referencedRelation: "pickup_place"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_back_stop_id_fkey"
+            columns: ["back_stop_id"]
+            isOneToOne: false
+            referencedRelation: "pickup_place"
             referencedColumns: ["id"]
           },
           {

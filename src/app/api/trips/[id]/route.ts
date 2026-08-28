@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { SEATS } from "@/domain/constants";
+import { resolveTripStops } from "@/lib/trips/resolveStops";
 import { toTripView } from "@/domain/toTripView";
 import type { TripRiderRowInput, TripRowInput } from "@/domain/toTripView";
 import { decorateTrip } from "@/domain/decorateTrip";
@@ -44,19 +45,28 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
 
   const riderProfileIds = [...new Set((riderRows ?? []).map((r) => r.profile_id).filter((v): v is string => !!v))];
-  const pickupPlaceIds = [...new Set((riderRows ?? []).map((r) => r.pickup_place_id).filter((v): v is string => !!v))];
+  // Rider pickup points and the trip's own stops (D-29) live in the same table, so one query
+  // fetches both — the extra columns are only read for the stop ids.
+  const pickupPlaceIds = [
+    ...new Set(
+      [...(riderRows ?? []).map((r) => r.pickup_place_id), trip.out_stop_id, trip.back_stop_id].filter(
+        (v): v is string => !!v,
+      ),
+    ),
+  ];
 
   const [{ data: riderProfiles }, { data: pickupPlaces }] = await Promise.all([
     riderProfileIds.length > 0
       ? supabase.from("profile").select("id, display_name, initials, avatar_color").in("id", riderProfileIds)
       : Promise.resolve({ data: [] }),
     pickupPlaceIds.length > 0
-      ? supabase.from("pickup_place").select("id, label").in("id", pickupPlaceIds)
+      ? supabase.from("pickup_place").select("id, label, icon, address").in("id", pickupPlaceIds)
       : Promise.resolve({ data: [] }),
   ]);
 
   const riderProfileById = new Map((riderProfiles ?? []).map((p) => [p.id, p]));
   const pickupLabelById = new Map((pickupPlaces ?? []).map((p) => [p.id, p.label]));
+  const placeById = new Map((pickupPlaces ?? []).map((p) => [p.id, p]));
 
   const activeRiders: TripRiderRowInput[] = (riderRows ?? []).map((r) => {
     const profile = r.profile_id ? riderProfileById.get(r.profile_id) : undefined;
@@ -78,6 +88,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     status: trip.status,
     driverId: trip.driver_id,
     cancelledReason: trip.cancelled_reason,
+    outStop: trip.out_stop_id ? placeById.get(trip.out_stop_id) ?? null : null,
+    backStop: trip.back_stop_id ? placeById.get(trip.back_stop_id) ?? null : null,
   };
 
   const view = toTripView({
@@ -177,6 +189,9 @@ const patchSchema = z
     departAt: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "must be a valid date/time"),
     returnAt: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "must be a valid date/time").nullable(),
     capacity: z.number().int().min(SEATS.min).max(SEATS.max),
+    // D-29: nullable so a driver can clear a stop, not only change it.
+    outStopId: z.string().uuid().nullable(),
+    backStopId: z.string().uuid().nullable(),
   })
   .partial()
   .refine((body) => Object.keys(body).length > 0, "At least one field is required");
@@ -189,7 +204,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const { data: trip } = await supabase.from("trip").select("driver_id, status, direction").eq("id", id).maybeSingle();
+  const { data: trip } = await supabase.from("trip").select("driver_id, status, direction, group_id").eq("id", id).maybeSingle();
   if (!trip) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -212,6 +227,34 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     );
   }
 
+  if (parsed.data.outStopId !== undefined && trip.direction === "back") {
+    return NextResponse.json(
+      { error: "invalid_request", message: "outStopId only applies to a trip with an outbound leg" },
+      { status: 400 },
+    );
+  }
+  if (parsed.data.backStopId !== undefined && trip.direction === "out") {
+    return NextResponse.json(
+      { error: "invalid_request", message: "backStopId only applies to a trip with a return leg" },
+      { status: 400 },
+    );
+  }
+
+  // Read through the session client so RLS confirms the driver can actually see the place they are
+  // naming — a stop must come from their own group's list (D-29).
+  const stops = await resolveTripStops(
+    supabase,
+    trip.group_id,
+    trip.direction,
+    parsed.data.outStopId,
+    parsed.data.backStopId,
+  );
+  if (!stops.ok) {
+    return stops.error === "unknown_stop"
+      ? NextResponse.json({ error: "unknown_stop", message: "That stop isn't on this group's list." }, { status: 400 })
+      : NextResponse.json({ error: "lookup_failed" }, { status: 500 });
+  }
+
   const admin = createSupabaseAdminClient();
   const { data: updated, error } = await admin
     .from("trip")
@@ -219,6 +262,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(parsed.data.departAt !== undefined && { depart_at: parsed.data.departAt }),
       ...(parsed.data.returnAt !== undefined && { return_at: parsed.data.returnAt }),
       ...(parsed.data.capacity !== undefined && { capacity: parsed.data.capacity }),
+      ...(parsed.data.outStopId !== undefined && { out_stop_id: stops.outStopId }),
+      ...(parsed.data.backStopId !== undefined && { back_stop_id: stops.backStopId }),
     })
     .eq("id", id)
     .select()
@@ -228,7 +273,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "update_failed", message: error?.message }, { status: 500 });
   }
 
-  if (parsed.data.departAt !== undefined || parsed.data.returnAt !== undefined) {
+  // A rider who joined a direct ride needs to know it now detours, just as much as they need to
+  // know the time moved (D-29).
+  const timeChanged = parsed.data.departAt !== undefined || parsed.data.returnAt !== undefined;
+  const stopsChanged = parsed.data.outStopId !== undefined || parsed.data.backStopId !== undefined;
+  if (timeChanged || stopsChanged) {
     const { data: activeRiders } = await supabase
       .from("trip_rider")
       .select("profile_id")
@@ -237,8 +286,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const riderProfileIds = (activeRiders ?? []).map((r) => r.profile_id).filter((pid): pid is string => !!pid);
     await notifyProfiles(riderProfileIds, {
       type: "change",
-      title: "Departure changed",
-      body: "Your driver updated this trip's time — check the new details.",
+      title: timeChanged ? "Departure changed" : "Route changed",
+      body: timeChanged
+        ? "Your driver updated this trip's time — check the new details."
+        : "Your driver changed where this trip stops — check the new details.",
       tripId: id,
     });
   }

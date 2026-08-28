@@ -1,5 +1,5 @@
 import { NOT_STARTED_REASON } from "./constants";
-import type { TripView } from "./types";
+import type { TripStopView, TripView } from "./types";
 
 // Ported from the sketch's decorate() — a trip's role-derived presentation (badge, accent, seat
 // math, avatar stack) is computed per viewer, never stored. Pure, no I/O.
@@ -9,6 +9,13 @@ export interface AvatarView {
   bg: string;
   fg: string;
   dashed?: boolean;
+}
+
+// D-29: one rendered route line. `stop` is the sign that sits between `from` and `to`.
+export interface RouteLeg {
+  from: string;
+  to: string;
+  stop: TripStopView | null;
 }
 
 export interface DecoratedTrip extends TripView {
@@ -22,6 +29,11 @@ export interface DecoratedTrip extends TripView {
   seatColor: string;
   joinable: boolean;
   driverLabel: string;
+  // D-29: the line the card always renders, with any stop already placed on it.
+  route: RouteLeg;
+  // A second, dimmer line — only when a round trip stops on the way home. A one-way 'back' trip
+  // needs no second line: its single route line already *is* the return leg.
+  returnRoute: RouteLeg | null;
   // D-27: belongs in the Carpools tab's Past section rather than the live feed.
   isPast: boolean;
 }
@@ -67,6 +79,19 @@ function terminalBadge(trip: TripView): string | null {
   return trip.cancelledReason === NOT_STARTED_REASON ? "PAST · NEVER STARTED" : "CANCELLED";
 }
 
+// D-29. `from`/`to` are already oriented for the trip.s direction by toTripView(), so the outbound
+// stop always belongs on that line. The return leg only needs a line of its own on a round trip:
+// a one-way 'back' trip is already being rendered *as* its return leg, and drawing the gym twice
+// would read as two separate detours.
+export function routeLegs(trip: TripView): { route: RouteLeg; returnRoute: RouteLeg | null } {
+  if (trip.direction === "back") {
+    return { route: { from: trip.from, to: trip.to, stop: trip.backStop }, returnRoute: null };
+  }
+  const route: RouteLeg = { from: trip.from, to: trip.to, stop: trip.outStop };
+  if (trip.direction === "out" || !trip.backStop) return { route, returnRoute: null };
+  return { route, returnRoute: { from: trip.to, to: trip.from, stop: trip.backStop } };
+}
+
 export function decorateTrip(trip: TripView): DecoratedTrip {
   const finished = terminalBadge(trip);
   const style = finished ? TERMINAL_STYLE : ROLE_STYLE[trip.role];
@@ -101,6 +126,7 @@ export function decorateTrip(trip: TripView): DecoratedTrip {
     // and close it for another 24h.
     joinable: trip.role === "open" && seatsLeft > 0 && trip.status === "scheduled" && !trip.departed,
     driverLabel: trip.role === "driving" ? "You’re driving" : `${trip.driver} is driving`,
+    ...routeLegs(trip),
     isPast: finished !== null,
   };
 }

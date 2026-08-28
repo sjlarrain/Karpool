@@ -1,5 +1,53 @@
 # Worklog
 
+## Shipped (2026-08-27 — D-29 trip stopovers, with the sign on the card)
+- **Migration `0012_trip_stops.sql`** — `pickup_place` gains `kind` (`pickup` | `stop`) and `icon`
+  (fixed 8-value vocabulary, non-null exactly when `kind = 'stop'`); `trip` gains `out_stop_id` and
+  `back_stop_id`, each CHECK-guarded against `direction` in the same idiom as the existing
+  `return_at` check. Reusing `pickup_place` rather than adding a table means no new RLS, API or
+  admin editor, and its POST route was **already** `group_admin`-only — which is exactly the
+  developer's "manager-managed, fixed list" requirement. **Not yet applied to the live project** —
+  see Blocked On.
+- **Domain** — `TripView` carries `direction`, `outStop`, `backStop`; `routeLegs()` in
+  `decorateTrip.ts` decides which line each stop renders on (outbound inline; a round trip's return
+  stop gets its own reversed line; a one-way `back` trip needs no second line because its single
+  line already *is* the return leg); `stopView()` in `toTripView.ts` narrows the DB's bare `icon`
+  string rather than casting, and drops a stop with no recognisable icon. 10 new tests, 145 total.
+- **API** — `POST /api/trips` and `PATCH /api/trips/:id` accept `outStopId`/`backStopId`, validated
+  by zod for the leg rule and by `src/lib/trips/resolveStops.ts` for the two facts the DB can't
+  cheaply enforce: the place belongs to *this* group, and it is a `stop`, not a `pickup` point. A
+  stop change now also notifies active riders (`type: "change"`), with copy that says route rather
+  than time. `POST /api/groups/:id/pickup-places` takes `kind` + `icon`. `GET /api/me/points`
+  returns `stopsThisMonth`.
+- **UI** — `StopSign.tsx` draws the 8 glyphs and the amber sign, and renders the route line with the
+  stop *inside* it (`Riverside → 🏋 Gym → HQ`) rather than as a badge beside it. Amber deliberately:
+  purple and teal already mean "you're driving" and "you've joined". Create form gains a stop picker
+  per travelled leg, and renders nothing at all for a group with no stops. Group tab gains a Stops
+  section with an icon picker for the admin. Trip detail shows each stop with its address.
+- **Knock-on fix the split made necessary:** the You tab's pickup-point selector and the Group tab's
+  pickup list both rendered every `pickup_place` row, so a stop would have been offered as somebody's
+  home pickup point. Both now filter on `kind`.
+
+## In Progress
+- Nothing.
+
+## Next
+- Apply `0012` to the live project, then verify the flow end-to-end in a browser (create a stop as
+  admin → publish a trip through it → confirm the sign on the card).
+
+## Blocked On
+- **`supabase db push --linked` was denied by the sandbox's permission classifier**, so migration
+  `0012` is committed but **not live**. Every code path above is inert until it is applied — the
+  columns don't exist yet, so the trip feed's `pickup_place`/`trip` selects will error against the
+  current live schema. The developer needs to run it (or grant the permission).
+- Unchanged from before: custom SMTP (D-22), the Supabase URL config, the scheduler's Vault secrets.
+
+## Gates Green
+- G1 (`pnpm verify`): green — typecheck, lint, 145/145 tests (was 135). Same pre-existing
+  `next lint` custom-font warning, still non-blocking.
+- G8 (API docs): `docs/API.md` updated in this commit for all five changed endpoints.
+
+
 ## Shipped (2026-08-26 — analytics raised, recorded as D-28, nothing built)
 - **D-28 opened** in `docs/DECISIONS.md`: the developer asked whether PostHog could be used for
   product analytics. Answer is yes on feasibility — Next 15 App Router + Vercel + PWA is a supported

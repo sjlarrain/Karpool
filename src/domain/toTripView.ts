@@ -1,7 +1,8 @@
 import { avatarColorFor } from "./avatarColor";
 import { initialsFor } from "./initials";
 import { dayLabel, formatTripTime } from "./tripDay";
-import type { TripDirection, TripRiderView, TripStatus, ViewerRole } from "./types";
+import { STOP_ICONS } from "./types";
+import type { StopIcon, TripDirection, TripRiderView, TripStatus, TripStopView, ViewerRole } from "./types";
 import type { TripView } from "./types";
 
 // Maps raw DB rows (trip + its active trip_rider rows + driver profile + group route labels) to
@@ -16,6 +17,16 @@ export interface TripRiderRowInput {
   avatarColor: string | null; // profile.avatar_color, only present when profileId is set
 }
 
+// A joined pickup_place row (D-29). `icon` arrives as a bare string from the generated DB types —
+// the CHECK constraint guarantees the value, but the type system doesn't, so stopView() narrows it
+// rather than casting.
+export interface TripStopRowInput {
+  id: string;
+  label: string;
+  icon: string | null;
+  address: string;
+}
+
 export interface TripRowInput {
   id: string;
   direction: TripDirection;
@@ -25,11 +36,24 @@ export interface TripRowInput {
   status: TripStatus;
   driverId: string;
   cancelledReason?: string | null;
+  outStop?: TripStopRowInput | null;
+  backStop?: TripStopRowInput | null;
 }
 
 export interface DriverInput {
   id: string;
   displayName: string;
+}
+
+function isStopIcon(value: string | null): value is StopIcon {
+  return value !== null && (STOP_ICONS as readonly string[]).includes(value);
+}
+
+// A stop with no recognisable icon has no sign to show, so it is dropped rather than rendered as a
+// blank marker — the sign is the whole point of the feature (D-29).
+export function stopView(row: TripStopRowInput | null | undefined): TripStopView | null {
+  if (!row || !isStopIcon(row.icon)) return null;
+  return { id: row.id, label: row.label, icon: row.icon, address: row.address };
 }
 
 export function riderView(rider: TripRiderRowInput): TripRiderView {
@@ -74,6 +98,7 @@ export function toTripView(params: {
     time: formatTripTime(departDate),
     from,
     to,
+    direction: trip.direction,
     role,
     driver: trip.driverId === viewerId ? "You" : driver.displayName,
     capacity: trip.capacity,
@@ -81,6 +106,10 @@ export function toTripView(params: {
     status: trip.status,
     departed: departDate.getTime() <= now.getTime(),
     cancelledReason: trip.cancelledReason ?? null,
+    // A leg the trip does not travel cannot carry a stop. The DB enforces this too (migration
+    // 0012), but the mapper must not surface a stale value if a direction is ever edited.
+    outStop: back ? null : stopView(trip.outStop),
+    backStop: trip.direction === "out" ? null : stopView(trip.backStop),
     riders: activeRiders.map(riderView),
   };
 }

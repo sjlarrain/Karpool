@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Database } from "@/types/database";
 import { avatarColorFor as colorFor } from "@/domain/avatarColor";
+import { STOP_ICONS } from "@/domain/types";
+import type { StopIcon } from "@/domain/types";
 import { shareOrCopy } from "@/lib/share";
+import { StopGlyph, isStopIcon } from "./StopSign";
 
 type Group = Database["public"]["Tables"]["group"]["Row"];
 type PickupPlace = Database["public"]["Tables"]["pickup_place"]["Row"];
@@ -21,6 +24,11 @@ interface Props {
 
 export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces, inviteLink, otherGroups }: Props) {
   const router = useRouter();
+  // D-29: one table, two kinds. A pickup point is where a member is collected; a stop is a place
+  // the whole car detours through. Keeping the lists apart is what stops "Gym" ever being offered
+  // as somebody's home pickup point.
+  const pickups = pickupPlaces.filter((p) => p.kind !== "stop");
+  const stopPlaces = pickupPlaces.filter((p) => p.kind === "stop");
   const [sheet, setSheet] = useState<"switch" | "create" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   // The server builds the invite link from NEXT_PUBLIC_APP_URL. Once mounted, prefer the origin the
@@ -111,10 +119,10 @@ export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces,
           Pickup places
         </label>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-          {pickupPlaces.length === 0 && (
+          {pickups.length === 0 && (
             <p style={{ font: "500 12px var(--font-body)", color: "rgba(0,0,0,.4)" }}>No pickup places yet.</p>
           )}
-          {pickupPlaces.map((p) => (
+          {pickups.map((p) => (
             <div
               key={p.id}
               style={{
@@ -152,7 +160,54 @@ export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces,
               </div>
             </div>
           ))}
-          {role === "group_admin" && <AddPickupPlace groupId={group.id} onAdded={() => router.refresh()} />}
+          {role === "group_admin" && <AddPlace groupId={group.id} kind="pickup" onAdded={() => router.refresh()} />}
+        </div>
+
+        <label className="lbl" style={{ textAlign: "left" }}>
+          Stops
+        </label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+          {stopPlaces.length === 0 && (
+            <p style={{ font: "500 12px var(--font-body)", color: "rgba(0,0,0,.4)" }}>
+              No stops yet. Add one and drivers can mark a trip as passing through it.
+            </p>
+          )}
+          {stopPlaces.map((p) => (
+            <div
+              key={p.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 11,
+                background: "var(--surface)",
+                border: "1px solid rgba(0,0,0,.08)",
+                borderRadius: 14,
+                padding: "12px 13px",
+                textAlign: "left",
+              }}
+            >
+              <span
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 9,
+                  background: "var(--amber-soft)",
+                  color: "var(--amber-ink)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flex: "none",
+                }}
+              >
+                {isStopIcon(p.icon) && <StopGlyph icon={p.icon} size={16} />}
+              </span>
+              <div style={{ flex: 1 }}>
+                <div style={{ font: "800 13px var(--font-body)", color: "var(--ink)" }}>{p.label}</div>
+                <div style={{ font: "600 10.5px var(--font-body)", color: "rgba(0,0,0,.45)" }}>{p.address}</div>
+              </div>
+            </div>
+          ))}
+          {role === "group_admin" && <AddPlace groupId={group.id} kind="stop" onAdded={() => router.refresh()} />}
         </div>
 
         <label className="lbl" style={{ textAlign: "left" }}>
@@ -234,10 +289,14 @@ function DetailRow({ icon, label, value, last, mono }: { icon: string; label: st
   );
 }
 
-function AddPickupPlace({ groupId, onAdded }: { groupId: string; onAdded: () => void }) {
+// D-29: one editor for both kinds of place. A stop additionally carries a sign, picked from a fixed
+// set — the admin chooses it once here, and every trip through that stop shows the same mark.
+function AddPlace({ groupId, kind, onAdded }: { groupId: string; kind: "pickup" | "stop"; onAdded: () => void }) {
+  const isStop = kind === "stop";
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
   const [address, setAddress] = useState("");
+  const [icon, setIcon] = useState<StopIcon>("gym");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -247,16 +306,16 @@ function AddPickupPlace({ groupId, onAdded }: { groupId: string; onAdded: () => 
         onClick={() => setOpen(true)}
         style={{
           width: "100%",
-          background: "var(--purple-soft)",
-          border: "1px dashed rgba(124,92,255,.5)",
+          background: isStop ? "var(--amber-soft)" : "var(--purple-soft)",
+          border: `1px dashed ${isStop ? "rgba(255,176,32,.6)" : "rgba(124,92,255,.5)"}`,
           borderRadius: 13,
           padding: 11,
           font: "800 12px var(--font-body)",
-          color: "var(--purple)",
+          color: isStop ? "var(--amber-ink)" : "var(--purple)",
           cursor: "pointer",
         }}
       >
-        + Add pickup place
+        {isStop ? "+ Add stop" : "+ Add pickup place"}
       </button>
     );
   }
@@ -268,11 +327,11 @@ function AddPickupPlace({ groupId, onAdded }: { groupId: string; onAdded: () => 
       const res = await fetch(`/api/groups/${groupId}/pickup-places`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label, address }),
+        body: JSON.stringify({ label, address, kind, icon: isStop ? icon : undefined }),
       });
       const body = await res.json();
       if (!res.ok) {
-        setError(body.message ?? "Couldn't add that pickup place.");
+        setError(body.message ?? `Couldn't add that ${isStop ? "stop" : "pickup place"}.`);
         return;
       }
       setLabel("");
@@ -288,14 +347,46 @@ function AddPickupPlace({ groupId, onAdded }: { groupId: string; onAdded: () => 
 
   return (
     <div style={{ background: "var(--surface)", border: "1px solid rgba(0,0,0,.08)", borderRadius: 14, padding: 12 }}>
-      <input className="field" style={{ marginBottom: 8 }} placeholder="e.g. Sepulveda" value={label} onChange={(e) => setLabel(e.target.value)} />
       <input
         className="field"
         style={{ marginBottom: 8 }}
-        placeholder="e.g. Sepulveda & Venice"
+        placeholder={isStop ? "e.g. Gym" : "e.g. Sepulveda"}
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+      />
+      <input
+        className="field"
+        style={{ marginBottom: 8 }}
+        placeholder={isStop ? "e.g. Fitness Park, Sepulveda" : "e.g. Sepulveda & Venice"}
         value={address}
         onChange={(e) => setAddress(e.target.value)}
       />
+      {isStop && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+          {STOP_ICONS.map((name) => (
+            <button
+              key={name}
+              onClick={() => setIcon(name)}
+              aria-label={name}
+              aria-pressed={icon === name}
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                background: icon === name ? "var(--amber-soft)" : "var(--chip)",
+                color: icon === name ? "var(--amber-ink)" : "rgba(0,0,0,.4)",
+                border: `1.5px solid ${icon === name ? "var(--amber)" : "transparent"}`,
+              }}
+            >
+              <StopGlyph icon={name} size={17} />
+            </button>
+          ))}
+        </div>
+      )}
       {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "0 0 8px" }}>{error}</p>}
       <div style={{ display: "flex", gap: 8 }}>
         <button className="btnG" style={{ background: "var(--chip)", color: "var(--ink)" }} onClick={() => setOpen(false)}>

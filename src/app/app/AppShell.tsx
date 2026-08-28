@@ -11,6 +11,8 @@ import { TripDetailOverlay } from "./TripDetailOverlay";
 import { RanksScreen } from "./RanksScreen";
 import { YouScreen } from "./YouScreen";
 import { NotificationsSheet, type NotificationItem } from "./NotificationsSheet";
+import { stopView } from "@/domain/toTripView";
+import type { TripStopView } from "@/domain/types";
 
 type Group = Database["public"]["Tables"]["group"]["Row"];
 type PickupPlace = Database["public"]["Tables"]["pickup_place"]["Row"];
@@ -34,6 +36,12 @@ interface Props {
 }
 
 export function AppShell({ group, role, memberCount, adminName, pickupPlaces, inviteLink, membershipId, pickupPlaceId, otherGroups, trips, viewerName, initialTripId, isPlatformAdmin }: Props) {
+  // D-29: one admin-managed list of places, two kinds. Stops are the ones a trip can detour
+  // through; pickup points stay out of the trip form entirely.
+  const stops = pickupPlaces
+    .filter((p) => p.kind === "stop")
+    .map((p) => stopView({ id: p.id, label: p.label, icon: p.icon, address: p.address }))
+    .filter((s): s is TripStopView => s !== null);
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("carpools");
   const [notifsOpen, setNotifsOpen] = useState(false);
@@ -212,6 +220,7 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
           groupName={group.name}
           originLabel={group.origin_label}
           destLabel={group.dest_label}
+          stops={stops}
           onClose={() => setOverlay(null)}
           onCreated={() => {
             setOverlay(null);

@@ -27,13 +27,25 @@ export async function loadGroupTrips(
   const pastCutoff = new Date(now.getTime() - PAST_TRIPS_WINDOW_DAYS * 24 * 3_600_000).toISOString();
   const { data: trips, error: tripsError } = await supabase
     .from("trip")
-    .select("id, direction, depart_at, return_at, capacity, status, driver_id, cancelled_reason")
+    .select("id, direction, depart_at, return_at, capacity, status, driver_id, cancelled_reason, out_stop_id, back_stop_id")
     .eq("group_id", groupId)
     .or(`status.in.(scheduled,started),and(status.in.(closed,cancelled),depart_at.gte.${pastCutoff})`)
     .order("depart_at", { ascending: true });
   if (tripsError) {
     return { ok: false, error: "lookup_failed" };
   }
+
+  // D-29: the group's stop places, fetched once and joined in memory. A handful of rows per group,
+  // and it keeps the trip query free of an embedded resource keyed on a foreign-key constraint name.
+  const { data: stopPlaces, error: stopsError } = await supabase
+    .from("pickup_place")
+    .select("id, label, icon, address")
+    .eq("group_id", groupId)
+    .eq("kind", "stop");
+  if (stopsError) {
+    return { ok: false, error: "lookup_failed" };
+  }
+  const stopById = new Map((stopPlaces ?? []).map((s) => [s.id, s]));
 
   const tripIds = (trips ?? []).map((t) => t.id);
   const driverIds = [...new Set((trips ?? []).map((t) => t.driver_id))];
@@ -90,6 +102,8 @@ export async function loadGroupTrips(
       status: trip.status,
       driverId: trip.driver_id,
       cancelledReason: trip.cancelled_reason,
+      outStop: trip.out_stop_id ? stopById.get(trip.out_stop_id) ?? null : null,
+      backStop: trip.back_stop_id ? stopById.get(trip.back_stop_id) ?? null : null,
     };
 
     return toTripView({

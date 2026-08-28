@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import type { DecoratedTrip } from "@/domain/decorateTrip";
+import type { TripStopView } from "@/domain/types";
+import { StopSign } from "./StopSign";
 import { rideShareMessage, rideShareUrl } from "@/domain/tripShare";
 import { shareOrCopy } from "@/lib/share";
 import { CloseTripOverlay } from "./CloseTripOverlay";
@@ -275,6 +277,18 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
         <h2 style={{ fontSize: 22, fontWeight: 800, color: "var(--ink)", margin: 0, lineHeight: 1.1 }}>
           {trip.from} → {trip.to}
         </h2>
+
+        {(trip.route.stop || trip.returnRoute?.stop) && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 11 }}>
+            {trip.route.stop && (
+              <StopRow
+                leg={trip.direction === "back" ? "On the way back" : trip.direction === "round" ? "Going" : "On the way"}
+                stop={trip.route.stop}
+              />
+            )}
+            {trip.returnRoute?.stop && <StopRow leg="Coming back" stop={trip.returnRoute.stop} />}
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: 16, margin: "12px 0 18px" }}>
           <div>
@@ -669,6 +683,20 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
       )}
 
       {shareToast && <div className="toast" style={{ position: "fixed" }}>{shareToast}</div>}
+    </div>
+  );
+}
+
+// D-29. The card shows the sign; the detail screen is where the address earns its place — a rider
+// deciding whether to take the ride wants to know *which* gym.
+function StopRow({ leg, stop }: { leg: string; stop: TripStopView }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <StopSign stop={stop} />
+      <div style={{ minWidth: 0 }}>
+        <div style={{ font: "700 10px var(--font-body)", color: "rgba(0,0,0,.4)", textTransform: "uppercase" }}>{leg}</div>
+        <div style={{ font: "600 12px var(--font-body)", color: "rgba(0,0,0,.55)" }}>{stop.address}</div>
+      </div>
     </div>
   );
 }

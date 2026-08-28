@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toTripView, deriveRole } from "./toTripView";
+import { toTripView, deriveRole, stopView } from "./toTripView";
 import type { TripRiderRowInput, TripRowInput } from "./toTripView";
 
 const NOW = new Date("2026-08-17T12:00:00");
@@ -133,5 +133,24 @@ describe("departure state (D-23)", () => {
       "not_started",
     );
     expect(view("2026-08-17T07:45:00").cancelledReason).toBeNull();
+  });
+});
+
+describe("stopView (D-29)", () => {
+  const row = { id: "p1", label: "Gym", icon: "gym", address: "Fitness Park" };
+
+  it("maps a stop row to its view", () => {
+    expect(stopView(row)).toEqual({ id: "p1", label: "Gym", icon: "gym", address: "Fitness Park" });
+  });
+
+  it("returns null for a missing stop", () => {
+    expect(stopView(null)).toBeNull();
+    expect(stopView(undefined)).toBeNull();
+  });
+
+  it("drops a stop whose icon is not in the fixed vocabulary", () => {
+    // No recognisable icon means no sign to render, and a blank marker is worse than no marker.
+    expect(stopView({ ...row, icon: "jetski" })).toBeNull();
+    expect(stopView({ ...row, icon: null })).toBeNull();
   });
 });

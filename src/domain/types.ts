@@ -14,6 +14,20 @@ export type ViewerRole = "driving" | "joined" | "open";
 // actually started; "reminder" means it's departing soon. Not in the sketch's original mock list.
 export type NotificationType = "start" | "rate" | "change" | "comment" | "tip" | "reminder";
 
+// D-29: the sign a stop shows on the card. A fixed vocabulary, mirrored by the CHECK constraint in
+// migration 0012 — free text would sprawl, and an emoji would render differently on each phone.
+export const STOP_ICONS = ["gym", "pool", "run", "sport", "shop", "coffee", "school", "medical"] as const;
+export type StopIcon = (typeof STOP_ICONS)[number];
+
+// A place the whole car detours through mid-leg (D-29). Named and iconed by the group admin, so
+// there is exactly one spelling of "Gym" in a group.
+export interface TripStopView {
+  id: string;
+  label: string;
+  icon: StopIcon;
+  address: string;
+}
+
 export interface TripRiderView {
   name: string;
   initials: string;
@@ -28,6 +42,9 @@ export interface TripView {
   time: string;
   from: string;
   to: string;
+  // D-29: needed to place a stop on the right leg — `from`/`to` are already swapped for a 'back'
+  // trip, so they can't tell an outbound stop from a return one on their own.
+  direction: TripDirection;
   role: ViewerRole;
   driver: string;
   capacity: number;
@@ -39,5 +56,8 @@ export interface TripView {
   // Set when the scheduler ended a trip nobody started (cancelled_reason 'not_started'), which the
   // UI must present as "Past", not as a driver cancelling on people.
   cancelledReason: string | null;
+  // D-29: at most one stop per leg. Which line each one renders on is derived in decorateTrip().
+  outStop: TripStopView | null;
+  backStop: TripStopView | null;
   riders: TripRiderView[];
 }

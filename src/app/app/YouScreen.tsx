@@ -18,7 +18,7 @@ type PickupPlace = Database["public"]["Tables"]["pickup_place"]["Row"];
 // pickupPlaceId since Phase 2 — but the tab rendered a placeholder line instead, so the numbers
 // were invisible and a member had no way anywhere in the app to say where they get picked up.
 
-type Stats = { driven: number; pooled: number; kudos: number; points: number };
+type Stats = { driven: number; pooled: number; kudos: number; points: number; stopsThisMonth: number };
 
 interface Props {
   viewerName: string;
@@ -59,7 +59,7 @@ export function YouScreen({
       })
       .catch(() => {
         // Stats are a nice-to-have on this screen; a failure shows zeros rather than an error wall.
-        if (!cancelled) setStats({ driven: 0, pooled: 0, kudos: 0, points: 0 });
+        if (!cancelled) setStats({ driven: 0, pooled: 0, kudos: 0, points: 0, stopsThisMonth: 0 });
       });
     return () => {
       cancelled = true;
@@ -177,7 +177,9 @@ export function YouScreen({
         ) : (
           <>
             <div className="seg">
-              {pickupPlaces.map((place) => (
+              {pickupPlaces
+                .filter((place) => place.kind !== "stop")
+                .map((place) => (
                 <button
                   key={place.id}
                   className={`segb ${pickup === place.id ? "on" : ""}`}
@@ -186,7 +188,7 @@ export function YouScreen({
                 >
                   {place.label}
                 </button>
-              ))}
+                ))}
             </div>
             <p style={{ font: "500 10.5px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "9px 2px 0" }}>
               Drivers&apos; route maps use this to plot your pickup stop.
@@ -200,6 +202,13 @@ export function YouScreen({
         {tile(stats?.pooled ?? 0, "People pooled", "var(--teal)")}
         {tile(stats?.kudos ?? 0, "Kudos earned", "var(--green)")}
       </div>
+
+      {/* D-29: the motivation counter. Scores nothing — it just makes the habit visible. */}
+      {(stats?.stopsThisMonth ?? 0) > 0 && (
+        <div style={{ display: "flex", gap: 9, marginBottom: 10 }}>
+          {tile(stats?.stopsThisMonth ?? 0, "Stops this month", "var(--amber)")}
+        </div>
+      )}
 
       <InstallCard />
       <PushSubscribe />

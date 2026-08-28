@@ -2,12 +2,17 @@
 
 import { useState } from "react";
 import { SEATS } from "@/domain/constants";
+import type { TripStopView } from "@/domain/types";
+import { StopGlyph } from "./StopSign";
 
 interface Props {
   groupId: string;
   groupName: string;
   originLabel: string;
   destLabel: string;
+  // D-29: the group's admin-managed stop list. Empty for a group that doesn't use stops, and the
+  // whole control disappears rather than showing an empty dropdown.
+  stops: TripStopView[];
   onClose: () => void;
   onCreated: () => void;
 }
@@ -15,7 +20,7 @@ interface Props {
 type Mode = "round" | "one-way";
 type Leg = "out" | "back";
 
-export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, onClose, onCreated }: Props) {
+export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, stops, onClose, onCreated }: Props) {
   const [mode, setMode] = useState<Mode>("round");
   const [leg, setLeg] = useState<Leg>("out");
   const [capacity, setCapacity] = useState<number>(SEATS.default);
@@ -29,6 +34,8 @@ export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, 
   const [departDate, setDepartDate] = useState(today);
   const [departTime, setDepartTime] = useState("07:45");
   const [returnTime, setReturnTime] = useState("17:30");
+  const [outStopId, setOutStopId] = useState("");
+  const [backStopId, setBackStopId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +67,10 @@ export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, 
           departAt: at(departDate, departTime),
           returnAt: mode === "round" ? at(departDate, returnTime) : undefined,
           capacity,
+          // Only the leg the trip actually travels may carry a stop — the API and the database
+          // both refuse the other combination (D-29).
+          outStopId: direction === "back" ? undefined : outStopId || undefined,
+          backStopId: direction === "out" ? undefined : backStopId || undefined,
         }),
       });
       const body = await res.json();
@@ -186,6 +197,33 @@ export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, 
           </>
         )}
 
+        {stops.length > 0 && (
+          <>
+            <label className="lbl">Stops on the way</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 6 }}>
+              {(mode === "round" || leg === "out") && (
+                <StopPicker
+                  label={mode === "round" ? "Going" : "On the way"}
+                  stops={stops}
+                  value={outStopId}
+                  onChange={setOutStopId}
+                />
+              )}
+              {(mode === "round" || leg === "back") && (
+                <StopPicker
+                  label={mode === "round" ? "Coming back" : "On the way back"}
+                  stops={stops}
+                  value={backStopId}
+                  onChange={setBackStopId}
+                />
+              )}
+            </div>
+            <p style={{ font: "500 11px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "0 2px 18px" }}>
+              The whole car stops here. Riders see it on the trip card.
+            </p>
+          </>
+        )}
+
         <label className="lbl">Seats available</label>
         <div
           style={{
@@ -245,6 +283,50 @@ export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, 
           Publish to {groupName}
         </button>
       </div>
+    </div>
+  );
+}
+
+// D-29. A dropdown over the group's own list — the driver never types a place, so a group has
+// exactly one spelling of "Gym" and the sign always matches the admin's wording.
+function StopPicker({
+  label,
+  stops,
+  value,
+  onChange,
+}: {
+  label: string;
+  stops: TripStopView[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const selected = stops.find((s) => s.id === value) ?? null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <span style={{ font: "600 12px var(--font-body)", color: "rgba(0,0,0,.5)", minWidth: 92 }}>{label}</span>
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 30,
+          height: 30,
+          borderRadius: 10,
+          flex: "none",
+          background: selected ? "var(--amber-soft)" : "var(--chip)",
+          color: selected ? "var(--amber-ink)" : "rgba(0,0,0,.25)",
+        }}
+      >
+        {selected ? <StopGlyph icon={selected.icon} size={16} /> : "–"}
+      </span>
+      <select className="field" style={{ flex: 1 }} value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
+        <option value="">No stop</option>
+        {stops.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

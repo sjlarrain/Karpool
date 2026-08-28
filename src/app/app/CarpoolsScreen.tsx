@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { decorateTrip, type DecoratedTrip } from "@/domain/decorateTrip";
 import { groupByDay } from "@/domain/tripDay";
 import type { TripView } from "@/domain/types";
+import { RouteLine } from "./StopSign";
 
 interface Props {
   trips: TripView[];
@@ -35,9 +36,8 @@ function TripCard({
         </span>
         <span style={{ font: "800 14px var(--font-display)", color: "var(--ink)" }}>{trip.time}</span>
       </div>
-      <div className="route">
-        {trip.from} <span style={{ color: "rgba(0,0,0,.3)" }}>→</span> {trip.to}
-      </div>
+      <RouteLine leg={trip.route} />
+      {trip.returnRoute && <RouteLine leg={trip.returnRoute} muted />}
       <div style={{ font: "600 12px var(--font-body)", color: "rgba(0,0,0,.5)", marginTop: 4 }}>{trip.driverLabel}</div>
       <div style={{ display: "flex", gap: 5, alignItems: "center", marginTop: 12 }}>
         {trip.avatars.map((a, i) => (

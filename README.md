@@ -128,7 +128,8 @@ src/
     share.ts       shareOrCopy() — the OS share sheet, falling back to the clipboard
     supabase/      Server/admin Supabase client factories (D-04: writes always go through the
                     service-role client; RLS bounds the session client's reads as defense-in-depth)
-    trips/         Shared trip-feed query, used by both the API route and the SSR page
+    trips/         Shared trip-feed query (used by both the API route and the SSR page) and the
+                    stop resolver that validates a trip's stops belong to its own group (D-29)
     notify/        Shared "write a notification row + push it" helper
     push/          web-push wrapper; prunes dead subscriptions on 404/410
     api/adminAuth.ts  authenticateAdmin() — the authenticate+authorize step shared by every /api/admin/* route

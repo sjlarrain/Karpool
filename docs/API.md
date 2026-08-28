@@ -136,13 +136,18 @@ List a group's pickup places, sorted by `sort_order`.
 - **Side effects**: none
 
 ### `POST /api/groups/:id/pickup-places`
-Add a pickup place. `group_admin` only.
+Add a pickup place or a stop. `group_admin` only — this is what keeps both lists manager-managed
+(D-29).
 
 - **Auth**: required, caller must be `group_admin` of `:id`
-- **Request**: `{ label: string (1-80), address: string (1-160), typicalTime?: string (max 20), sortOrder?: number (int, >= 0) }`
+- **Request**: `{ label: string (1-80), address: string (1-160), typicalTime?: string (max 20), sortOrder?: number (int, >= 0), kind?: "pickup" | "stop" (default "pickup"), icon?: "gym" | "pool" | "run" | "sport" | "shop" | "coffee" | "school" | "medical" }`
 - **Response**: `201 { pickupPlace }`
 - **Errors**: `401 unauthenticated`, `404 not_found` (not a member), `403 forbidden` (not admin), `400 invalid_request`, `500 create_failed`
 - **Side effects**: inserts a `pickup_place` row. No ledger/audit writes.
+- **Notes**: `icon` is required for `kind: "stop"` and rejected for `kind: "pickup"` — mirrored by a
+  CHECK in migration `0012`. A stop with no icon has no sign to render, which is the whole point of
+  a stop. The two kinds never mix: pickup dropdowns (member pickup point, rider pickup) filter to
+  `pickup`, and the trip form's stop pickers filter to `stop`.
 
 ### `PATCH /api/pickup-places/:id`
 Update a pickup place. `group_admin` (of the place's group) only.
@@ -190,7 +195,7 @@ departed within the last 30 days (`PAST_TRIPS_WINDOW_DAYS`), for the Carpools ta
 
 - **Auth**: required, caller must be a member of `groupId`
 - **Request**: query params `groupId` (required), `scope` (`all` default, or `mine` — trips where the caller is driving or an active rider)
-- **Response**: `{ trips: TripView[] }` (role/badge/day-label already derived for the caller; see `src/domain/types.ts`)
+- **Response**: `{ trips: TripView[] }` (role/badge/day-label already derived for the caller; see `src/domain/types.ts`). Each carries `direction` and `outStop`/`backStop` — the D-29 stop on each leg, or `null`
 - **Errors**: `401 unauthenticated`, `400 invalid_request` (missing groupId), `404 not_found` (not a member), `500 trip_lookup_failed` / `rider_lookup_failed` / `driver_lookup_failed`
 - **Side effects**: none
 
@@ -199,10 +204,14 @@ Driver publishes a trip. The group owns the route — trips never invent origin/
 pick a direction along it.
 
 - **Auth**: required, caller must be a member of `groupId`
-- **Request**: `{ groupId: string (uuid), direction: "out" | "back" | "round", departAt: string (ISO date/time), returnAt?: string (ISO date/time, required iff direction is "round"), capacity: number (1-7) }`
+- **Request**: `{ groupId: string (uuid), direction: "out" | "back" | "round", departAt: string (ISO date/time), returnAt?: string (ISO date/time, required iff direction is "round"), capacity: number (1-7), outStopId?: string (uuid) | null, backStopId?: string (uuid) | null }`
 - **Response**: `201 { trip }`
-- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found` (not a member), `429 rate_limited` (10/hour per caller), `500 trip_create_failed`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `400 unknown_stop`, `404 not_found` (not a member), `429 rate_limited` (10/hour per caller), `500 trip_create_failed`
 - **Side effects**: inserts a `trip` row (`status: "scheduled"`, `driver_id` = caller). No ledger/audit writes.
+- **Notes** (D-29): at most one stop per leg. `outStopId` is rejected for `direction: "back"` and
+  `backStopId` for `direction: "out"` — a leg the trip doesn't travel can't carry a stop, enforced
+  by zod here and by CHECK constraints in migration `0012`. Both ids must name a `pickup_place` in
+  **this** group with `kind: "stop"`, or the route answers `400 unknown_stop`.
 
 ### `GET /api/trips/:id`
 Trip detail overlay: decorated summary plus the driver's pickup list in route order. RLS
@@ -213,17 +222,22 @@ Trip detail overlay: decorated summary plus the driver's pickup list in route or
 - **Response**: `{ trip: DecoratedTrip, driverId, isDriver: boolean, cancelledReason: string | null, seatsLeft: number, pickups: { id, name, initials?, color?, pickupLabel: string | null, stopOrder: number | null, isViewer: boolean, addedByDriver: boolean }[], addableMembers: { id, name, initials, color }[] }`
 - **Errors**: `401 unauthenticated`, `404 not_found`
 - **Side effects**: none
-- **Notes**: `addableMembers` (D-24) is the passenger picker's list — group members not already on the trip. Empty unless the caller is the driver and the trip is `scheduled`/`started`. `pickups[].addedByDriver` marks a seat the driver booked for someone.
+- **Notes**: `trip.route` and `trip.returnRoute` (D-29) are the rendered route lines with any stop already placed on the correct leg; `returnRoute` is non-null only for a round trip that stops on the way home. `addableMembers` (D-24) is the passenger picker's list — group members not already on the trip. Empty unless the caller is the driver and the trip is `scheduled`/`started`. `pickups[].addedByDriver` marks a seat the driver booked for someone.
 
 ### `PATCH /api/trips/:id`
 Edit a trip. Driver only, and only while `status: "scheduled"` — a started or closed trip's plan is
 fixed.
 
 - **Auth**: required, caller must be the trip's driver
-- **Request**: any non-empty subset of `{ departAt: string (ISO), returnAt: string (ISO) | null, capacity: number (1-7) }`
+- **Request**: any non-empty subset of `{ departAt: string (ISO), returnAt: string (ISO) | null, capacity: number (1-7), outStopId: string (uuid) | null, backStopId: string (uuid) | null }`
 - **Response**: `{ trip }`
-- **Errors**: `401 unauthenticated`, `404 not_found`, `403 forbidden` (not the driver), `409 wrong_status` (not scheduled), `400 invalid_request`, `500 update_failed`
-- **Side effects**: updates the `trip` row. No ledger/audit writes.
+- **Errors**: `401 unauthenticated`, `404 not_found`, `403 forbidden` (not the driver), `409 wrong_status` (not scheduled), `400 invalid_request`, `400 unknown_stop`, `500 update_failed`
+- **Side effects**: updates the `trip` row, and notifies active riders when the departure **or** a
+  stop changed (`notification.type: "change"`) — a rider who joined a direct ride needs to know it
+  now detours. No ledger/audit writes.
+- **Notes** (D-29): pass `null` to clear a stop. The same leg rules as `POST` apply, checked against
+  the trip's stored `direction`; stop ids are resolved through the caller's own session (RLS), so a
+  place from another group reads as `400 unknown_stop`.
 
 ### `POST /api/trips/:id/start`
 Driver only, `scheduled→started`, not before T-2h (D-16).
@@ -341,9 +355,13 @@ group leaderboard view is month-scoped, the ledger itself never resets).
 
 - **Auth**: required
 - **Request**: none
-- **Response**: `{ driven: number, pooled: number, kudos: number, points: number }`
+- **Response**: `{ driven: number, pooled: number, kudos: number, points: number, stopsThisMonth: number }`
 - **Errors**: `401 unauthenticated`
 - **Side effects**: none
+- **Notes**: `stopsThisMonth` (D-29) counts `closed` trips this calendar month that passed through a
+  stop and that the caller drove or rode (`state: "confirmed"`). Unlike the four totals above it is
+  month-scoped, and it is **not** a ledger figure — stops score no points, so this number can never
+  move the leaderboard.
 
 ## Notifications
 

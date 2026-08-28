@@ -16,6 +16,9 @@ export const mockTrips: TripView[] = [
     status: "scheduled",
     departed: false,
     cancelledReason: null,
+    direction: "round",
+    outStop: { id: "p1", label: "Gym", icon: "gym", address: "Fitness Park, Sepulveda" },
+    backStop: null,
     riders: [
       { name: "Alex Morgan", initials: "AM", color: "var(--purple)" },
       { name: "Jordan Silva", initials: "JS", color: "var(--amber)" },
@@ -34,6 +37,9 @@ export const mockTrips: TripView[] = [
     status: "scheduled",
     departed: false,
     cancelledReason: null,
+    direction: "round",
+    outStop: null,
+    backStop: { id: "p2", label: "Pool", icon: "pool", address: "Aquatic centre, Gate 3" },
     riders: [
       { name: "Dana Kim", initials: "DK", color: "var(--teal)" },
       { name: "You", initials: "AM", color: "var(--purple)" },
@@ -53,6 +59,9 @@ export const mockTrips: TripView[] = [
     status: "scheduled",
     departed: false,
     cancelledReason: null,
+    direction: "round",
+    outStop: null,
+    backStop: null,
     riders: [{ name: "Marco Lee", initials: "ML", color: "var(--cyan)" }],
   },
   {
@@ -68,6 +77,9 @@ export const mockTrips: TripView[] = [
     status: "scheduled",
     departed: false,
     cancelledReason: null,
+    direction: "round",
+    outStop: null,
+    backStop: null,
     riders: [
       { name: "Priya Rao", initials: "PR", color: "var(--pink)" },
       { name: "Tom H", initials: "TH", color: "var(--purple)" },
@@ -87,6 +99,9 @@ export const mockTrips: TripView[] = [
     status: "scheduled",
     departed: false,
     cancelledReason: null,
+    direction: "out",
+    outStop: null,
+    backStop: null,
     riders: [
       { name: "Sam West", initials: "SW", color: "var(--green)" },
       { name: "Ivy P", initials: "IP", color: "var(--purple)" },
