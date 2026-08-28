@@ -100,7 +100,8 @@ export const mockTrips: TripView[] = [
     departed: false,
     cancelledReason: null,
     direction: "out",
-    outStop: null,
+    // One-way, so the notice reads "on the way" with no there/back qualifier to disambiguate.
+    outStop: { id: "p3", label: "Coffee", icon: "coffee", address: "Blue Bottle, Abbot Kinney" },
     backStop: null,
     riders: [
       { name: "Sam West", initials: "SW", color: "var(--green)" },
