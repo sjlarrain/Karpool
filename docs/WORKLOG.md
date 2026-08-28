@@ -1,5 +1,39 @@
 # Worklog
 
+## Shipped (2026-08-28 — D-29 complete and deployed; five new items opened)
+- **Pushed.** 14 commits went to `origin/main` (`1e811bd..010e562`), the first push in several
+  sessions. This clears item 4 of the pending-manual-checks list: local `main` and production are
+  no longer divergent, so D-23/D-24/D-25/D-27 and D-29 all reach users on the next deploy.
+- **D-29 is live end to end.** The developer added the Gym stop to MBA 2028 themselves; confirmed in
+  the live data as `kind='stop'`, `icon='gym'`, address `UCLA`, sitting alongside the two untouched
+  pickup places. The create-trip form's `+ Add a stop` will now appear for that group.
+- **Removed `_preview-stops.html`**, the throwaway design preview. It was never tracked, so nothing
+  left the repo with it.
+- **Five new decisions opened, from the developer's own backlog** (`docs/DECISIONS.md`):
+  **D-30** one-way riders on a round trip so return seats free up (**urgent**), **D-31** the Snitch,
+  **D-32** a per-trip feedback form, **D-33** a group feed with photos, **D-34** dynamic/open groups
+  with per-trip destinations (**high**). None started — each carries the analysis and the specific
+  questions that are the developer's call.
+
+## In Progress
+- Nothing.
+
+## Next
+- **D-30 first** — it is the developer's urgent one, and it is the only one of the five that changes
+  an existing locking contract (`join_trip()`'s `select ... for update` capacity check). It also
+  needs its four answers before code: points weighting for a one-leg rider, the late-cancellation
+  charge, whether return-leg-only joining is allowed, and whether two one-way trips already suffice.
+- **D-34 next by size** — it amends `CLAUDE.md` §4's "route is owned by the group", and interacts
+  with D-30 because per-leg seats presuppose legs.
+
+## Blocked On
+- D-30 through D-34 all need developer answers before implementation.
+- Unchanged: custom SMTP (D-22), the Supabase URL config, the scheduler's Vault secrets.
+
+## Gates Green
+- G1 (`pnpm verify`): green — typecheck, lint, 144/144.
+
+
 ## Shipped (2026-08-27 — D-29 live: migration 0012 applied, feature complete)
 - **Migration `0012` applied to the live project** (`supabase db push --linked`, developer
   authorised). This was the last blocker; every other piece of D-29 was already built and inert.
