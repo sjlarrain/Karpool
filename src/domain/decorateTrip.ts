@@ -17,8 +17,8 @@ export interface AvatarView {
 export interface StopNotice {
   stop: TripStopView;
   leg: "out" | "back";
-  // Phrased by destination, which is what a rider is actually placing the stop against: the
-  // outbound leg arrives somewhere, the return leg goes home.
+  // Kept to a word or two: the chip beside it already names the place, so this only has to say
+  // which leg of the ride it falls on.
   when: string;
 }
 
@@ -86,10 +86,10 @@ function terminalBadge(trip: TripView): string | null {
 export function stopNotices(trip: TripView): StopNotice[] {
   const notices: StopNotice[] = [];
   if (trip.direction !== "back" && trip.outStop) {
-    notices.push({ stop: trip.outStop, leg: "out", when: "before arriving" });
+    notices.push({ stop: trip.outStop, leg: "out", when: "in way" });
   }
   if (trip.direction !== "out" && trip.backStop) {
-    notices.push({ stop: trip.backStop, leg: "back", when: "on the way home" });
+    notices.push({ stop: trip.backStop, leg: "back", when: "back" });
   }
   return notices;
 }

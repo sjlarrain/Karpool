@@ -33,8 +33,8 @@ export function StopDemo() {
   const selectedBack = DEMO_STOPS.find((s) => s.id === backStop) ?? null;
 
   const notices = [
-    ...(selectedOut ? [{ stop: selectedOut, leg: "out" as const, when: "before arriving" }] : []),
-    ...(selectedBack ? [{ stop: selectedBack, leg: "back" as const, when: "on the way home" }] : []),
+    ...(selectedOut ? [{ stop: selectedOut, leg: "out" as const, when: "in way" }] : []),
+    ...(selectedBack ? [{ stop: selectedBack, leg: "back" as const, when: "back" }] : []),
   ];
 
   return (

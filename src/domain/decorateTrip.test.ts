@@ -88,27 +88,27 @@ describe("stopNotices (D-29)", () => {
   const gym = { id: "p1", label: "Gym", icon: "gym" as const, address: "Fitness Park" };
   const shop = { id: "p2", label: "Shop", icon: "shop" as const, address: "Market St" };
 
-  it("phrases an outbound stop against the destination it precedes", () => {
+  it("marks an outbound stop as the outbound leg", () => {
     const d = decorateTrip({ ...base, direction: "out", outStop: gym });
-    expect(d.stopNotices).toEqual([{ stop: gym, leg: "out", when: "before arriving" }]);
+    expect(d.stopNotices).toEqual([{ stop: gym, leg: "out", when: "in way" }]);
   });
 
-  it("phrases a return stop against going home", () => {
+  it("marks a return stop as the return leg", () => {
     const d = decorateTrip({ ...base, direction: "back", from: "HQ", to: "Riverside", backStop: gym });
-    expect(d.stopNotices).toEqual([{ stop: gym, leg: "back", when: "on the way home" }]);
+    expect(d.stopNotices).toEqual([{ stop: gym, leg: "back", when: "back" }]);
   });
 
   it("uses the same wording on a round trip's outbound leg as on a one-way", () => {
     // The leg determines the phrasing, not whether the ride comes back — a stop before arriving is
     // the same fact either way.
     const d = decorateTrip({ ...base, direction: "round", outStop: gym });
-    expect(d.stopNotices).toEqual([{ stop: gym, leg: "out", when: "before arriving" }]);
+    expect(d.stopNotices).toEqual([{ stop: gym, leg: "out", when: "in way" }]);
   });
 
   it("lists both stops of a round trip in travel order", () => {
     const d = decorateTrip({ ...base, direction: "round", outStop: gym, backStop: shop });
     expect(d.stopNotices.map((n) => n.leg)).toEqual(["out", "back"]);
-    expect(d.stopNotices[1]).toEqual({ stop: shop, leg: "back", when: "on the way home" });
+    expect(d.stopNotices[1]).toEqual({ stop: shop, leg: "back", when: "back" });
   });
 
   it("says nothing for a direct ride", () => {

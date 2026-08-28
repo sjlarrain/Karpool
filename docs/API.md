@@ -222,7 +222,7 @@ Trip detail overlay: decorated summary plus the driver's pickup list in route or
 - **Response**: `{ trip: DecoratedTrip, driverId, isDriver: boolean, cancelledReason: string | null, seatsLeft: number, pickups: { id, name, initials?, color?, pickupLabel: string | null, stopOrder: number | null, isViewer: boolean, addedByDriver: boolean }[], addableMembers: { id, name, initials, color }[] }`
 - **Errors**: `401 unauthenticated`, `404 not_found`
 - **Side effects**: none
-- **Notes**: `trip.stopNotices` (D-29) is the ride's stops in travel order, each with its `leg` (`out`/`back`) and the `when` wording the UI shows (`"before arriving"` for an outbound stop, `"on the way home"` for a return one). Empty for a direct ride. `addableMembers` (D-24) is the passenger picker's list — group members not already on the trip. Empty unless the caller is the driver and the trip is `scheduled`/`started`. `pickups[].addedByDriver` marks a seat the driver booked for someone.
+- **Notes**: `trip.stopNotices` (D-29) is the ride's stops in travel order, each with its `leg` (`out`/`back`) and the `when` wording the UI shows (`"in way"` for an outbound stop, `"back"` for a return one). Empty for a direct ride. `addableMembers` (D-24) is the passenger picker's list — group members not already on the trip. Empty unless the caller is the driver and the trip is `scheduled`/`started`. `pickups[].addedByDriver` marks a seat the driver booked for someone.
 
 ### `PATCH /api/trips/:id`
 Edit a trip. Driver only, and only while `status: "scheduled"` — a started or closed trip's plan is
