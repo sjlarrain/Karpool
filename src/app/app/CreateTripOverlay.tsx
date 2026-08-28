@@ -36,6 +36,16 @@ export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, 
   const [returnTime, setReturnTime] = useState("17:30");
   const [outStopId, setOutStopId] = useState("");
   const [backStopId, setBackStopId] = useState("");
+  // Most rides are direct, so the stop controls stay behind a "+" rather than taking two rows of
+  // the form by default. Collapsing clears both legs — a hidden control must never still be
+  // publishing a stop the driver can no longer see.
+  const [stopsOpen, setStopsOpen] = useState(false);
+
+  function clearStops() {
+    setOutStopId("");
+    setBackStopId("");
+    setStopsOpen(false);
+  }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -197,9 +207,43 @@ export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, 
           </>
         )}
 
-        {stops.length > 0 && (
+        {stops.length > 0 && !stopsOpen && (
+          <button
+            onClick={() => setStopsOpen(true)}
+            style={{
+              width: "100%",
+              background: "var(--amber-soft)",
+              border: "1px dashed rgba(255,176,32,.6)",
+              borderRadius: 13,
+              padding: 11,
+              font: "800 12px var(--font-body)",
+              color: "var(--amber-ink)",
+              cursor: "pointer",
+              marginBottom: 18,
+            }}
+          >
+            + Add a stop
+          </button>
+        )}
+
+        {stops.length > 0 && stopsOpen && (
           <>
-            <label className="lbl">Stops on the way</label>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+              <label className="lbl">Stops on the way</label>
+              <button
+                onClick={clearStops}
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  font: "700 11px var(--font-body)",
+                  color: "rgba(0,0,0,.4)",
+                  cursor: "pointer",
+                }}
+              >
+                Remove
+              </button>
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 6 }}>
               {(mode === "round" || leg === "out") && (
                 <StopPicker

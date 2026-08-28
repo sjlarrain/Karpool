@@ -26,8 +26,10 @@ function Label({ children }: { children: React.ReactNode }) {
 export function StopDemo() {
   // The create form's own state, mirrored: a round trip offers a picker per leg, and the driver may
   // leave either empty.
-  const [outStop, setOutStop] = useState("s1");
+  const [outStop, setOutStop] = useState("");
   const [backStop, setBackStop] = useState("");
+  // Mirrors the form: most rides are direct, so the controls stay behind a "+".
+  const [stopsOpen, setStopsOpen] = useState(false);
 
   const selectedOut = DEMO_STOPS.find((s) => s.id === outStop) ?? null;
   const selectedBack = DEMO_STOPS.find((s) => s.id === backStop) ?? null;
@@ -73,19 +75,50 @@ export function StopDemo() {
             padding: 14,
           }}
         >
-          <div style={{ font: "700 11px var(--font-body)", color: "rgba(0,0,0,.45)", marginBottom: 10 }}>
-            Stops on the way
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <StopPicker label="Going" stops={DEMO_STOPS} value={outStop} onChange={setOutStop} />
-            <StopPicker label="Coming back" stops={DEMO_STOPS} value={backStop} onChange={setBackStop} />
-          </div>
-          <p style={{ font: "500 11px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "10px 2px 0" }}>
-            The whole car stops here. Riders see it on the trip card.
-          </p>
+          {!stopsOpen ? (
+            <button
+              onClick={() => setStopsOpen(true)}
+              style={{
+                width: "100%",
+                background: "var(--amber-soft)",
+                border: "1px dashed rgba(255,176,32,.6)",
+                borderRadius: 13,
+                padding: 11,
+                font: "800 12px var(--font-body)",
+                color: "var(--amber-ink)",
+                cursor: "pointer",
+              }}
+            >
+              + Add a stop
+            </button>
+          ) : (
+            <>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+                <span style={{ font: "700 11px var(--font-body)", color: "rgba(0,0,0,.45)" }}>Stops on the way</span>
+                <button
+                  onClick={() => {
+                    setOutStop("");
+                    setBackStop("");
+                    setStopsOpen(false);
+                  }}
+                  style={{ background: "none", border: "none", padding: 0, font: "700 11px var(--font-body)", color: "rgba(0,0,0,.4)", cursor: "pointer" }}
+                >
+                  Remove
+                </button>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <StopPicker label="Going" stops={DEMO_STOPS} value={outStop} onChange={setOutStop} />
+                <StopPicker label="Coming back" stops={DEMO_STOPS} value={backStop} onChange={setBackStop} />
+              </div>
+              <p style={{ font: "500 11px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "10px 2px 0" }}>
+                The whole car stops here. Riders see it on the trip card.
+              </p>
+            </>
+          )}
         </div>
         <p style={{ font: "500 11px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "8px 2px 0" }}>
-          A one-way trip shows only the leg it travels. A group with no stops sees none of this.
+          Collapsed by default — most rides are direct. Removing clears both legs, so a hidden control
+          can never still be publishing a stop. A one-way shows only the leg it travels.
         </p>
       </div>
 
