@@ -1,5 +1,39 @@
 # Worklog
 
+## Shipped (2026-08-27 — D-29 live: migration 0012 applied, feature complete)
+- **Migration `0012` applied to the live project** (`supabase db push --linked`, developer
+  authorised). This was the last blocker; every other piece of D-29 was already built and inert.
+- **Verified against the live database**, 12 checks, all passing: the two existing MBA 2028 pickup
+  places defaulted to `kind='pickup'` with a null icon; a stop without an icon, a pickup carrying
+  one, and an icon outside the vocabulary are all rejected; an out stop on a `back` trip and a
+  return stop on an `out` trip are rejected; a round trip with an outbound stop is accepted; the
+  feed's select resolves every new column and round-trips the stop id; the stop-list query returns
+  only stops; and deleting a place **nulls** the trip's stop rather than blocking the delete. All
+  test rows removed afterwards.
+- **The tag's final shape**, after three rounds of developer notes: place name on top, leg as a
+  centred arrow underneath — straight for outbound, sideways U-turn for the return. `in way`/`back`
+  remain as `sr-only` text and the tag `title`, so an arrow-only signal doesn't strand screen
+  readers. The U-turn points **left**; the literal -90° the developer named lands the head pointing
+  right, which collides with the outbound arrow.
+- `src/types/database.ts` needed no regeneration — the new columns were already hand-patched with
+  the literal unions the generator can't infer from a CHECK.
+
+## In Progress
+- Nothing.
+
+## Next
+- The group admin adds a real stop to MBA 2028 (Group tab → Stops → **+**, name it, pick an icon).
+  Nothing appears in the create-trip form until a group has at least one.
+
+## Blocked On
+- Nothing for D-29. Unchanged elsewhere: custom SMTP (D-22), the Supabase URL config, the
+  scheduler's Vault secrets. Phase 6 (Maps) stays deferred behind D-03.
+
+## Gates Green
+- G1 (`pnpm verify`): green — typecheck, lint, 144/144.
+- G8 (API docs): `docs/API.md` documents the stop fields on every affected route.
+
+
 ## Shipped (2026-08-27 — stop mention right-aligned; D-29 primitives added to the styleguide)
 - **The mention moved to the right end of the route row**, opposite the `from → to` it qualifies,
   instead of sitting on its own line beneath it. The card no longer grows a row per stop. Two stops
