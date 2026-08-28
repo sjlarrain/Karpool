@@ -1,5 +1,39 @@
 # Worklog
 
+## Shipped (2026-08-28, later — backlog corrected and re-prioritised by the developer)
+- **D-34 was recorded wrong and is rewritten.** The first reading had it as "each trip picks its own
+  destination". The developer's actual intent is an **event model**: large groups with no fixed
+  destination, where someone **creates an event** and **cars subscribe to it**. That means a new
+  `event` entity between group and trip (`trip.event_id`), not an origin/destination override on the
+  existing trip. Also **downgraded — explicitly not a priority.**
+- **D-30 now carries the developer's own mechanics.** Joining a trip with open seats **asks whether
+  you are returning on it too**; outbound riders hold **priority** on the return seats; a
+  return-only booking is refused **until the outbound leg is closed**, and only the seats still free
+  at that point open to everyone else. Reserved, not first-come.
+- **D-35 opened, and it outranks everything** — the developer called it "more urgent than the one
+  leg trip". A round trip has two departures but the lifecycle has a single `started_at`/`closed_at`,
+  which breaks in five identified places: Start is ambiguous, points pay out at close, D-16's T−2h
+  guard is measured off `depart_at`, the 6h auto-close would close a trip whose return has not run,
+  and D-23's 24h expiry would expire it mid-day. **D-30 depends on it** — its "until the outbound is
+  closed" cutoff is defined in terms of whatever D-35 decides.
+
+## In Progress
+- Nothing.
+
+## Next
+- **Detail D-35 first, then D-30.** The developer's standing instruction (2026-08-28): when they ask
+  "what's next", begin *specifying* the recorded backlog rather than re-listing it.
+- Priority order as it now stands: **D-35** (most urgent) → **D-30** (soon) → **D-31 / D-32 / D-33**
+  (mid) → **D-34** (not a priority).
+
+## Blocked On
+- D-30 through D-35 all need developer answers before implementation.
+- Unchanged: custom SMTP (D-22), the Supabase URL config, the scheduler's Vault secrets.
+
+## Gates Green
+- G1 (`pnpm verify`): green — typecheck, lint, 144/144.
+
+
 ## Shipped (2026-08-28 — D-29 complete and deployed; five new items opened)
 - **Pushed.** 14 commits went to `origin/main` (`1e811bd..010e562`), the first push in several
   sessions. This clears item 4 of the pending-manual-checks list: local `main` and production are
