@@ -67,13 +67,27 @@ export function StopSign({ stop, small = false }: { stop: TripStopView; small?: 
   );
 }
 
-// What the car does before it arrives. Sized to sit under the route line without competing with
-// it: no box, no border, no alert glyph — a bordered block read as "something is wrong with this
-// ride", and nothing is. The tinted chip carries the name, the trailing text carries the timing.
+// What the car does before it arrives. No box, no border, no alert glyph — a bordered block read
+// as "something is wrong with this ride", and nothing is. The tinted chip carries the name, the
+// trailing text carries the timing.
+//
+// It sits at the right end of the route row, opposite the origin -> destination it qualifies, so
+// the card keeps one horizontal band per fact instead of growing a row. Two stops stack rather
+// than run on, which keeps the right edge readable when a round trip stops on both legs.
 export function StopMention({ notices }: { notices: StopNotice[] }) {
   if (notices.length === 0) return null;
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 7px", marginTop: 7 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
+        gap: 3,
+        marginLeft: "auto",
+        paddingLeft: 8,
+        flex: "none",
+      }}
+    >
       {notices.map((n) => (
         <span key={n.leg} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
           <span
@@ -96,6 +110,50 @@ export function StopMention({ notices }: { notices: StopNotice[] }) {
           <span style={{ font: "600 10.5px var(--font-body)", color: "rgba(0,0,0,.45)" }}>{n.when}</span>
         </span>
       ))}
+    </div>
+  );
+}
+
+// D-29. A dropdown over the group's own list — the driver never types a place, so a group has
+// exactly one spelling of "Gym" and the sign always matches the admin's wording.
+export function StopPicker({
+  label,
+  stops,
+  value,
+  onChange,
+}: {
+  label: string;
+  stops: TripStopView[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const selected = stops.find((s) => s.id === value) ?? null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <span style={{ font: "600 12px var(--font-body)", color: "rgba(0,0,0,.5)", minWidth: 92 }}>{label}</span>
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 30,
+          height: 30,
+          borderRadius: 10,
+          flex: "none",
+          background: selected ? "var(--amber-soft)" : "var(--chip)",
+          color: selected ? "var(--amber-ink)" : "rgba(0,0,0,.25)",
+        }}
+      >
+        {selected ? <StopGlyph icon={selected.icon} size={16} /> : "–"}
+      </span>
+      <select className="field" style={{ flex: 1 }} value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
+        <option value="">No stop</option>
+        {stops.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

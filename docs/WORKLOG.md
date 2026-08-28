@@ -1,5 +1,36 @@
 # Worklog
 
+## Shipped (2026-08-27 — stop mention right-aligned; D-29 primitives added to the styleguide)
+- **The mention moved to the right end of the route row**, opposite the `from → to` it qualifies,
+  instead of sitting on its own line beneath it. The card no longer grows a row per stop. Two stops
+  on a round trip stack at the right edge rather than running on, so the right margin stays readable.
+- **`/styleguide` gains a "Trip stops (D-29)" section** (`src/app/styleguide/StopDemo.tsx`), which
+  renders the **real** components with mock props rather than copied markup: the eight-icon
+  vocabulary, the add-trip stop pickers (live — changing them updates the card below), and the
+  resulting card. This is the page's job, and a copy stops being comparable the moment the real
+  component changes — the same drift that had already happened once with the route line.
+- **`StopPicker` moved out of `CreateTripOverlay` into `StopSign.tsx`**, next to the rest of the D-29
+  UI, so the form and the styleguide share one control instead of two that can diverge.
+- Verified live: six route rows render with the mention right-aligned — `Gym before arriving`,
+  `Pool on the way home`, `Coffee before arriving`, two direct rides showing nothing, plus the
+  interactive demo card. 144/144 tests.
+
+## In Progress
+- Nothing. Awaiting review of the right-aligned placement.
+
+## Next
+- Apply migration `0012`, then walk the real flow: add a stop as admin → publish a trip through it.
+
+## Blocked On
+- **Migration `0012` is still not applied** — `supabase db push --linked` was denied by the sandbox's
+  permission classifier. Confirmed absent by probing the live project. All D-29 code is inert until
+  it runs, and the Carpools tab will error against the current live schema.
+- Unchanged: custom SMTP (D-22), the Supabase URL config, the scheduler's Vault secrets.
+
+## Gates Green
+- G1 (`pnpm verify`): green — typecheck, lint, 144/144.
+
+
 ## Shipped (2026-08-27 — D-29 stop mention resized and reframed)
 - **It is not a warning.** The notice was a bordered amber block led by a warning triangle; the
   developer's read was that it was too big for the card and that a stop isn't an alert — "it is just

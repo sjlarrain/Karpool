@@ -36,10 +36,12 @@ function TripCard({
         </span>
         <span style={{ font: "800 14px var(--font-display)", color: "var(--ink)" }}>{trip.time}</span>
       </div>
-      <div className="route">
-        {trip.from} <span style={{ color: "rgba(0,0,0,.3)" }}>→</span> {trip.to}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <div className="route" style={{ minWidth: 0 }}>
+          {trip.from} <span style={{ color: "rgba(0,0,0,.3)" }}>→</span> {trip.to}
+        </div>
+        <StopMention notices={trip.stopNotices} />
       </div>
-      <StopMention notices={trip.stopNotices} />
       <div style={{ font: "600 12px var(--font-body)", color: "rgba(0,0,0,.5)", marginTop: 4 }}>{trip.driverLabel}</div>
       <div style={{ display: "flex", gap: 5, alignItems: "center", marginTop: 12 }}>
         {trip.avatars.map((a, i) => (

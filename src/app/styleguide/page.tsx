@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { decorateTrip } from "@/domain/decorateTrip";
 import { dayOrder, mockTrips } from "./mockData";
 import { StopMention } from "../app/StopSign";
+import { StopDemo } from "./StopDemo";
 
 // Dev-only: Phase 0 deliverable per 02_IMPLEMENTATION_PLAN.md §4 (Phase 0). Verified by comparing
 // this route to docs/Carpool App.dc.html's phone frame — not a real product route.
@@ -136,10 +137,12 @@ export default function StyleguidePage() {
                           {t.time}
                         </span>
                       </div>
-                      <div className="route">
-                        {t.from} <span style={{ color: "rgba(0,0,0,.3)" }}>→</span> {t.to}
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                        <div className="route" style={{ minWidth: 0 }}>
+                          {t.from} <span style={{ color: "rgba(0,0,0,.3)" }}>→</span> {t.to}
+                        </div>
+                        <StopMention notices={t.stopNotices} />
                       </div>
-                      <StopMention notices={t.stopNotices} />
                       <div
                         style={{
                           font: "600 12px var(--font-body)",
@@ -291,6 +294,11 @@ export default function StyleguidePage() {
             </div>
           </div>
         </div>
+      </section>
+
+      <section style={{ width: 322 }}>
+        <h2 style={{ fontFamily: "var(--font-display)", textAlign: "center" }}>Trip stops (D-29)</h2>
+        <StopDemo />
       </section>
     </div>
   );

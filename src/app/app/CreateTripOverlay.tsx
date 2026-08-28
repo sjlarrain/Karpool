@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { SEATS } from "@/domain/constants";
 import type { TripStopView } from "@/domain/types";
-import { StopGlyph } from "./StopSign";
+import { StopPicker } from "./StopSign";
 
 interface Props {
   groupId: string;
@@ -283,50 +283,6 @@ export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, 
           Publish to {groupName}
         </button>
       </div>
-    </div>
-  );
-}
-
-// D-29. A dropdown over the group's own list — the driver never types a place, so a group has
-// exactly one spelling of "Gym" and the sign always matches the admin's wording.
-function StopPicker({
-  label,
-  stops,
-  value,
-  onChange,
-}: {
-  label: string;
-  stops: TripStopView[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const selected = stops.find((s) => s.id === value) ?? null;
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <span style={{ font: "600 12px var(--font-body)", color: "rgba(0,0,0,.5)", minWidth: 92 }}>{label}</span>
-      <span
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: 30,
-          height: 30,
-          borderRadius: 10,
-          flex: "none",
-          background: selected ? "var(--amber-soft)" : "var(--chip)",
-          color: selected ? "var(--amber-ink)" : "rgba(0,0,0,.25)",
-        }}
-      >
-        {selected ? <StopGlyph icon={selected.icon} size={16} /> : "–"}
-      </span>
-      <select className="field" style={{ flex: 1 }} value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
-        <option value="">No stop</option>
-        {stops.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.label}
-          </option>
-        ))}
-      </select>
     </div>
   );
 }
