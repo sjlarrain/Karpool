@@ -88,26 +88,27 @@ describe("stopNotices (D-29)", () => {
   const gym = { id: "p1", label: "Gym", icon: "gym" as const, address: "Fitness Park" };
   const shop = { id: "p2", label: "Shop", icon: "shop" as const, address: "Market St" };
 
-  it("warns about an outbound stop on a one-way out trip, unqualified", () => {
-    // One-way: there is only one "way", so the wording needs no there/back qualifier.
+  it("phrases an outbound stop against the destination it precedes", () => {
     const d = decorateTrip({ ...base, direction: "out", outStop: gym });
-    expect(d.stopNotices).toEqual([{ stop: gym, leg: "out", when: "on the way" }]);
+    expect(d.stopNotices).toEqual([{ stop: gym, leg: "out", when: "before arriving" }]);
   });
 
-  it("warns about a return stop on a one-way back trip", () => {
+  it("phrases a return stop against going home", () => {
     const d = decorateTrip({ ...base, direction: "back", from: "HQ", to: "Riverside", backStop: gym });
-    expect(d.stopNotices).toEqual([{ stop: gym, leg: "back", when: "on the way back" }]);
+    expect(d.stopNotices).toEqual([{ stop: gym, leg: "back", when: "on the way home" }]);
   });
 
-  it("qualifies the direction on a round trip", () => {
+  it("uses the same wording on a round trip's outbound leg as on a one-way", () => {
+    // The leg determines the phrasing, not whether the ride comes back — a stop before arriving is
+    // the same fact either way.
     const d = decorateTrip({ ...base, direction: "round", outStop: gym });
-    expect(d.stopNotices).toEqual([{ stop: gym, leg: "out", when: "on the way there" }]);
+    expect(d.stopNotices).toEqual([{ stop: gym, leg: "out", when: "before arriving" }]);
   });
 
   it("lists both stops of a round trip in travel order", () => {
     const d = decorateTrip({ ...base, direction: "round", outStop: gym, backStop: shop });
     expect(d.stopNotices.map((n) => n.leg)).toEqual(["out", "back"]);
-    expect(d.stopNotices[1]).toEqual({ stop: shop, leg: "back", when: "on the way back" });
+    expect(d.stopNotices[1]).toEqual({ stop: shop, leg: "back", when: "on the way home" });
   });
 
   it("says nothing for a direct ride", () => {

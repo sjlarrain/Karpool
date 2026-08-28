@@ -11,14 +11,14 @@ export interface AvatarView {
   dashed?: boolean;
 }
 
-// D-29: a heads-up that this ride isn't direct. The card states it as its own notice rather than
-// threading it through the route line — a rider scanning the feed should see the detour as a
-// warning about the ride, not as a place name they have to parse out of "A -> B".
+// D-29: what this ride does before it arrives. Not a warning — nothing is wrong with a ride that
+// stops — just a mention, stated under the route rather than threaded through it so a rider reads
+// it as something the car does rather than as a place name inside "A -> B".
 export interface StopNotice {
   stop: TripStopView;
   leg: "out" | "back";
-  // Wording depends on whether the trip travels both legs: "on the way" needs no qualifier on a
-  // one-way ride, but a round trip has two "ways" and has to say which.
+  // Phrased by destination, which is what a rider is actually placing the stop against: the
+  // outbound leg arrives somewhere, the return leg goes home.
   when: string;
 }
 
@@ -85,12 +85,11 @@ function terminalBadge(trip: TripView): string | null {
 // is travel order, so the notices read the way the ride happens.
 export function stopNotices(trip: TripView): StopNotice[] {
   const notices: StopNotice[] = [];
-  const roundTrip = trip.direction === "round";
   if (trip.direction !== "back" && trip.outStop) {
-    notices.push({ stop: trip.outStop, leg: "out", when: roundTrip ? "on the way there" : "on the way" });
+    notices.push({ stop: trip.outStop, leg: "out", when: "before arriving" });
   }
   if (trip.direction !== "out" && trip.backStop) {
-    notices.push({ stop: trip.backStop, leg: "back", when: "on the way back" });
+    notices.push({ stop: trip.backStop, leg: "back", when: "on the way home" });
   }
   return notices;
 }

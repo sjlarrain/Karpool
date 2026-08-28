@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { decorateTrip, type DecoratedTrip } from "@/domain/decorateTrip";
 import { groupByDay } from "@/domain/tripDay";
 import type { TripView } from "@/domain/types";
-import { StopWarning } from "./StopSign";
+import { StopMention } from "./StopSign";
 
 interface Props {
   trips: TripView[];
@@ -39,7 +39,7 @@ function TripCard({
       <div className="route">
         {trip.from} <span style={{ color: "rgba(0,0,0,.3)" }}>→</span> {trip.to}
       </div>
-      <StopWarning notices={trip.stopNotices} />
+      <StopMention notices={trip.stopNotices} />
       <div style={{ font: "600 12px var(--font-body)", color: "rgba(0,0,0,.5)", marginTop: 4 }}>{trip.driverLabel}</div>
       <div style={{ display: "flex", gap: 5, alignItems: "center", marginTop: 12 }}>
         {trip.avatars.map((a, i) => (

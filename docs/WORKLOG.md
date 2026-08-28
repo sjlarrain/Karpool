@@ -1,5 +1,48 @@
 # Worklog
 
+## Shipped (2026-08-27 — D-29 stop mention resized and reframed)
+- **It is not a warning.** The notice was a bordered amber block led by a warning triangle; the
+  developer's read was that it was too big for the card and that a stop isn't an alert — "it is just
+  to communicate that they will do something before arriving". `StopWarning` → `StopMention`: no
+  box, no border, no triangle. A small tinted chip carries the icon and name, muted text after it
+  carries the timing, and the whole thing sits under the route line at 10.5px instead of 11.5px in
+  an 8px-padded bordered block.
+- **Wording is now keyed to the leg, not to the trip shape.** Was `on the way` / `on the way there` /
+  `on the way back`, qualified by whether the ride had two legs. Now `before arriving` for an
+  outbound stop and `on the way home` for a return one — phrased against the destination the rider
+  is actually placing the stop against, and identical on a one-way and on a round trip's matching
+  leg, so one less rule to hold.
+- Verified live on `/styleguide`: `Gym before arriving`, `Pool on the way home`,
+  `Coffee before arriving`, and two direct rides showing nothing. 144/144 tests.
+
+## In Progress
+- Nothing. Awaiting the developer's review of the resized mention.
+
+## Next
+- Apply migration `0012`, then walk the real flow: add a stop as admin → publish a trip through it.
+
+## Blocked On
+- **Migration `0012` is still not applied** — `supabase db push --linked` was denied by the sandbox's
+  permission classifier and has not been retried. Confirmed still absent this session by probing the
+  live project (`column trip.out_stop_id does not exist`). Everything D-29 is inert until it runs.
+- Unchanged: custom SMTP (D-22), the Supabase URL config, the scheduler's Vault secrets.
+
+## Live data, checked this session (read-only)
+- **MBA 2028** (`Q8JB2X`, UV → UCLA): 3 members — Alejandro Rivera, sjlarrain (admin), Isa — with
+  **2 pickup places** (Sepulveda, Sawtelle) and **0 trips**. Both places will default to
+  `kind = 'pickup'` when `0012` runs, so they stay pickup points; the group has no stops yet, which
+  means the create form's stop picker stays hidden until the admin adds one.
+- Corrects an earlier note in this worklog: `pickup_place` was described as having 0 rows. It has 2.
+  Harmless — they satisfy the new constraints — but the migration is not landing on an empty table.
+- Clutter left in the live project: three Playwright groups (`E2E Group…`, `Share Group…`,
+  `Confirm Group…`) and five test profiles (`Probe`, `Browser Tester` ×2, `E2E Driver`, `E2E Rider`)
+  alongside the four real accounts. `pnpm db:reset-data` keeps accounts and groups by design, so it
+  will not clear them. Not removed — deleting rows from the live project needs the developer's word.
+
+## Gates Green
+- G1 (`pnpm verify`): green — typecheck, lint, 144/144.
+
+
 ## Shipped (2026-08-27 — D-29 presentation reworked: the stop is a warning, not a route segment)
 - **The sign moved out of the route line.** It was built as `Riverside → [Gym] → HQ`; the developer
   rejected that and asked for "a **warning** mention that they will be going to the gym". A stop is

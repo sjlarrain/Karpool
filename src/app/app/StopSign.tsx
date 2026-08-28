@@ -67,51 +67,35 @@ export function StopSign({ stop, small = false }: { stop: TripStopView; small?: 
   );
 }
 
-// The heads-up itself: this ride is not direct. Stated as its own notice rather than woven into
-// the route line, so a rider scanning the feed reads it as a warning about the ride instead of
-// having to spot an extra place name inside "A -> B".
-export function StopWarning({ notices }: { notices: StopNotice[] }) {
+// What the car does before it arrives. Sized to sit under the route line without competing with
+// it: no box, no border, no alert glyph — a bordered block read as "something is wrong with this
+// ride", and nothing is. The tinted chip carries the name, the trailing text carries the timing.
+export function StopMention({ notices }: { notices: StopNotice[] }) {
   if (notices.length === 0) return null;
   return (
-    <div
-      role="note"
-      style={{
-        display: "flex",
-        gap: 8,
-        alignItems: "flex-start",
-        background: "var(--amber-soft)",
-        border: "1px solid rgba(255,176,32,.45)",
-        borderRadius: 11,
-        padding: "8px 10px",
-        marginTop: 9,
-        color: "var(--amber-ink)",
-      }}
-    >
-      <svg
-        width={15}
-        height={15}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-        style={{ flex: "none", marginTop: 1 }}
-      >
-        <path d="M12 3.5L22 20H2z" />
-        <path d="M12 10v4" />
-        <path d="M12 17.2v.1" />
-      </svg>
-      <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-        {notices.map((n) => (
-          <span key={n.leg} style={{ display: "flex", alignItems: "center", gap: 5, font: "700 11.5px var(--font-body)" }}>
-            <StopGlyph icon={n.stop.icon} size={14} />
-            Stopping at {n.stop.label}
-            <span style={{ font: "600 11.5px var(--font-body)", opacity: 0.75 }}>{n.when}</span>
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 7px", marginTop: 7 }}>
+      {notices.map((n) => (
+        <span key={n.leg} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <span
+            title={n.stop.address}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              background: "var(--amber-soft)",
+              color: "var(--amber-ink)",
+              padding: "1.5px 7px",
+              borderRadius: 20,
+              font: "700 10.5px var(--font-body)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <StopGlyph icon={n.stop.icon} size={12} />
+            {n.stop.label}
           </span>
-        ))}
-      </div>
+          <span style={{ font: "600 10.5px var(--font-body)", color: "rgba(0,0,0,.45)" }}>{n.when}</span>
+        </span>
+      ))}
     </div>
   );
 }

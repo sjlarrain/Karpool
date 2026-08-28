@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { decorateTrip } from "@/domain/decorateTrip";
 import { dayOrder, mockTrips } from "./mockData";
-import { StopWarning } from "../app/StopSign";
+import { StopMention } from "../app/StopSign";
 
 // Dev-only: Phase 0 deliverable per 02_IMPLEMENTATION_PLAN.md §4 (Phase 0). Verified by comparing
 // this route to docs/Carpool App.dc.html's phone frame — not a real product route.
@@ -139,7 +139,7 @@ export default function StyleguidePage() {
                       <div className="route">
                         {t.from} <span style={{ color: "rgba(0,0,0,.3)" }}>→</span> {t.to}
                       </div>
-                      <StopWarning notices={t.stopNotices} />
+                      <StopMention notices={t.stopNotices} />
                       <div
                         style={{
                           font: "600 12px var(--font-body)",
