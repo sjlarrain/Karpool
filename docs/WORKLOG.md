@@ -9,9 +9,12 @@
   hand-published `back` trip at the return hour rather than duplicating it (the D-36 collision), and
   seats confirmed riders who declared a return, oldest first, up to remaining capacity.
 - **Close is no longer driver-only** (D-35 mechanic (i)). `transition()` gained `not_permitted` and a
-  `closeMode`; a rider or group admin gets the **restricted** close — confirms everyone, marks nobody
-  a `no_show`, ignores the body's guests — and it **pays the driver the full award** (answer (A)).
+  `closeMode`; the **group admin** gets the **restricted** close — confirms everyone, marks nobody a
+  `no_show`, ignores the body's guests — and it **pays the driver the full award** (answer (A)).
   The three close callers now share one `src/lib/api/closeTrip.ts` so they cannot drift.
+  **Corrected same day:** this first went in allowing *riders* to close too, per the original wording
+  of mechanic (i). The developer pulled that back — closing moves points and decides who rode, which
+  is not one passenger's authority over another. Riders are out; driver and admin only.
 - **`force-close` stopped being points-free**, deliberately. Its old "never touches `points_ledger`"
   rule does not survive D-35: a forgotten close would cost the driver both legs. Started trips take
   the restricted close; `scheduled` trips keep the old status-only behaviour.
@@ -34,8 +37,9 @@
   and `generate_back_trip` are currently **hand-patched** into `src/types/database.ts`.
 - **Verify the loop end-to-end against the live project**: join a round trip both ways, close the
   outbound, confirm the back leg appears with the right riders and the decliner's seat is free.
-- **D-35 mechanic (ii): T−2h auto-generation in `/api/cron/tick`** — the deferred half of the design.
-  Until it ships, the rider/admin close is the only safety net for a driver who forgets.
+- **D-35 mechanic (ii): T−2h auto-generation in `/api/cron/tick`** — the deferred half of the design,
+  and now more urgent than it was. With riders excluded from closing, an **admin noticing** is the
+  only thing between a forgotten close and a stranded return leg.
 - Then **D-36** (the same-hour publish key — still needs the developer's answer), then D-31/32/33.
 
 ## Blocked On

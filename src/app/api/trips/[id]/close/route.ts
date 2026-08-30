@@ -16,10 +16,13 @@ const bodySchema = z.object({
 // POST /api/trips/:id/close — started -> closed. Confirms riders, awards the driver 1 "drive" +
 // 1 escalating "pool" per confirmed rider, and queues the kudos prompt.
 //
-// D-35 mechanic (i): no longer driver-only. A rider on the trip, or a group admin, may close a
-// ride the driver forgot to close — because on a round trip the close is also what materialises
-// the return leg, and a driver who forgets would otherwise strand everyone who declared a return.
-// A non-driver gets the RESTRICTED close: every active rider is confirmed, nobody can be marked a
+// D-35 mechanic (i), as narrowed by the developer on 2026-08-30: no longer driver-only, but open
+// to the GROUP ADMIN only — not to riders. On a round trip the close is also what materialises the
+// return leg, so a driver who forgets would strand everyone who declared a return; someone has to
+// be able to close it for them. That someone is the admin. A close decides who rode and moves
+// points, which is not an authority one passenger should hold over another.
+//
+// The admin gets the RESTRICTED close: every active rider is confirmed, nobody can be marked a
 // no-show, and the body's confirmedTripRiderIds/guestNames are ignored. Deciding that a colleague
 // did not show up is a judgement only the driver was there to make.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -44,16 +47,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const admin = createSupabaseAdminClient();
 
-  const [{ data: seat }, { data: membership }] = await Promise.all([
-    admin.from("trip_rider").select("id").eq("trip_id", id).eq("profile_id", user.id).in("state", ["joined", "confirmed"]).maybeSingle(),
-    admin.from("membership").select("group_role").eq("group_id", trip.group_id).eq("profile_id", user.id).maybeSingle(),
-  ]);
+  const { data: membership } = await admin
+    .from("membership")
+    .select("group_role")
+    .eq("group_id", trip.group_id)
+    .eq("profile_id", user.id)
+    .maybeSingle();
 
   const result = await closeTrip({
     tripId: id,
     actor: {
       profileId: user.id,
-      isRider: !!seat,
       isGroupAdmin: membership?.group_role === "group_admin",
     },
     confirmedTripRiderIds: parsed.data.confirmedTripRiderIds,

@@ -90,38 +90,38 @@ describe("tripMachine.transition — exhaustive matrix", () => {
 });
 
 // D-35 mechanic (i) — a driver who forgets to close strands every rider who declared a return,
-// because the return leg is only materialised at close. So close, and close alone, is open to the
-// people who were there.
-describe("tripMachine.transition — non-driver close (D-35)", () => {
-  it("a rider on the trip may close it, in restricted form", () => {
-    const result = transition(snapshot("started"), "close", { profileId: OTHER, isRider: true }, ON_TIME);
-    expect(result).toEqual({ ok: true, nextStatus: "closed", closeMode: "restricted" });
-  });
-
+// because the return leg is only materialised at close. So close, and close alone, is open to
+// someone other than the driver: the group admin, and nobody else (developer, 2026-08-30).
+describe("tripMachine.transition — admin close (D-35)", () => {
   it("a group admin may close it, in restricted form", () => {
     const result = transition(snapshot("started"), "close", { profileId: OTHER, isGroupAdmin: true }, ON_TIME);
     expect(result).toEqual({ ok: true, nextStatus: "closed", closeMode: "restricted" });
   });
 
-  it("the driver's own close stays full even when they are also flagged a rider", () => {
-    const result = transition(snapshot("started"), "close", { profileId: DRIVER, isRider: true }, ON_TIME);
+  it("the driver's own close stays full", () => {
+    const result = transition(snapshot("started"), "close", { profileId: DRIVER }, ON_TIME);
     expect(result).toEqual({ ok: true, nextStatus: "closed", closeMode: "full" });
   });
 
-  it("someone with no relationship to the trip still cannot close it", () => {
+  it("a driver who is also the group admin still gets the full close, not the restricted one", () => {
+    const result = transition(snapshot("started"), "close", { profileId: DRIVER, isGroupAdmin: true }, ON_TIME);
+    expect(result).toEqual({ ok: true, nextStatus: "closed", closeMode: "full" });
+  });
+
+  it("a RIDER cannot close the trip — closing decides who rode and moves points", () => {
     const result = transition(snapshot("started"), "close", { profileId: OTHER }, ON_TIME);
     expect(result).toEqual({ ok: false, error: "not_permitted" });
   });
 
-  it("opening close to riders does not open start or cancel to them", () => {
+  it("opening close to the admin does not open start or cancel to them", () => {
     for (const event of ["start", "cancel"] as const) {
-      const result = transition(snapshot("scheduled"), event, { profileId: OTHER, isRider: true, isGroupAdmin: true }, ON_TIME);
+      const result = transition(snapshot("scheduled"), event, { profileId: OTHER, isGroupAdmin: true }, ON_TIME);
       expect(result).toEqual({ ok: false, error: "not_driver" });
     }
   });
 
-  it("a rider cannot close a trip that never started", () => {
-    const result = transition(snapshot("scheduled"), "close", { profileId: OTHER, isRider: true }, ON_TIME);
+  it("the admin cannot close a trip that never started", () => {
+    const result = transition(snapshot("scheduled"), "close", { profileId: OTHER, isGroupAdmin: true }, ON_TIME);
     expect(result).toEqual({ ok: false, error: "wrong_status" });
   });
 });

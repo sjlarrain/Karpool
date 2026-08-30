@@ -261,23 +261,25 @@ Driver only, `scheduled→cancelled`.
 `started→closed`. Confirms which currently-active registered riders actually rode, adds any guest
 riders, awards points, and — on a round trip — **materialises the return leg** (D-35).
 
-**Not driver-only (D-35 mechanic (i)).** A rider on the trip, or a group admin, may close a ride
-the driver forgot to close, because on a round trip the close is also what creates the return leg:
-a forgotten close would strand everyone who declared a return. Two forms:
+**Not driver-only (D-35 mechanic (i)).** A **group admin** may close a ride the driver forgot to
+close, because on a round trip the close is also what creates the return leg: a forgotten close
+would strand everyone who declared a return. **Riders cannot close** (developer, 2026-08-30) — a
+close decides who rode and moves points, and that is not an authority one passenger should hold
+over another. Two forms:
 
 | Form | Who | Confirms | No-shows | Guests | Pays the driver |
 |---|---|---|---|---|---|
 | `full` | the driver | only the ids in the body | everyone else | yes | yes |
-| `restricted` | a rider or group admin | **every** active rider | **none** | ignored | yes |
+| `restricted` | a group admin | **every** active rider | **none** | ignored | yes |
 
 A restricted close ignores `confirmedTripRiderIds` and `guestNames` entirely — judging that a
 colleague did not show up is a call only the driver was there to make — but still pays the normal
 award, because a leg that was driven was driven regardless of who tapped the button.
 
-- **Auth**: required, caller must be the trip's driver, an active rider on it, or a group admin of its group
+- **Auth**: required, caller must be the trip's driver or a group admin of its group
 - **Request**: `{ confirmedTripRiderIds?: string[] (uuid, trip_rider row ids — not profile ids — of active riders who rode; default []), guestNames?: string[] (1-80 chars each, max 20; default []) }`. Any id in `confirmedTripRiderIds` that isn't an active rider on this trip is silently ignored, not trusted.
 - **Response**: `{ trip, mode: "full" | "restricted", confirmedCount: number, noShowCount: number, pointsAwarded: number, backTripId: string | null }`
-- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `403 not_permitted` (caller is neither driver, rider, nor group admin), `409 wrong_status`, `500 confirm_failed` / `no_show_failed` / `guest_add_failed` / `back_leg_failed` / `ledger_write_failed` / `update_failed`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `403 not_permitted` (caller is neither the driver nor a group admin — riders included), `409 wrong_status`, `500 confirm_failed` / `no_show_failed` / `guest_add_failed` / `back_leg_failed` / `ledger_write_failed` / `update_failed`
 - **Scoring (D-19)**: the driver gets one `drive` entry plus one `pool` entry per confirmed rider, escalating per seat (`pool_weight + (n-1)·pool_step` — 3, 5, 7 at the defaults). Each registered rider marked `no_show` is charged `group.no_show_penalty` (default −10) on **their own** profile, not the driver's; guests are never penalised.
 - **Side effects**: updates confirmed riders' `trip_rider.state` to `"confirmed"`, unconfirmed active riders to `"no_show"`; inserts a `trip_rider` row per guest (`state: "confirmed"`, `profile_id: null`); inserts `points_ledger` rows to the **driver** — one `drive` entry (`group.drive_weight`) plus one `pool` entry (`group.pool_weight`) per confirmed rider, registered or guest (guests have no profile to hold their own points, so their contribution always lands on the driver — matches the sketch's "guest riders still count toward your pooled score"); inserts a `rate`-type `notification` row for each confirmed *registered* rider **whose ride ends here** (see below); updates `trip.status` and `closed_at`.
 - **Return leg (D-35)**: if the trip is `direction: "round"` with a `return_at`, calls `generate_back_trip()` (`supabase/migrations/0013_round_trip_back_leg.sql`), which creates a `direction: "back"` trip at `return_at` with `parent_trip_id` set, inheriting the outbound's `capacity` and `back_stop_id`, and seats every **confirmed** rider whose `trip_rider.wants_return` is true (oldest join first, guests skipped). The generator is **idempotent** — a unique index on `trip.parent_trip_id` means the driver's close, a rider's close, an admin's close and (later) the cron tick can all call it while only one leg is ever created. If the driver already hand-published a `back` trip at that hour it is **adopted** rather than duplicated (the D-36 collision). Riders seated on it get a `change`-type notification. Generation happens **before** the ledger write and the status flip, so a failure here leaves the close safely retryable rather than leaving a closed trip whose return leg does not exist.

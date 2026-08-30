@@ -10,18 +10,19 @@ export type TripTransitionEvent = "start" | "close" | "cancel";
 
 export interface TripTransitionActor {
   profileId: string;
-  // D-35 mechanic (i): close is no longer driver-only. A rider on the trip, or a group admin, may
-  // close a ride the driver forgot to close — otherwise the return leg is never generated and
-  // everyone who declared a return is stranded. Start and cancel stay driver-only: they are the
-  // driver's own commitments, and nobody else can make them on their behalf.
-  isRider?: boolean;
+  // D-35 mechanic (i), narrowed by the developer on 2026-08-30: close is no longer driver-only,
+  // but it opens to the GROUP ADMIN and nobody else. Closing a ride the driver forgot is what
+  // generates the return leg, so someone other than the driver has to be able to do it — but not a
+  // rider. A close decides who rode and moves points, and handing that to one passenger over the
+  // others is an authority a colleague should not have over a colleague.
+  // Start and cancel stay driver-only: they are the driver's own commitments to make.
   isGroupAdmin?: boolean;
 }
 
 // D-35 answer (A). A "full" close is the driver's: it names who actually rode, so anyone left
-// unconfirmed is marked no_show and charged D-19's penalty. A "restricted" close is anyone else's
-// — it confirms every active rider and can mark nobody as a no-show, because deciding that a
-// colleague did not show up is a judgement only the driver was there to make. Both pay the driver
+// unconfirmed is marked no_show and charged D-19's penalty. A "restricted" close is the group
+// admin's — it confirms every active rider and can mark nobody as a no-show, because deciding that
+// a colleague did not show up is a judgement only the driver was there to make. Both pay the driver
 // the normal award; a leg that was actually driven is paid for regardless of who tapped Close.
 export type CloseMode = "full" | "restricted";
 
@@ -62,7 +63,7 @@ export function transition(
   const isDriver = actor.profileId === trip.driverId;
 
   if (event === "close") {
-    if (!isDriver && !actor.isRider && !actor.isGroupAdmin) {
+    if (!isDriver && !actor.isGroupAdmin) {
       return { ok: false, error: "not_permitted" };
     }
   } else if (!isDriver) {

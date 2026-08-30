@@ -6,13 +6,15 @@ import { notifyProfiles } from "@/lib/notify/tripNotify";
 
 // D-35 made close the hinge of the whole round-trip design: it is what materialises the return
 // leg, so it can no longer live only in the driver's route. Three callers share this — the
-// driver's close, a rider closing a ride the driver forgot, and an admin doing the same from the
-// console — and they must agree exactly on who gets confirmed, who gets paid, and which riders are
-// asked for kudos. Keeping one copy is the only way that stays true.
+// driver's close, a group admin closing a ride the driver forgot, and the platform admin doing the
+// same from the console — and they must agree exactly on who gets confirmed, who gets paid, and
+// which riders are asked for kudos. Keeping one copy is the only way that stays true.
+//
+// Riders deliberately cannot close (developer, 2026-08-30). A close decides who rode and moves
+// points; that is the driver's authority, or the admin's, and not one passenger's over another's.
 
 export interface CloseTripActor {
   profileId: string;
-  isRider?: boolean;
   isGroupAdmin?: boolean;
 }
 
@@ -96,7 +98,8 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
 
   // The one behavioural difference between the two close forms. A restricted close confirms
   // everyone and charges nobody: it exists so a forgotten ride still pays the driver and still
-  // generates the return leg, not so a colleague can mark another colleague a no-show.
+  // generates the return leg, not so an admin ends up adjudicating who showed up for a ride they
+  // were not on.
   const confirmedIds = mode === "full" ? confirmedTripRiderIds.filter((rid) => activeById.has(rid)) : active.map((r) => r.id);
   const noShowIds = mode === "full" ? active.map((r) => r.id).filter((rid) => !confirmedIds.includes(rid)) : [];
   const namedGuests = mode === "full" ? guestNames : [];
