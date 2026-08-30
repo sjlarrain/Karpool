@@ -258,15 +258,30 @@ Driver only, `scheduled→cancelled`.
 - **Side effects**: updates `trip.status` and `cancelled_reason`. No ledger/audit writes.
 
 ### `POST /api/trips/:id/close`
-Driver only, `started→closed`. Confirms which currently-active registered riders actually rode
-(everyone not listed becomes `no_show`), adds any guest riders, and awards points.
+`started→closed`. Confirms which currently-active registered riders actually rode, adds any guest
+riders, awards points, and — on a round trip — **materialises the return leg** (D-35).
 
-- **Auth**: required, caller must be the trip's driver
+**Not driver-only (D-35 mechanic (i)).** A rider on the trip, or a group admin, may close a ride
+the driver forgot to close, because on a round trip the close is also what creates the return leg:
+a forgotten close would strand everyone who declared a return. Two forms:
+
+| Form | Who | Confirms | No-shows | Guests | Pays the driver |
+|---|---|---|---|---|---|
+| `full` | the driver | only the ids in the body | everyone else | yes | yes |
+| `restricted` | a rider or group admin | **every** active rider | **none** | ignored | yes |
+
+A restricted close ignores `confirmedTripRiderIds` and `guestNames` entirely — judging that a
+colleague did not show up is a call only the driver was there to make — but still pays the normal
+award, because a leg that was driven was driven regardless of who tapped the button.
+
+- **Auth**: required, caller must be the trip's driver, an active rider on it, or a group admin of its group
 - **Request**: `{ confirmedTripRiderIds?: string[] (uuid, trip_rider row ids — not profile ids — of active riders who rode; default []), guestNames?: string[] (1-80 chars each, max 20; default []) }`. Any id in `confirmedTripRiderIds` that isn't an active rider on this trip is silently ignored, not trusted.
-- **Response**: `{ trip, confirmedCount: number, noShowCount: number, pointsAwarded: number }`
-- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `403 not_driver`, `409 wrong_status`, `500 confirm_failed` / `no_show_failed` / `guest_add_failed` / `ledger_write_failed` / `update_failed`
+- **Response**: `{ trip, mode: "full" | "restricted", confirmedCount: number, noShowCount: number, pointsAwarded: number, backTripId: string | null }`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `403 not_permitted` (caller is neither driver, rider, nor group admin), `409 wrong_status`, `500 confirm_failed` / `no_show_failed` / `guest_add_failed` / `back_leg_failed` / `ledger_write_failed` / `update_failed`
 - **Scoring (D-19)**: the driver gets one `drive` entry plus one `pool` entry per confirmed rider, escalating per seat (`pool_weight + (n-1)·pool_step` — 3, 5, 7 at the defaults). Each registered rider marked `no_show` is charged `group.no_show_penalty` (default −10) on **their own** profile, not the driver's; guests are never penalised.
-- **Side effects**: updates confirmed riders' `trip_rider.state` to `"confirmed"`, unconfirmed active riders to `"no_show"`; inserts a `trip_rider` row per guest (`state: "confirmed"`, `profile_id: null`); inserts `points_ledger` rows to the **driver** — one `drive` entry (`group.drive_weight`) plus one `pool` entry (`group.pool_weight`) per confirmed rider, registered or guest (guests have no profile to hold their own points, so their contribution always lands on the driver — matches the sketch's "guest riders still count toward your pooled score"); inserts a `rate`-type `notification` row for each confirmed *registered* rider; updates `trip.status` and `closed_at`.
+- **Side effects**: updates confirmed riders' `trip_rider.state` to `"confirmed"`, unconfirmed active riders to `"no_show"`; inserts a `trip_rider` row per guest (`state: "confirmed"`, `profile_id: null`); inserts `points_ledger` rows to the **driver** — one `drive` entry (`group.drive_weight`) plus one `pool` entry (`group.pool_weight`) per confirmed rider, registered or guest (guests have no profile to hold their own points, so their contribution always lands on the driver — matches the sketch's "guest riders still count toward your pooled score"); inserts a `rate`-type `notification` row for each confirmed *registered* rider **whose ride ends here** (see below); updates `trip.status` and `closed_at`.
+- **Return leg (D-35)**: if the trip is `direction: "round"` with a `return_at`, calls `generate_back_trip()` (`supabase/migrations/0013_round_trip_back_leg.sql`), which creates a `direction: "back"` trip at `return_at` with `parent_trip_id` set, inheriting the outbound's `capacity` and `back_stop_id`, and seats every **confirmed** rider whose `trip_rider.wants_return` is true (oldest join first, guests skipped). The generator is **idempotent** — a unique index on `trip.parent_trip_id` means the driver's close, a rider's close, an admin's close and (later) the cron tick can all call it while only one leg is ever created. If the driver already hand-published a `back` trip at that hour it is **adopted** rather than duplicated (the D-36 collision). Riders seated on it get a `change`-type notification. Generation happens **before** the ledger write and the status flip, so a failure here leaves the close safely retryable rather than leaving a closed trip whose return leg does not exist.
+- **Kudos targeting (D-35 answer (B))**: kudos is one prompt per rider per **ride**, not per leg. Riders carried on to the return leg are *not* prompted here — they are prompted when that leg closes — so a rider travelling both ways is asked exactly once, at the end.
 
 ### `POST /api/trips/:id/join`
 Join an open seat. Calls `join_trip()` (`supabase/migrations/0002_join_trip.sql`), a Postgres
@@ -275,10 +290,10 @@ insert, so two riders racing for the last seat produce exactly one winner — ve
 live database with concurrent requests on a 1-seat trip.
 
 - **Auth**: required, caller must be a member of the trip's group and not its driver
-- **Request**: none
+- **Request**: `{ wantsReturn: boolean }` — **required, no default** (D-35 answer (C)). Joining a round trip asks outright whether the rider is coming back with the same driver; there is deliberately no opt-in/opt-out default, so a join that never asked the question is a `400` rather than a silent "not returning". Forced to `false` on a one-way trip, which has no return leg to declare for.
 - **Response**: `201 { tripRider }`
-- **Errors**: `401 unauthenticated`, `404 not_found`, `429 rate_limited` (20/10min per caller), `409 is_driver`, `409 wrong_status` (not scheduled), `409 already_joined`, `409 full`, `409 departed` (D-23 — departure time has passed; only the driver can seat anyone after that)
-- **Side effects**: inserts a `trip_rider` row (`state: "joined"`). No ledger writes on join — pooled points are awarded on close.
+- **Errors**: `401 unauthenticated`, `400 invalid_request` (missing `wantsReturn`), `404 not_found`, `429 rate_limited` (20/10min per caller), `409 is_driver`, `409 wrong_status` (not scheduled), `409 already_joined`, `409 full`, `409 departed` (D-23 — departure time has passed; only the driver can seat anyone after that)
+- **Side effects**: inserts a `trip_rider` row (`state: "joined"`, `wants_return` as answered). No ledger writes on join — pooled points are awarded on close. The declaration does nothing until the outbound closes, at which point a `true` seats the rider on the generated return leg and a `false` is what frees that seat for everyone else — never before (D-35).
 
 ### `POST /api/trips/:id/leave`
 Drop a seat you're holding.
@@ -322,8 +337,8 @@ kudos, once per trip. Awards the driver `group.kudos_weight` points.
 - **Auth**: required, caller must be a confirmed rider (`trip_rider.state = "confirmed"`) on this trip
 - **Request**: `{ comment?: string (max 500) }`
 - **Response**: `201 { kudos }`
-- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `409 wrong_status` (not closed), `409 is_driver`, `403 not_confirmed_rider`, `429 rate_limited` (20/hour per caller), `409 already_given`, `500 kudos_failed`
-- **Scoring (D-19)**: the award is `group.kudos_weight × the trip's confirmed rider count` (guests included), so a kudos on a full car is worth more than one on a solo pickup. Floors at one rider.
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `409 wrong_status` (not closed), `409 is_driver`, `403 not_confirmed_rider`, `429 rate_limited` (20/hour per caller), `409 already_given` (**including a kudos already given on the other leg of the same round trip** — D-35 answer (B): one per rider per *ride*, and the `unique (trip_id, from_profile_id)` constraint alone cannot see across two rows), `500 kudos_failed`
+- **Scoring (D-19, amended by D-35)**: the award is `group.kudos_weight × the ride's confirmed rider count` (guests included), so a kudos on a full car is worth more than one on a solo pickup. On a round trip that count is the **fuller of the two legs**, not the leg being rated — a rider rates the leg where their ride ended, usually the emptier return, and scaling by that alone would pay the driver less for having carried more people. Floors at one rider.
 - **Side effects**: inserts a `kudos` row; inserts a `kind: "kudos"` `points_ledger` entry for the driver.
 
 ### `POST /api/trips/:id/kudos/decline`
@@ -508,13 +523,23 @@ Cross-group trip explorer. `?status=scheduled|started|closed|cancelled` filters;
 - **Side effects**: none.
 
 ### `POST /api/admin/trips/:id/force-close`
-Safety-net close for a stuck trip. Never touches `points_ledger` — same rule as the cron auto-close, since nobody confirmed who actually rode.
+Safety-net close for a stuck trip — and, since D-35, the way an admin generates a return leg for a
+driver who forgot to close. **This route used to never touch `points_ledger`; D-35 answer (A)
+retired that rule for started trips**, because a forgotten close now costs the driver both legs'
+awards and strands every rider who declared a return.
+
+Two behaviours, by the trip's status:
+
+| Status | What happens | `mode` |
+|---|---|---|
+| `started` | the full **restricted close** — every active rider confirmed, nobody marked `no_show`, driver paid, return leg generated | `"restricted"` |
+| `scheduled` | status-only close, as before — no ride happened, so nothing to pay for and no leg to build | `"status_only"` |
 
 - **Auth**: `platform_admin`
 - **Request**: `{ reason: string (1-500 chars, required) }`
-- **Response**: `{ trip }`
-- **Errors**: `401 unauthenticated`, `403 forbidden`, `400 invalid_request`, `404 not_found`, `409 wrong_status` (already closed/cancelled), `500 update_failed`
-- **Side effects**: sets `trip.status = "closed"`/`closed_at`; inserts an `audit_log` row (`action: "force_close_trip"`, `after` includes the required reason).
+- **Response**: `{ trip, mode }`; for a started trip also `{ confirmedCount, pointsAwarded, backTripId }`
+- **Errors**: `401 unauthenticated`, `403 forbidden`, `400 invalid_request`, `404 not_found`, `409 wrong_status` (already closed/cancelled), `500 update_failed`, plus the close route's `500` codes for a started trip
+- **Side effects**: sets `trip.status = "closed"`/`closed_at`; inserts an `audit_log` row (`action: "force_close_trip"`, `after` includes the required reason, the `mode`, and — for a started trip — `confirmedCount`, `pointsAwarded` and `backTripId`). For a started trip, every side effect of a restricted `POST /api/trips/:id/close` as well.
 
 ### `GET /api/admin/ledger`
 Full `points_ledger` browse. `?profileId=`/`?groupId=` filter; `?limit=`/`?offset=` paginate.

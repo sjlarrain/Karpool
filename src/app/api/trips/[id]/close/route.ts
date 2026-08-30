@@ -3,28 +3,25 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
-import { transition, type TripTransitionErrorCode } from "@/domain/tripMachine";
-import { computeCloseAwards, computeNoShowPenalty } from "@/domain/points";
-import { notifyProfiles } from "@/lib/notify/tripNotify";
-
-const STATUS_BY_ERROR: Record<TripTransitionErrorCode, number> = {
-  not_driver: 403,
-  wrong_status: 409,
-  too_early: 409,
-};
+import { closeTrip } from "@/lib/api/closeTrip";
 
 const bodySchema = z.object({
   // trip_rider row ids (not profile ids) of currently-active registered riders the driver confirms
-  // actually rode. Any active registered rider not listed here is marked no_show.
+  // actually rode. Any active registered rider not listed here is marked no_show. Ignored on a
+  // restricted close — see below.
   confirmedTripRiderIds: z.array(z.string().uuid()).default([]),
   guestNames: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
 });
 
-// POST /api/trips/:id/close — driver only, started->closed. Confirms riders (unconfirmed active
-// registered riders become no_show), adds guest riders, awards the driver 1 "drive" + 1 "pool" per
-// confirmed rider (registered or guest — points_ledger.profile_id can't reference a guest, so guest
-// contributions land on the driver, matching the sketch's "still count toward your pooled score"),
-// and queues a "rate" notification for each confirmed registered rider.
+// POST /api/trips/:id/close — started -> closed. Confirms riders, awards the driver 1 "drive" +
+// 1 escalating "pool" per confirmed rider, and queues the kudos prompt.
+//
+// D-35 mechanic (i): no longer driver-only. A rider on the trip, or a group admin, may close a
+// ride the driver forgot to close — because on a round trip the close is also what materialises
+// the return leg, and a driver who forgets would otherwise strand everyone who declared a return.
+// A non-driver gets the RESTRICTED close: every active rider is confirmed, nobody can be marked a
+// no-show, and the body's confirmedTripRiderIds/guestNames are ignored. Deciding that a colleague
+// did not show up is a judgement only the driver was there to make.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
@@ -39,142 +36,40 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "invalid_request", issues: parsed.error.issues }, { status: 400 });
   }
 
-  const { data: trip } = await supabase
-    .from("trip")
-    .select("driver_id, status, depart_at, group_id")
-    .eq("id", id)
-    .maybeSingle();
+  // RLS (is_member) makes this null for a non-member, giving the same 404 as a missing trip.
+  const { data: trip } = await supabase.from("trip").select("id, group_id").eq("id", id).maybeSingle();
   if (!trip) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const result = transition(
-    { status: trip.status, driverId: trip.driver_id, departAt: trip.depart_at },
-    "close",
-    { profileId: user.id },
-  );
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: STATUS_BY_ERROR[result.error] });
-  }
-
-  const { data: group } = await supabase
-    .from("group")
-    .select("drive_weight, pool_weight, pool_step, no_show_penalty")
-    .eq("id", trip.group_id)
-    .maybeSingle();
-  if (!group) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
-
-  const { data: activeRiders, error: ridersError } = await supabase
-    .from("trip_rider")
-    .select("id, profile_id")
-    .eq("trip_id", id)
-    .in("state", ["joined", "confirmed"]);
-  if (ridersError) {
-    return NextResponse.json({ error: "rider_lookup_failed" }, { status: 500 });
-  }
-
-  // Only trip_rider ids that actually belong to this trip's active riders count — a stale or
-  // spoofed id in the request body is silently ignored rather than trusted.
-  const activeById = new Map((activeRiders ?? []).map((r) => [r.id, r]));
-  const confirmedIds = parsed.data.confirmedTripRiderIds.filter((rid) => activeById.has(rid));
-  const noShowIds = (activeRiders ?? []).map((r) => r.id).filter((rid) => !confirmedIds.includes(rid));
-
-  const confirmedProfileIds = confirmedIds
-    .map((rid) => activeById.get(rid)?.profile_id)
-    .filter((pid): pid is string => !!pid);
-
   const admin = createSupabaseAdminClient();
 
-  if (confirmedIds.length > 0) {
-    const { error } = await admin.from("trip_rider").update({ state: "confirmed" }).in("id", confirmedIds);
-    if (error) return NextResponse.json({ error: "confirm_failed", message: error.message }, { status: 500 });
-  }
-  if (noShowIds.length > 0) {
-    const { error } = await admin.from("trip_rider").update({ state: "no_show" }).in("id", noShowIds);
-    if (error) return NextResponse.json({ error: "no_show_failed", message: error.message }, { status: 500 });
-  }
-
-  let insertedGuests: { id: string; guest_name: string | null }[] = [];
-  if (parsed.data.guestNames.length > 0) {
-    const { data, error } = await admin
-      .from("trip_rider")
-      .insert(parsed.data.guestNames.map((guestName) => ({ trip_id: id, guest_name: guestName, state: "confirmed" as const })))
-      .select("id, guest_name");
-    if (error) return NextResponse.json({ error: "guest_add_failed", message: error.message }, { status: 500 });
-    insertedGuests = data ?? [];
-  }
-
-  const confirmedProfiles =
-    confirmedProfileIds.length > 0
-      ? await supabase.from("profile").select("id, display_name").in("id", confirmedProfileIds)
-      : { data: [] as { id: string; display_name: string }[] };
-  const nameByProfileId = new Map((confirmedProfiles.data ?? []).map((p) => [p.id, p.display_name]));
-
-  const riderNames = [
-    ...confirmedProfileIds.map((pid) => nameByProfileId.get(pid) ?? "A rider"),
-    ...insertedGuests.map((g) => g.guest_name ?? "Guest"),
-  ];
-
-  const awards = computeCloseAwards(riderNames, {
-    driveWeight: group.drive_weight,
-    poolWeight: group.pool_weight,
-    poolStep: group.pool_step,
-  });
-
-  // The driver's awards and the no-show penalties go in as one append-only batch. Penalties are
-  // charged to the RIDER who booked and didn't ride, never to the driver, and only to registered
-  // riders — a guest has no profile to hold points and nobody booked a seat on their behalf.
-  const noShowProfileIds = noShowIds
-    .map((rid) => activeById.get(rid)?.profile_id)
-    .filter((pid): pid is string => !!pid);
-  const noShowPenalty = computeNoShowPenalty(group.no_show_penalty);
-
-  const { error: ledgerError } = await admin.from("points_ledger").insert([
-    ...awards.map((award) => ({
-      profile_id: trip.driver_id,
-      group_id: trip.group_id,
-      trip_id: id,
-      kind: award.kind,
-      points: award.points,
-      reason: award.reason,
-    })),
-    ...noShowProfileIds.map((pid) => ({
-      profile_id: pid,
-      group_id: trip.group_id,
-      trip_id: id,
-      kind: noShowPenalty.kind,
-      points: noShowPenalty.points,
-      reason: noShowPenalty.reason,
-    })),
+  const [{ data: seat }, { data: membership }] = await Promise.all([
+    admin.from("trip_rider").select("id").eq("trip_id", id).eq("profile_id", user.id).in("state", ["joined", "confirmed"]).maybeSingle(),
+    admin.from("membership").select("group_role").eq("group_id", trip.group_id).eq("profile_id", user.id).maybeSingle(),
   ]);
-  if (ledgerError) {
-    return NextResponse.json({ error: "ledger_write_failed", message: ledgerError.message }, { status: 500 });
-  }
 
-  await notifyProfiles(confirmedProfileIds, {
-    type: "rate",
-    title: "Trip closed — leave kudos",
-    body: "Rate your driver's ride and award points.",
+  const result = await closeTrip({
     tripId: id,
+    actor: {
+      profileId: user.id,
+      isRider: !!seat,
+      isGroupAdmin: membership?.group_role === "group_admin",
+    },
+    confirmedTripRiderIds: parsed.data.confirmedTripRiderIds,
+    guestNames: parsed.data.guestNames,
   });
 
-  const { data: updated, error } = await admin
-    .from("trip")
-    .update({ status: result.nextStatus, closed_at: new Date().toISOString() })
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error || !updated) {
-    return NextResponse.json({ error: "update_failed", message: error?.message }, { status: 500 });
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
   }
 
   return NextResponse.json({
-    trip: updated,
-    confirmedCount: confirmedProfileIds.length + insertedGuests.length,
-    noShowCount: noShowIds.length,
-    pointsAwarded: awards.reduce((sum, a) => sum + a.points, 0),
+    trip: result.trip,
+    mode: result.mode,
+    confirmedCount: result.confirmedCount,
+    noShowCount: result.noShowCount,
+    pointsAwarded: result.pointsAwarded,
+    backTripId: result.backTripId,
   });
 }

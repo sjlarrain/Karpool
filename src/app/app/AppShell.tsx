@@ -11,6 +11,7 @@ import { TripDetailOverlay } from "./TripDetailOverlay";
 import { RanksScreen } from "./RanksScreen";
 import { YouScreen } from "./YouScreen";
 import { NotificationsSheet, type NotificationItem } from "./NotificationsSheet";
+import { ReturnQuestionSheet } from "./ReturnQuestionSheet";
 import { stopView } from "@/domain/toTripView";
 import type { TripStopView } from "@/domain/types";
 
@@ -83,6 +84,8 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
   const [overlay, setOverlay] = useState<"create" | null>(null);
   // A ride share link (/t/:id) lands here as /app?trip=<id> — open that ride straight away.
   const [openTripId, setOpenTripId] = useState<string | null>(initialTripId);
+  // D-35: the trip whose "coming back too?" question is currently on screen, if any.
+  const [returnQuestionFor, setReturnQuestionFor] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   function flash(message: string) {
@@ -101,15 +104,31 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
     window.history.replaceState({}, "", query ? `/app?${query}` : "/app");
   }
 
-  async function quickJoin(tripId: string) {
+  // D-35 answer (C): a round trip asks the return question before the join lands, with no default
+  // either way. A one-way has no return leg to declare for, so it joins straight through.
+  function quickJoin(tripId: string) {
+    const trip = trips.find((t) => t.id === tripId);
+    if (trip?.direction === "round") {
+      setReturnQuestionFor(tripId);
+      return;
+    }
+    void submitJoin(tripId, false);
+  }
+
+  async function submitJoin(tripId: string, wantsReturn: boolean) {
+    setReturnQuestionFor(null);
     try {
-      const res = await fetch(`/api/trips/${tripId}/join`, { method: "POST" });
+      const res = await fetch(`/api/trips/${tripId}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wantsReturn }),
+      });
       const body = await res.json();
       if (!res.ok) {
         flash(body.message ?? (body.error === "full" ? "That trip just filled up." : "Couldn't join that trip."));
         return;
       }
-      flash("Joined — added to your trips 🎉");
+      flash(wantsReturn ? "Joined both ways — seat home held 🎉" : "Joined — added to your trips 🎉");
       router.refresh();
     } catch {
       flash("Couldn't reach the server — check your connection and try again.");
@@ -254,6 +273,21 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
       )}
 
       {toast && <div className="toast" style={{ position: "fixed" }}>{toast}</div>}
+      {returnQuestionFor &&
+        (() => {
+          const t = trips.find((x) => x.id === returnQuestionFor);
+          if (!t) return null;
+          return (
+            <ReturnQuestionSheet
+              time={t.time}
+              returnTime={t.returnTime}
+              driver={t.driver}
+              onAnswer={(wantsReturn) => void submitJoin(returnQuestionFor, wantsReturn)}
+              onClose={() => setReturnQuestionFor(null)}
+            />
+          );
+        })()}
+
     </main>
   );
 }

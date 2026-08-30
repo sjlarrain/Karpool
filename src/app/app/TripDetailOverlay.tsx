@@ -7,6 +7,7 @@ import { StopSign } from "./StopSign";
 import { rideShareMessage, rideShareUrl } from "@/domain/tripShare";
 import { shareOrCopy } from "@/lib/share";
 import { CloseTripOverlay } from "./CloseTripOverlay";
+import { ReturnQuestionSheet } from "./ReturnQuestionSheet";
 
 interface Pickup {
   id: string;
@@ -53,6 +54,8 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
+  // D-35: the "coming back too?" question, shown before a join on a round trip.
+  const [askingReturn, setAskingReturn] = useState(false);
   const [closing, setClosing] = useState(false);
   const [kudosComment, setKudosComment] = useState("");
   // Sketch default: the toggle starts off, so the submit reads "Skip & close" until the rider opts in.
@@ -75,11 +78,16 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
     load();
   }, [load]);
 
-  async function act(path: string, message: string) {
+  async function act(path: string, message: string, payload?: unknown) {
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch(`/api/trips/${tripId}/${path}`, { method: "POST" });
+      const res = await fetch(`/api/trips/${tripId}/${path}`, {
+        method: "POST",
+        ...(payload === undefined
+          ? {}
+          : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+      });
       const body = await res.json();
       if (!res.ok) {
         setError(body.message ?? "That didn't work.");
@@ -455,7 +463,18 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
               {trip.seatsLeft} seat{trip.seatsLeft === 1 ? "" : "s"} left — hop in and split the drive.
             </div>
             {shareButton}
-            <button className="btnP" disabled={busy} onClick={() => act("join", "Joined — added to your trips 🎉")}>
+            <button
+              className="btnP"
+              disabled={busy}
+              onClick={() => {
+                // D-35 answer (C): a round trip asks the return question first, with no default.
+                if (trip.direction === "round") {
+                  setAskingReturn(true);
+                  return;
+                }
+                void act("join", "Joined — added to your trips 🎉", { wantsReturn: false });
+              }}
+            >
               Request to join
             </button>
           </>
@@ -619,6 +638,23 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
           </div>
         )}
       </div>
+
+      {askingReturn && (
+        <ReturnQuestionSheet
+          time={trip.time}
+          returnTime={trip.returnTime}
+          driver={trip.driver}
+          onAnswer={(wantsReturn) => {
+            setAskingReturn(false);
+            void act(
+              "join",
+              wantsReturn ? "Joined both ways — seat home held 🎉" : "Joined — added to your trips 🎉",
+              { wantsReturn },
+            );
+          }}
+          onClose={() => setAskingReturn(false)}
+        />
+      )}
 
       {closing && (
         <CloseTripOverlay

@@ -555,6 +555,7 @@ export type Database = {
           group_id: string
           id: string
           out_stop_id: string | null
+          parent_trip_id: string | null
           return_at: string | null
           started_at: string | null
           status: "scheduled" | "started" | "closed" | "cancelled"
@@ -571,6 +572,7 @@ export type Database = {
           group_id: string
           id?: string
           out_stop_id?: string | null
+          parent_trip_id?: string | null
           return_at?: string | null
           started_at?: string | null
           status?: "scheduled" | "started" | "closed" | "cancelled"
@@ -587,6 +589,7 @@ export type Database = {
           group_id?: string
           id?: string
           out_stop_id?: string | null
+          parent_trip_id?: string | null
           return_at?: string | null
           started_at?: string | null
           status?: "scheduled" | "started" | "closed" | "cancelled"
@@ -635,6 +638,7 @@ export type Database = {
           state: "joined" | "left" | "confirmed" | "no_show"
           stop_order: number | null
           trip_id: string
+          wants_return: boolean
         }
         Insert: {
           added_by_profile_id?: string | null
@@ -648,6 +652,7 @@ export type Database = {
           state?: "joined" | "left" | "confirmed" | "no_show"
           stop_order?: number | null
           trip_id: string
+          wants_return?: boolean
         }
         Update: {
           added_by_profile_id?: string | null
@@ -661,6 +666,7 @@ export type Database = {
           state?: "joined" | "left" | "confirmed" | "no_show"
           stop_order?: number | null
           trip_id?: string
+          wants_return?: boolean
         }
         Relationships: [
           {
@@ -726,6 +732,7 @@ export type Database = {
           state: "joined" | "left" | "confirmed" | "no_show"
           stop_order: number | null
           trip_id: string
+          wants_return: boolean
         }
         SetofOptions: {
           from: "*"
@@ -734,8 +741,37 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      // Hand-added (0013): D-35's return-leg generator. Returns the back trip — the existing one
+      // if it has already been materialised, which is what makes every close path idempotent — or
+      // null for a trip that has no return leg to build.
+      generate_back_trip: {
+        Args: { p_parent_trip_id: string }
+        Returns: {
+          back_stop_id: string | null
+          cancelled_reason: string | null
+          capacity: number
+          closed_at: string | null
+          created_at: string
+          depart_at: string
+          direction: "out" | "back" | "round"
+          driver_id: string
+          group_id: string
+          id: string
+          out_stop_id: string | null
+          parent_trip_id: string | null
+          return_at: string | null
+          started_at: string | null
+          status: "scheduled" | "started" | "closed" | "cancelled"
+        } | null
+        SetofOptions: {
+          from: "*"
+          to: "trip"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       join_trip: {
-        Args: { p_profile_id: string; p_trip_id: string }
+        Args: { p_profile_id: string; p_trip_id: string; p_wants_return: boolean }
         Returns: {
           added_by_profile_id: string | null
           guest_name: string | null
@@ -747,6 +783,7 @@ export type Database = {
           state: "joined" | "left" | "confirmed" | "no_show"
           stop_order: number | null
           trip_id: string
+          wants_return: boolean
         }
         SetofOptions: {
           from: "*"

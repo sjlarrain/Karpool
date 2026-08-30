@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { computeKudosAward } from "@/domain/points";
+import { confirmedRiderCountForRide } from "@/lib/api/closeTrip";
 
 const bodySchema = z.object({ comment: z.string().trim().max(500).optional() });
 
@@ -26,7 +27,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "invalid_request", issues: parsed.error.issues }, { status: 400 });
   }
 
-  const { data: trip } = await supabase.from("trip").select("id, status, driver_id, group_id").eq("id", id).maybeSingle();
+  const { data: trip } = await supabase
+    .from("trip")
+    .select("id, status, driver_id, group_id, parent_trip_id")
+    .eq("id", id)
+    .maybeSingle();
   if (!trip) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -58,6 +63,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const admin = createSupabaseAdminClient();
 
+  // D-35 answer (B): kudos is one per rider per RIDE, not per leg. The unique(trip_id,
+  // from_profile_id) constraint only stops a second kudos on the SAME row, so on a round trip —
+  // which is now two rows — it would happily let one rider rate the same driver twice on the same
+  // day, each one scaled by car fullness. The sibling leg is checked here instead.
+  const siblingId = await siblingLegId(admin, id, trip.parent_trip_id);
+  if (siblingId) {
+    const { data: onSibling } = await admin
+      .from("kudos")
+      .select("id")
+      .eq("trip_id", siblingId)
+      .eq("from_profile_id", user.id)
+      .maybeSingle();
+    if (onSibling) {
+      return NextResponse.json(
+        { error: "already_given", message: "You've already given kudos for this ride." },
+        { status: 409 },
+      );
+    }
+  }
+
   const { allowed } = await checkRateLimit(admin, user.id, "kudos", 20, 3600);
   if (!allowed) {
     return NextResponse.json({ error: "rate_limited", message: "Too many kudos attempts — try again in a bit." }, { status: 429 });
@@ -81,15 +106,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "kudos_failed", message: error?.message }, { status: 500 });
   }
 
-  // D-19: a kudos is worth more on a fuller car. Count the confirmed riders on this trip (guests
-  // included — they count toward pooling everywhere else too) and scale the award by it.
-  const { count: confirmedRiderCount } = await admin
-    .from("trip_rider")
-    .select("id", { count: "exact", head: true })
-    .eq("trip_id", id)
-    .eq("state", "confirmed");
-
-  const award = computeKudosAward(group.kudos_weight, confirmedRiderCount ?? 1);
+  // D-19: a kudos is worth more on a fuller car. D-35 answer (B) makes that the FULLER of the two
+  // legs on a round trip — a rider rates the leg where their ride ended, usually the emptier
+  // return, and scaling by that alone would pay the driver less for having carried more people.
+  const award = computeKudosAward(group.kudos_weight, await confirmedRiderCountForRide(id));
 
   await admin.from("points_ledger").insert({
     profile_id: trip.driver_id,
@@ -101,4 +121,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   });
 
   return NextResponse.json({ kudos }, { status: 201 });
+}
+
+// The other half of a round trip, if this leg is one: the parent when called on a generated return
+// leg, the generated leg when called on the outbound. At most one of each, guaranteed by the
+// unique index on trip.parent_trip_id.
+async function siblingLegId(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  tripId: string,
+  parentTripId: string | null,
+): Promise<string | null> {
+  if (parentTripId) return parentTripId;
+  const { data: child } = await admin.from("trip").select("id").eq("parent_trip_id", tripId).maybeSingle();
+  return child?.id ?? null;
 }

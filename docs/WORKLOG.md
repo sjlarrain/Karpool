@@ -1,5 +1,64 @@
 # Worklog
 
+## Shipped (2026-08-30 — D-35 first slice: the round trip's return leg becomes a real trip)
+- **Migration `0013_round_trip_back_leg.sql`.** `trip.parent_trip_id` with a unique partial index —
+  load-bearing, because four separate paths can now ask for a return leg and nothing else on the row
+  records that it already exists. `trip_rider.wants_return`. `join_trip()` re-signed to carry the
+  answer (old 2-arg version dropped, so a caller that forgets fails loudly). New
+  `generate_back_trip()`: locks the parent, returns an existing leg unchanged, **adopts** a
+  hand-published `back` trip at the return hour rather than duplicating it (the D-36 collision), and
+  seats confirmed riders who declared a return, oldest first, up to remaining capacity.
+- **Close is no longer driver-only** (D-35 mechanic (i)). `transition()` gained `not_permitted` and a
+  `closeMode`; a rider or group admin gets the **restricted** close — confirms everyone, marks nobody
+  a `no_show`, ignores the body's guests — and it **pays the driver the full award** (answer (A)).
+  The three close callers now share one `src/lib/api/closeTrip.ts` so they cannot drift.
+- **`force-close` stopped being points-free**, deliberately. Its old "never touches `points_ledger`"
+  rule does not survive D-35: a forgotten close would cost the driver both legs. Started trips take
+  the restricted close; `scheduled` trips keep the old status-only behaviour.
+- **Kudos is per ride, not per leg** (answer (B)). The outbound close prompts only riders who are
+  *not* returning; returning riders are prompted when the back leg closes. The kudos route rejects a
+  kudos already given on the sibling leg — `unique (trip_id, from_profile_id)` cannot see across two
+  rows — and scales the award by the **fuller** leg via `confirmedRiderCountForRide()`.
+- **The join question is asked outright** (answer (C)): `wantsReturn` is required with no zod default,
+  so a join that never asked is a 400. New `ReturnQuestionSheet` with two equally-weighted answers and
+  no pre-selection, wired into both join paths (the card's quick-join and the detail overlay).
+- Docs: `docs/API.md` updated for all four changed endpoints in the same commit; D-35 in
+  `docs/DECISIONS.md` carries the four answers and the four contradictions found against built code.
+
+## In Progress
+- Nothing. The slice is complete and `pnpm verify` is green.
+
+## Next
+- **Apply migration 0013 to the linked project** (`supabase db push`) — it is written but NOT yet
+  applied, so nothing above is live. Then regenerate types (`pnpm db:types:linked`); the new columns
+  and `generate_back_trip` are currently **hand-patched** into `src/types/database.ts`.
+- **Verify the loop end-to-end against the live project**: join a round trip both ways, close the
+  outbound, confirm the back leg appears with the right riders and the decliner's seat is free.
+- **D-35 mechanic (ii): T−2h auto-generation in `/api/cron/tick`** — the deferred half of the design.
+  Until it ships, the rider/admin close is the only safety net for a driver who forgets.
+- Then **D-36** (the same-hour publish key — still needs the developer's answer), then D-31/32/33.
+
+## Blocked On
+- **The Supabase Vault secrets** (D-21) — the developer said they would fix this on 2026-08-30. The
+  T−2h auto-generation cannot ship until the tick has a caller, which is exactly why mechanic (ii)
+  was deferred out of this slice.
+- **D-36's key** is undefined (driver + hour, ± group, ± direction). `generate_back_trip()` adopts an
+  existing same-hour back trip so the generator itself is safe either way, but the publish-side rule
+  cannot be built without it.
+- `CLAUDE.md` §4 still reads "Kudos: one per rider per **trip**" while the decision is per **ride** —
+  that file is immutable to the agent, so the developer edits it by hand (same as the stale D-19
+  scoring line).
+- Unchanged: custom SMTP (D-22), the Supabase URL config.
+
+## Gates Green
+- G1 (`pnpm verify`): green — typecheck, lint, **162/162 tests** across 13 files.
+- G3 (trip state machine): the exhaustive matrix still passes and now covers the non-driver close —
+  a rider and a group admin get `restricted`, the driver keeps `full`, a stranger gets
+  `not_permitted`, and opening close did **not** open `start`/`cancel` (asserted).
+- G8 (API docs): every changed route re-documented in the same commit.
+- **Not claimable yet**: nothing in this slice has run against a real database. Migration 0013 is
+  unapplied, so `generate_back_trip()` has never executed — the SQL is reviewed, not verified.
+
 ## Shipped (2026-08-28, later — backlog corrected and re-prioritised by the developer)
 - **D-34 was recorded wrong and is rewritten.** The first reading had it as "each trip picks its own
   destination". The developer's actual intent is an **event model**: large groups with no fixed

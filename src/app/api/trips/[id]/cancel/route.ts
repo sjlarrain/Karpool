@@ -7,6 +7,9 @@ import { transition, type TripTransitionErrorCode } from "@/domain/tripMachine";
 
 const STATUS_BY_ERROR: Record<TripTransitionErrorCode, number> = {
   not_driver: 403,
+  // D-35 opened close, and only close, to riders and group admins. start and cancel stay
+  // driver-only, so this branch is unreachable here — it exists to keep the map total.
+  not_permitted: 403,
   wrong_status: 409,
   too_early: 409,
 };
