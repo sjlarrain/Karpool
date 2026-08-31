@@ -28,6 +28,16 @@
 - Docs: `docs/API.md` updated for all four changed endpoints in the same commit; D-35 in
   `docs/DECISIONS.md` carries the four answers and the four contradictions found against built code.
 
+- **D-35 mechanic (ii) — T−2h auto-generation, built 2026-08-30.** `/api/cron/tick` grew a second
+  job: a `round` trip still `started` within 120 minutes of its `return_at` and owed a leg gets the
+  restricted close from the scheduler — driver paid, leg materialised, `cron_generate_return_leg`
+  in `audit_log` with a null actor. `isSystem` on the transition actor; `profileId` is now optional,
+  and an actor with neither id nor flag is refused.
+- **The ordering bug that fell out of it.** The 6h auto-close would have beaten the deadline on every
+  ordinary commute (out 08:00, back 18:00 → stale 14:00, due 16:00), closing the outbound for zero
+  points and leaving the return unbuilt. Generation now runs first and the auto-close skips any round
+  trip still owed a leg.
+
 ## In Progress
 - Nothing. The slice is complete and `pnpm verify` is green.
 
@@ -37,15 +47,15 @@
   and `generate_back_trip` are currently **hand-patched** into `src/types/database.ts`.
 - **Verify the loop end-to-end against the live project**: join a round trip both ways, close the
   outbound, confirm the back leg appears with the right riders and the decliner's seat is free.
-- **D-35 mechanic (ii): T−2h auto-generation in `/api/cron/tick`** — the deferred half of the design,
-  and now more urgent than it was. With riders excluded from closing, an **admin noticing** is the
-  only thing between a forgotten close and a stranded return leg.
+- **Prove the tick in production.** Mechanic (ii) is built but has never run on a schedule — the
+  Vault secrets are what stand between it and a real tick. Until then an **admin noticing** is still
+  the only safety net for a forgotten close.
 - Then **D-36** (the same-hour publish key — still needs the developer's answer), then D-31/32/33.
 
 ## Blocked On
-- **The Supabase Vault secrets** (D-21) — the developer said they would fix this on 2026-08-30. The
-  T−2h auto-generation cannot ship until the tick has a caller, which is exactly why mechanic (ii)
-  was deferred out of this slice.
+- **The Supabase Vault secrets** (D-21) — the developer said they would fix this on 2026-08-30.
+  Mechanic (ii) is now written, so the secrets are the last thing between it and a live scheduler:
+  with no caller, no tick, and the generator never runs.
 - **D-36's key** is undefined (driver + hour, ± group, ± direction). `generate_back_trip()` adopts an
   existing same-hour back trip so the generator itself is safe either way, but the publish-side rule
   cannot be built without it.
@@ -55,7 +65,7 @@
 - Unchanged: custom SMTP (D-22), the Supabase URL config.
 
 ## Gates Green
-- G1 (`pnpm verify`): green — typecheck, lint, **162/162 tests** across 13 files.
+- G1 (`pnpm verify`): green — typecheck, lint, **172/172 tests** across 13 files.
 - G3 (trip state machine): the exhaustive matrix still passes and now covers the non-driver close —
   a rider and a group admin get `restricted`, the driver keeps `full`, a stranger gets
   `not_permitted`, and opening close did **not** open `start`/`cancel` (asserted).

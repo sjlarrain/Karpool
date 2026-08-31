@@ -432,12 +432,20 @@ Remove a browser's `PushSubscription`. Scoped to the caller's own subscriptions.
 ### `GET|POST /api/cron/tick`
 Called every 5 minutes by the `carpool-tick` pg_cron job in Supabase (D-21, migration `0008`),
 which posts here through `pg_net` with the `CRON_SECRET` header; `GET` is kept for triggering a tick
-by hand with curl. Two jobs per
-tick: (1) departure reminders — any
+by hand with curl. Four jobs per
+tick, in this order: (1) departure reminders — any
 `scheduled` trip departing within 15 minutes gets a `reminder`-type notification + push to its
 driver and active riders, deduped by checking for an existing reminder notification carrying that
-trip's id; (2) auto-close — any trip left `started` for 6+ hours is force-closed as a safety net
-(never touches `points_ledger` — no driver confirmed who actually rode); (3) expiry (D-23) — any
+trip's id; (2) **return-leg generation (D-35 mechanic (ii))** — a `round` trip still `started`
+within `RETURN_LEG_LEAD_MINUTES` (120) of its `return_at`, with no leg built yet, is closed by the
+scheduler in the same **restricted** form an admin gets: every active rider confirmed, nobody marked
+`no_show`, **the driver paid in full**, and the return leg materialised. The deadline is measured
+against the *return* departure, so a rider learns two hours out whether they have a seat home. This
+job runs **before** the auto-close, and any round trip still owed a leg is **skipped** by it — on a
+normal commute (out 08:00, back 18:00) the 6h stale mark falls at 14:00, before the 16:00 deadline,
+so without that skip the auto-close would take the trip first, close it for zero points and leave
+the return unbuilt; (3) auto-close — any *other* trip left `started` for 6+ hours is force-closed as
+a safety net (never touches `points_ledger` — no driver confirmed who actually rode); (4) expiry (D-23) — any
 trip still `scheduled` 24 hours (`UNSTARTED_GRACE_HOURS`) after its departure time is ended as
 `cancelled` with `cancelled_reason: "not_started"`. No points and no penalties: an expiry is the
 absence of a trip, not anyone's fault. That update is re-guarded on `status = 'scheduled'`, so a
@@ -445,9 +453,9 @@ trip started between the read and the write is left alone.
 
 - **Auth**: `Authorization: Bearer <CRON_SECRET>`. The scheduler reads both the URL and the secret from Supabase Vault (`carpool_tick_url`, `carpool_cron_secret`) at call time, so neither is in any tracked file; with either missing the job returns without calling anything.
 - **Request**: none
-- **Response**: `{ remindersSent: number, autoClosed: number, expired: number }`
+- **Response**: `{ remindersSent: number, returnLegsGenerated: number, autoClosed: number, expired: number }`
 - **Errors**: `401 unauthorized`
-- **Side effects**: inserts `notification` rows (`type: "reminder"` for departures, `type: "change"` for expiries) + sends push; updates stale trips' `status`/`closed_at` and expired trips' `status`/`cancelled_reason`; inserts an `audit_log` row per auto-close (`cron_auto_close`) and per expiry (`cron_expire_unstarted`), both with `actor_profile_id: null` marking them system-acted.
+- **Side effects**: inserts `notification` rows (`type: "reminder"` for departures, `type: "change"` for expiries, `type: "change"` to the back leg's riders when one is generated) + sends push; updates stale trips' `status`/`closed_at` and expired trips' `status`/`cancelled_reason`; **writes `points_ledger` for a generated return leg** — the one place the scheduler moves points, and deliberately so: the outbound was driven whether or not anyone remembered to close it; inserts an `audit_log` row per generation (`cron_generate_return_leg`), per auto-close (`cron_auto_close`) and per expiry (`cron_expire_unstarted`), all with `actor_profile_id: null` marking them system-acted.
 
 ## Feedback
 

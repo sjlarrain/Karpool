@@ -45,6 +45,19 @@ export function kudosPromptTargets({ confirmedProfileIds, seatedOnBackLegProfile
 }
 
 /**
+ * D-35 mechanic (ii): has the scheduler waited long enough for the driver to close the outbound?
+ *
+ * The generation deadline is measured against the RETURN departure, not the outbound one. That is
+ * what makes it useful: a rider needs to know whether they have a seat home while there is still
+ * time to arrange one if they do not, and the outbound's own timing says nothing about that. A
+ * driver who closes normally always beats this — the deadline only fires for a ride nobody closed.
+ */
+export function isReturnLegDue(returnAt: string, now: Date, leadMinutes: number): boolean {
+  const deadline = new Date(returnAt).getTime() - leadMinutes * 60_000;
+  return now.getTime() >= deadline;
+}
+
+/**
  * D-35 answer (B), the multiplier half: `computeKudosAward` scales a kudos by how full the car was,
  * so a two-leg ride needs one number rather than two. It is the FULLER leg — a driver who carried
  * three people out and two back drove a three-person car, and should not be paid less because

@@ -125,3 +125,31 @@ describe("tripMachine.transition — admin close (D-35)", () => {
     expect(result).toEqual({ ok: false, error: "wrong_status" });
   });
 });
+
+// D-35 mechanic (ii) — the scheduler closes an outbound nobody closed, so the return leg exists
+// before anyone needs it. It acts as nobody: no profile id at all.
+describe("tripMachine.transition — the scheduler's close (D-35 mechanic (ii))", () => {
+  it("closes a started trip in restricted form, with no profile id", () => {
+    const result = transition(snapshot("started"), "close", { isSystem: true }, ON_TIME);
+    expect(result).toEqual({ ok: true, nextStatus: "closed", closeMode: "restricted" });
+  });
+
+  it("cannot close a trip that never started — an unstarted ride is D-23's expiry to own, not this", () => {
+    const result = transition(snapshot("scheduled"), "close", { isSystem: true }, ON_TIME);
+    expect(result).toEqual({ ok: false, error: "wrong_status" });
+  });
+
+  it("cannot start or cancel — the scheduler ends rides, it does not begin or call them off", () => {
+    for (const event of ["start", "cancel"] as const) {
+      expect(transition(snapshot("scheduled"), event, { isSystem: true }, ON_TIME)).toEqual({
+        ok: false,
+        error: "not_driver",
+      });
+    }
+  });
+
+  it("an actor with no id and no system flag is still refused — absence is not authority", () => {
+    const result = transition(snapshot("started"), "close", {}, ON_TIME);
+    expect(result).toEqual({ ok: false, error: "not_permitted" });
+  });
+});

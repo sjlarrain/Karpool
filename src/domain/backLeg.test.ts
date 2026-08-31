@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shouldGenerateBackLeg, kudosPromptTargets, rideRiderCount } from "./backLeg";
+import { shouldGenerateBackLeg, kudosPromptTargets, rideRiderCount, isReturnLegDue } from "./backLeg";
 import { computeKudosAward } from "./points";
 
 describe("shouldGenerateBackLeg", () => {
@@ -80,5 +80,39 @@ describe("rideRiderCount", () => {
     const outThreeBackOne = computeKudosAward(weights, rideRiderCount(3, 1));
     const straightThree = computeKudosAward(weights, 3);
     expect(outThreeBackOne).toEqual(straightThree);
+  });
+});
+
+// D-35 mechanic (ii): the scheduler stops waiting for the driver this long before the RETURN
+// departure, not the outbound one — the deadline exists so a rider still has time to arrange
+// something else if their seat home never materialised.
+describe("isReturnLegDue", () => {
+  const RETURN_AT = "2026-08-30T18:00:00.000Z";
+  const LEAD = 120;
+  const at = (iso: string) => new Date(iso);
+
+  it("is not due three hours out", () => {
+    expect(isReturnLegDue(RETURN_AT, at("2026-08-30T15:00:00.000Z"), LEAD)).toBe(false);
+  });
+
+  it("is due exactly at the deadline — the boundary is inclusive, so a tick landing on it acts", () => {
+    expect(isReturnLegDue(RETURN_AT, at("2026-08-30T16:00:00.000Z"), LEAD)).toBe(true);
+  });
+
+  it("is not due one minute before the deadline", () => {
+    expect(isReturnLegDue(RETURN_AT, at("2026-08-30T15:59:00.000Z"), LEAD)).toBe(false);
+  });
+
+  it("stays due after the deadline passes, so a missed tick still catches up", () => {
+    expect(isReturnLegDue(RETURN_AT, at("2026-08-30T17:30:00.000Z"), LEAD)).toBe(true);
+  });
+
+  it("is still due after the return itself has departed — better a late leg than none", () => {
+    expect(isReturnLegDue(RETURN_AT, at("2026-08-30T19:00:00.000Z"), LEAD)).toBe(true);
+  });
+
+  it("measures against the return, not the outbound — a lead of 0 fires only at the return time", () => {
+    expect(isReturnLegDue(RETURN_AT, at("2026-08-30T17:59:00.000Z"), 0)).toBe(false);
+    expect(isReturnLegDue(RETURN_AT, at("2026-08-30T18:00:00.000Z"), 0)).toBe(true);
   });
 });

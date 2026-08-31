@@ -9,7 +9,9 @@ export const START_WINDOW_MINUTES = 120; // D-16: fixed T-2h window
 export type TripTransitionEvent = "start" | "close" | "cancel";
 
 export interface TripTransitionActor {
-  profileId: string;
+  // Absent for the scheduler, which acts as nobody. An absent id can never match driverId, so it
+  // fails closed on every driver-only transition.
+  profileId?: string;
   // D-35 mechanic (i), narrowed by the developer on 2026-08-30: close is no longer driver-only,
   // but it opens to the GROUP ADMIN and nobody else. Closing a ride the driver forgot is what
   // generates the return leg, so someone other than the driver has to be able to do it — but not a
@@ -17,6 +19,9 @@ export interface TripTransitionActor {
   // others is an authority a colleague should not have over a colleague.
   // Start and cancel stay driver-only: they are the driver's own commitments to make.
   isGroupAdmin?: boolean;
+  // D-35 mechanic (ii): the scheduler closing an outbound nobody closed, so the return leg exists
+  // before anyone needs it. Not a person — audit_log records it with a null actor.
+  isSystem?: boolean;
 }
 
 // D-35 answer (A). A "full" close is the driver's: it names who actually rode, so anyone left
@@ -63,7 +68,7 @@ export function transition(
   const isDriver = actor.profileId === trip.driverId;
 
   if (event === "close") {
-    if (!isDriver && !actor.isGroupAdmin) {
+    if (!isDriver && !actor.isGroupAdmin && !actor.isSystem) {
       return { ok: false, error: "not_permitted" };
     }
   } else if (!isDriver) {

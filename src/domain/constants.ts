@@ -12,6 +12,13 @@ export const GROUP_CODE_LENGTH = 6;
 export const UNSTARTED_GRACE_HOURS = 24;
 export const NOT_STARTED_REASON = "not_started";
 
+// D-35 mechanic (ii): how long before a round trip's return departure the scheduler gives up
+// waiting for the driver and materialises the return leg itself. Deliberately the same 120 as
+// D-16's start window, for the same reason — two hours out is the point where a rider needs to
+// know whether they have a seat home, and where a driver can still act on the answer. The two
+// numbers coincide but are not the same rule: changing one does not imply changing the other.
+export const RETURN_LEG_LEAD_MINUTES = 120;
+
 // D-27: how far back the Carpools tab's Past section reaches. Applied default, not a decision —
 // all-time history is a bigger query and a bigger screen than was asked for.
 export const PAST_TRIPS_WINDOW_DAYS = 30;

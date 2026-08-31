@@ -14,8 +14,11 @@ import { notifyProfiles } from "@/lib/notify/tripNotify";
 // points; that is the driver's authority, or the admin's, and not one passenger's over another's.
 
 export interface CloseTripActor {
-  profileId: string;
+  profileId?: string;
   isGroupAdmin?: boolean;
+  // D-35 mechanic (ii). The scheduler gets the same restricted close as the admin: it confirms
+  // everyone and penalises nobody, because it was not there either.
+  isSystem?: boolean;
 }
 
 export interface CloseTripInput {
