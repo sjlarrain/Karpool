@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CreateGroupSheet } from "./app/GroupScreen";
+import { readJsonBody } from "@/lib/http/readJsonBody";
 
 // Ported from the sketch's LOCKED block: authenticated users with no group see zero trips and a
 // way back into the group-code step. The sketch itself has no "create a group" affordance here —
@@ -26,9 +27,9 @@ export function LockedGate() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
       });
-      const body = await res.json();
+      const body = await readJsonBody(res);
       if (!res.ok) {
-        setError(body.message ?? "That code didn't work.");
+        setError(body?.message ?? "That code didn't work.");
         return;
       }
       router.refresh();

@@ -8,6 +8,7 @@ import { STOP_ICONS } from "@/domain/types";
 import type { StopIcon } from "@/domain/types";
 import { shareOrCopy } from "@/lib/share";
 import { StopGlyph, isStopIcon } from "./StopSign";
+import { readJsonBody, UNREADABLE_REPLY } from "@/lib/http/readJsonBody";
 
 type Group = Database["public"]["Tables"]["group"]["Row"];
 type PickupPlace = Database["public"]["Tables"]["pickup_place"]["Row"];
@@ -329,9 +330,9 @@ function AddPlace({ groupId, kind, onAdded }: { groupId: string; kind: "pickup" 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label, address, kind, icon: isStop ? icon : undefined }),
       });
-      const body = await res.json();
+      const body = await readJsonBody(res);
       if (!res.ok) {
-        setError(body.message ?? `Couldn't add that ${isStop ? "stop" : "pickup place"}.`);
+        setError(body?.message ?? `Couldn't add that ${isStop ? "stop" : "pickup place"}.`);
         return;
       }
       setLabel("");
@@ -423,9 +424,14 @@ function SwitchGroupSheet({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
       });
-      const body = await res.json();
+      const body = await readJsonBody<{ group: { id: string } }>(res);
       if (!res.ok) {
-        setError(body.message ?? "That code didn't work.");
+        setError(body?.message ?? "That code didn't work.");
+        return;
+      }
+      // Joined, but with no id to navigate to — say so rather than pushing to `/app?g=undefined`.
+      if (!body?.group) {
+        setError(UNREADABLE_REPLY);
         return;
       }
       router.push(`/app?g=${body.group.id}`);
@@ -527,9 +533,13 @@ export function CreateGroupSheet({ onClose }: { onClose: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, originLabel: origin, destLabel: dest }),
       });
-      const body = await res.json();
+      const body = await readJsonBody<{ group: { id: string } }>(res);
       if (!res.ok) {
-        setError(body.message ?? "Couldn't create that group.");
+        setError(body?.message ?? "Couldn't create that group.");
+        return;
+      }
+      if (!body?.group) {
+        setError(UNREADABLE_REPLY);
         return;
       }
       router.push(`/app?g=${body.group.id}`);

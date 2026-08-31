@@ -4,6 +4,7 @@ import { useState } from "react";
 import { SEATS } from "@/domain/constants";
 import type { TripStopView } from "@/domain/types";
 import { StopPicker } from "./StopSign";
+import { readJsonBody, UNREADABLE_REPLY } from "@/lib/http/readJsonBody";
 
 // D-38. The driver's own trip, still scheduled, opened for a change of plan. Deliberately narrower
 // than "Offer a trip": the day, the times, the seats and the stops move — the direction does not.
@@ -91,9 +92,13 @@ export function EditTripOverlay({
           ...(hasStops && direction !== "out" && { backStopId: backStopId || null }),
         }),
       });
-      const body = await res.json();
+      const body = await readJsonBody<{ changed?: string[]; notifiedRiders?: number }>(res);
       if (!res.ok) {
-        setError(body.message ?? "Couldn't save those changes.");
+        setError(body?.message ?? "Couldn't save those changes.");
+        return;
+      }
+      if (!body) {
+        setError(UNREADABLE_REPLY);
         return;
       }
       const changed: string[] = body.changed ?? [];
