@@ -87,6 +87,24 @@
   path returns before the per-subscription loop, so a broken channel cannot smear `failure_count`
   across healthy subscriptions.
 
+## Also 2026-08-31 (the sharing-link report, finally diagnosed)
+- The developer confirmed **Confirm email is OFF**, which retires the theory the invite fix was
+  built on: with confirmation off `signUp` returns a session immediately, so no real visitor ever
+  reaches `/auth/callback` and `pending_group_code` is never on their path. `redeemPendingInvite`
+  is still correct defence-in-depth, but **it was not the reported bug.**
+- **New `tests/e2e/invite-link.spec.ts`, green against the live database**, drives the path nothing
+  covered: signed-out visitor opens `/j/CODE`, signs up **on the invite page**, and is carried into
+  the group — plus an existing account signing in there, and an unusable code. `share-link.spec.ts`
+  covers the *ride* link and joins by typing the code; `signup-confirm.spec.ts` covers a route that
+  only runs when confirmation is on. So the one live onboarding path was the one untested path, and
+  it **works**.
+- **The real fault is [D-40]:** the link people naturally share is the **ride** link `/t/:id`, and
+  [D-20] deliberately makes it a dead end for non-members ("Ask whoever shared it for the group's
+  invite link"). Correct, and indistinguishable from a broken link to whoever sent it. Recommended
+  fix is to let `rideShareMessage()` carry the invite in the sharer's own text — which leaks nothing
+  they don't already hold — but it is a product judgement with three open questions, so nothing was
+  built.
+
 ## In Progress
 - Nothing mid-flight. Ten commits on `dev`, not merged and not pushed.
 
