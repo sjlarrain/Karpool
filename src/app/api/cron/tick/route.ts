@@ -8,9 +8,10 @@ import {
   RETURN_LEG_LEAD_MINUTES,
   DEPARTURE_REMINDER_LEAD_MINUTES,
   DEPARTURE_REMINDER_GRACE_MINUTES,
+  CLOSE_REMINDER_AFTER_MINUTES,
 } from "@/domain/constants";
 import { isReturnLegDue } from "@/domain/backLeg";
-import { isDepartureReminderDue } from "@/domain/tripReminders";
+import { isDepartureReminderDue, isCloseReminderDue } from "@/domain/tripReminders";
 import { closeTrip } from "@/lib/api/closeTrip";
 
 const AUTO_CLOSE_AFTER_HOURS = 6;
@@ -26,14 +27,18 @@ type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 // 1. Departure reminders — any scheduled trip departing within DEPARTURE_REMINDER_LEAD_MINUTES
 //    gets a "reminder" notification to its driver and active riders, deduped against an existing
 //    reminder row carrying that trip's id.
-// 2. Generate a round trip's return leg (D-35 mechanic (ii)) — a round trip whose outbound is
+// 2. Close reminders — a trip left "started" for CLOSE_REMINDER_AFTER_MINUTES nudges its driver to
+//    close it. Closing is the only thing that writes points_ledger, so until it happens the ride
+//    has paid nobody; the 6h auto-close below is a tidier, not a substitute, because it awards
+//    nothing at all.
+// 3. Generate a round trip's return leg (D-35 mechanic (ii)) — a round trip whose outbound is
 //    still "started" RETURN_LEG_LEAD_MINUTES before the return departure is closed by the
 //    scheduler, in the same restricted form an admin gets, which pays the driver and materialises
 //    the return leg. Without this the leg's existence depends on the driver remembering one tap.
-// 3. Auto-close abandoned trips — a trip left "started" for AUTO_CLOSE_AFTER_HOURS is force-closed.
+// 4. Auto-close abandoned trips — a trip left "started" for AUTO_CLOSE_AFTER_HOURS is force-closed.
 //    This is a safety net, not the real close flow: no driver confirmed who rode, so it never
 //    touches points_ledger. Logged to audit_log (actor_profile_id: null marks it as system-acted).
-// 4. Expire trips nobody started (D-23) — a scheduled trip stays live for UNSTARTED_GRACE_HOURS
+// 5. Expire trips nobody started (D-23) — a scheduled trip stays live for UNSTARTED_GRACE_HOURS
 //    past its departure so a driver who forgot to tap Start can still put it right. After that it
 //    ends as cancelled with reason NOT_STARTED_REASON, which the UI shows as "Past · never started"
 //    rather than "Cancelled". No points and no penalties: an expiry is the absence of a trip.
@@ -44,7 +49,7 @@ type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 // row, the error was dropped on the floor with only `data` destructured, and the reminder read as
 // "never sent" — re-pushing to every phone on the trip on each of the three ticks the 15-minute
 // window spans. Asking for at most one row is the whole fix.
-async function alreadyNotified(admin: AdminClient, type: "reminder", tripId: string): Promise<boolean> {
+async function alreadyNotified(admin: AdminClient, type: "reminder" | "close_reminder", tripId: string): Promise<boolean> {
   const { data, error } = await admin
     .from("notification")
     .select("id")
@@ -113,7 +118,28 @@ async function handleTick(request: Request) {
     else remindersSent += 1;
   }
 
-  // --- 2. Return legs -------------------------------------------------------------------------
+  // --- 2. Close reminders ---------------------------------------------------------------------
+  // Only the driver is nudged: they are the only person who can close a trip, so telling the riders
+  // their points are stuck would be noise they cannot act on.
+  const { data: openTrips } = await admin.from("trip").select("id, driver_id, started_at").eq("status", "started");
+
+  let closeRemindersSent = 0;
+  let closeReminderFailures = 0;
+  for (const trip of openTrips ?? []) {
+    if (!isCloseReminderDue(trip.started_at, now, CLOSE_REMINDER_AFTER_MINUTES)) continue;
+    if (await alreadyNotified(admin, "close_reminder", trip.id)) continue;
+
+    const result = await notifyProfiles([trip.driver_id], {
+      type: "close_reminder",
+      title: "Close your trip",
+      body: "This ride is still open. Close it to confirm who came along and hand out the points.",
+      tripId: trip.id,
+    });
+    if (result.error) closeReminderFailures += 1;
+    else closeRemindersSent += 1;
+  }
+
+  // --- 3. Return legs -------------------------------------------------------------------------
   // D-35 mechanic (ii) runs BEFORE the 6h auto-close, and the auto-close then skips any round trip
   // still owed a return leg. The ordering matters: on a normal commute the 6h mark arrives first
   // (out at 08:00, back at 18:00 — stale at 14:00, due at 16:00), so without this the auto-close
@@ -165,7 +191,7 @@ async function handleTick(request: Request) {
     returnLegsGenerated += 1;
   }
 
-  // --- 3. Auto-close abandoned trips -----------------------------------------------------------
+  // --- 4. Auto-close abandoned trips -----------------------------------------------------------
   const staleBefore = new Date(now.getTime() - AUTO_CLOSE_AFTER_HOURS * 3_600_000).toISOString();
   const { data: staleTrips } = await admin.from("trip").select("id").eq("status", "started").lte("started_at", staleBefore);
 
@@ -185,7 +211,7 @@ async function handleTick(request: Request) {
     autoClosed += 1;
   }
 
-  // --- 4. Expire trips nobody started ----------------------------------------------------------
+  // --- 5. Expire trips nobody started ----------------------------------------------------------
   const expireBefore = new Date(now.getTime() - UNSTARTED_GRACE_HOURS * 3_600_000).toISOString();
   const { data: expiredTrips } = await admin
     .from("trip")
@@ -228,6 +254,8 @@ async function handleTick(request: Request) {
   return NextResponse.json({
     remindersSent,
     reminderFailures,
+    closeRemindersSent,
+    closeReminderFailures,
     returnLegsGenerated,
     autoClosed,
     expired,
