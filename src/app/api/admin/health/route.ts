@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticateAdmin } from "@/lib/api/adminAuth";
+import { pushChannelStatus } from "@/lib/push/send";
 
 // GET /api/admin/health — push delivery health, the scheduler's own pulse, and recent cron
 // activity. Maps API errors aren't reported: Phase 6 (Google Maps) isn't built yet, so there's
@@ -43,7 +44,10 @@ export async function GET() {
   };
 
   return NextResponse.json({
-    push: { totalSubscriptions, failingSubscriptions, deadSubscriptions },
+    // `channel` reports the sending side; the counts report the receiving side. A healthy-looking
+    // set of subscriptions with an unconfigured channel is the exact state in which every
+    // notification is written to the bell and none of them ever reaches a phone.
+    push: { totalSubscriptions, failingSubscriptions, deadSubscriptions, channel: pushChannelStatus() },
     scheduler,
     recentCronAutoCloses: cronRuns ?? [],
     maps: { status: "not_applicable", message: "Phase 6 (Google Maps) not built yet" },
