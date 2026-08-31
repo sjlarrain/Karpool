@@ -19,6 +19,8 @@
     "db:diff": "supabase db diff",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "db:reset-data": "tsx scripts/reset-data.ts",
+    "db:audit-ledger": "tsx scripts/audit-ledger.ts",
+    "db:dedupe-ledger": "tsx scripts/dedupe-close-ledger.ts",
     "verify": "pnpm typecheck && pnpm lint && pnpm test"
   },
   "dependencies": {

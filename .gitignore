@@ -90,3 +90,6 @@ yarn-error.log*
 .cache/
 tmp/
 temp/
+
+# Ledger repair backups (scripts/dedupe-close-ledger.ts) — local data, never committed.
+scripts/backups/

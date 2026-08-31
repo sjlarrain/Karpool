@@ -1,5 +1,30 @@
 # Worklog
 
+## Shipped (2026-08-31 — the duplicated close awards, repaired on the live leaderboard)
+- **Shipped:** the data cleanup [D-39] said would be needed. Developer sent a Ranks screenshot —
+  "He pooled 4 people not 12" — and they were right. `scripts/audit-ledger.ts` (read-only) found
+  **one** trip (`0e938b27`, 4 riders) whose close awards were written **three times**: `16:20:51`,
+  `16:20:56`, `17:03:16`, 1 `drive` + 4 `pool` per run. Textbook replayable close — ledger written,
+  push threw on the invalid `VAPID_SUBJECT`, status never flipped, driver tapped Close again.
+  `scripts/dedupe-close-ledger.ts` (dry-run default, JSON backup before delete, keeps the earliest
+  batch per trip using the shared `created_at` as the batch key) removed **10 rows / −68 pts**.
+  Alejandro Rivera: **3 driven · 12 pooled · 102** → **1 driven · 4 pooled · 34**. Re-audited clean;
+  no other trip affected. Deleted rather than compensated with `admin_adjust` on purpose — `driven`
+  and `pooled` are *row counts*, so an adjustment fixes the score and leaves the counts lying.
+  Recorded as **[D-41]**.
+- **In progress:** nothing mid-flight.
+- **Next:** close the remaining double-pay *race* — the [D-39] reordering kills the sequential
+  retry, but `closeTrip` still reads the trip status and then writes without a conditional update,
+  so two concurrent closes both pass `transition()` and both pay. A gated
+  `UPDATE trip SET status='closed' WHERE id=? AND status='started'` before the ledger write, or a
+  unique index on the close-award rows, closes it. Then back to the backlog: D-35 return leg, D-30.
+- **Blocked on:** [D-41]'s open question — is `pooled` a driver-only stat? Riders show `0 pooled`
+  even when they rode, which is [D-19] working as designed; the developer's "the other have been
+  pooled once" was read as evidence for the count of four, not as a request to credit riders.
+  Changing it is a scoring-model decision. Also still the developer's: the `carpool-tick` Vault
+  secrets, a valid `VAPID_SUBJECT`, migration `0017`.
+- **Gates now green:** `pnpm verify` — typecheck, lint, **215/215 tests across 17 suites**.
+
 ## Shipped (2026-08-31 — branch `dev`: notifications that arrive, invites that survive, and a nudge to close)
 - **The ask (developer):** three patches on a new `dev` branch — "fix the notification system... so
   the users receive them when the trip is starting"; "the sharing link is not working so users can
