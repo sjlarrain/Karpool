@@ -38,6 +38,12 @@
   points and leaving the return unbuilt. Generation now runs first and the auto-close skips any round
   trip still owed a leg.
 
+- **Deployed 2026-08-30.** All seven commits pushed to `origin/main` (`2e1d00e..8021e49`), which is
+  what Vercel builds from. `pnpm build` was run locally first so a broken production build could not
+  be the way we found out. The live site answers 200. **Which commit is actually serving cannot be
+  confirmed from outside** — that needs the Vercel dashboard, or the user-visible tell: the join
+  sheet on a round trip now asks whether you are coming back.
+
 ## In Progress
 - Nothing. The slice is complete and `pnpm verify` is green.
 
