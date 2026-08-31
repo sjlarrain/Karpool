@@ -32,13 +32,38 @@
   a change still counts, whether a `started` trip can be abandoned (it cannot — the sharpest gap), and
   whether a serially-cancelling driver is accountable at all.
 
+## Also this session (verification attempt)
+- **The developer reported running migration `0016`; it is not on the live database.** Proven, not
+  inferred: the trip detail route now answers
+  `500 rider_lookup_failed / "column trip_rider.penalty_waived_at does not exist"`, and
+  `supabase migration list --linked` shows no remote row for 0016. **Everything else is verified and
+  waiting on that one statement.**
+- **Two bugs found by trying to verify, both fixed and committed separately from the feature.**
+  (1) `GET /api/trips/:id` and `POST .../leave` destructured only `data` from the `trip_rider`
+  query, so a failed query read as "nobody has joined": the detail screen answered **200 with an
+  empty car** and offered a rider "Request to join" for a seat they already held, and `leave`
+  answered `404 "You're not riding this trip"` to someone who was. That silent failure is what made
+  a missing column look like a stale UI, and it is what CLAUDE.md §3.5's "no swallowed errors" is
+  for. (2) `core-loop.spec.ts` (gate **G5**) has been **red since D-35 shipped** — every spec
+  publishes a round trip, and answer (C) put a mandatory "Coming back too?" sheet in front of that
+  join, so the spec waited for a confirmation that could not arrive. Fixed with a `joinTrip()`
+  helper that answers the question.
+- **New spec `tests/e2e/trip-edit-cancel.spec.ts`** covers the whole D-38 flow against the real
+  database, and is written so it cannot pass vacuously: the rider is charged −5 for leaving an
+  **unchanged** trip inside the window, then rejoins the **same** trip and leaves again after an
+  edit — same rider, same trip, same distance from departure, only the edit differs. It also asserts
+  the untouched-save no-op, `notifiedRiders`, the rider-facing wording both ways, and that both
+  notification rows actually reached the rider.
+
 ## In Progress
-- Nothing mid-flight.
+- **`tests/e2e/trip-edit-cancel.spec.ts` is written and currently red on the missing column.** It is
+  the verification; re-run it the moment `0016` lands.
 
 ## Next
-- Apply migration `0016` to the live project (`supabase db push`) — the agent's sandbox refused it.
-  **The new code selects `penalty_waived_at`, so it must not be deployed before the migration lands.**
-  Then verify the edit/cancel flow in a real browser against the live database.
+- **Apply migration `0016`** — the agent's sandbox refuses `supabase db push`, and the developer's
+  first attempt did not reach the live project (see above). **The committed code selects
+  `penalty_waived_at`, so it must not be deployed before the migration lands.** Then re-run
+  `npx playwright test tests/e2e/trip-edit-cancel.spec.ts`.
 - [D-38] (c): an "abandon" path from `started`, if the developer wants one.
 
 ## Blocked On
@@ -50,8 +75,10 @@
 ## Gates Green
 - G1 (`pnpm verify`): typecheck, lint and **195/195** tests green (11 new in `tripEdit.test.ts`).
   Same pre-existing `next lint` custom-font warning, still non-blocking.
-- **Not claimed:** live verification of this feature. It cannot run until `0016` is applied — the
-  detail and leave routes select a column the live database does not yet have.
+- **G5 was red and nobody knew.** `core-loop.spec.ts` has been failing since D-35's join question
+  shipped; it is fixed here but **still not green**, because the same missing column now stops it at
+  the trip detail screen. G5 is claimable only once `0016` is applied.
+- **Not claimed:** live verification of this feature, for the same one reason.
 
 ## Shipped (2026-08-30 — trip times rendered in the reader's time zone, not the server's)
 - **The bug (developer, from production): a ride published for 7:45 read back as 14:45.** Storage was
