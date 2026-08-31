@@ -38,9 +38,8 @@ comment on column trip_rider.wants_return is
   'D-35: rider declared at join time that they are returning with this driver. Only meaningful on a round trip. The seat on the return leg is held until the outbound closes; declining frees it for everyone else at that moment, never before.';
 
 -- === 3. join_trip() carries the answer ======================================
--- Signature change, so the old two-argument version is dropped rather than left callable -- a
--- caller that forgets the answer must fail loudly, not silently default to "not returning".
-drop function if exists public.join_trip(uuid, uuid);
+-- Signature change. The old two-argument version is KEPT for now, as a shim that delegates with
+-- "not returning" -- see the bottom of this section for why, and for when to remove it.
 
 create or replace function public.join_trip(p_trip_id uuid, p_profile_id uuid, p_wants_return boolean)
 returns trip_rider
@@ -103,6 +102,33 @@ $$;
 
 revoke execute on function public.join_trip(uuid, uuid, boolean) from public, anon, authenticated;
 grant execute on function public.join_trip(uuid, uuid, boolean) to service_role;
+
+-- DEPLOY SHIM -- REMOVE IN A LATER MIGRATION.
+--
+-- The instinct was to drop the two-argument version outright, so a caller that forgets the answer
+-- fails loudly instead of silently defaulting to "not returning". That is right for application
+-- code and wrong for a live database: the deployed app is whatever is on origin/main at the time
+-- this migration runs, and it still calls join_trip(trip, profile). Dropping the old signature
+-- makes every join on the live app fail from the instant the migration lands until the new build
+-- is serving -- an outage whose length is however long a deploy takes, for no benefit.
+--
+-- So the old signature survives as a two-line delegation. It is not a default in disguise: nothing
+-- in the new code path can reach it, because the API layer requires the answer in zod before it
+-- ever gets here. It exists only for requests served by the previous build.
+--
+-- Remove it in the migration after the new build is live and confirmed. At that point a call to
+-- the two-argument form genuinely is a bug, and should fail loudly again.
+create or replace function public.join_trip(p_trip_id uuid, p_profile_id uuid)
+returns trip_rider
+language sql
+security definer
+set search_path = public
+as $$
+  select public.join_trip(p_trip_id, p_profile_id, false);
+$$;
+
+revoke execute on function public.join_trip(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.join_trip(uuid, uuid) to service_role;
 
 -- === 4. the generator =======================================================
 -- Called by every close path. Idempotent by construction: it locks the parent first, and the

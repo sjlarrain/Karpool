@@ -42,11 +42,20 @@
 - Nothing. The slice is complete and `pnpm verify` is green.
 
 ## Next
-- **Apply migration 0013 to the linked project** (`supabase db push`) — it is written but NOT yet
-  applied, so nothing above is live. Then regenerate types (`pnpm db:types:linked`); the new columns
-  and `generate_back_trip` are currently **hand-patched** into `src/types/database.ts`.
+- ~~Apply migration 0013~~ **DONE 2026-08-30.** Pushed to the linked project; `migration list` shows
+  0013 on both sides and the remote reports up to date. A **deploy shim** went in before the push:
+  the two-argument `join_trip` survives as a delegation passing `false`, because the live build still
+  calls it and dropping it would have broken every join until a redeploy. **Owed: a migration that
+  drops the shim once the new build is live.**
+- **Do NOT run `pnpm db:types:linked` expecting a clean result.** It was run and reverted. The CLI
+  emits `string` for every CHECK-constrained text column, flattening the hand-narrowed unions
+  (`trip.status`, `trip.direction`, `profile.platform_role`, `trip_rider.state`, `points_ledger.kind`,
+  `notification.type`) the rest of the app type-checks against — 5 type errors immediately. The header
+  of `src/types/database.ts` says as much; the file is deliberately hand-maintained. Its entries were
+  diffed against the freshly generated output and match the live schema exactly.
 - **Verify the loop end-to-end against the live project**: join a round trip both ways, close the
   outbound, confirm the back leg appears with the right riders and the decliner's seat is free.
+  The schema is live now, but `generate_back_trip()` has still never actually executed.
 - **Prove the tick in production.** Mechanic (ii) is built but has never run on a schedule — the
   Vault secrets are what stand between it and a real tick. Until then an **admin noticing** is still
   the only safety net for a forgotten close.
