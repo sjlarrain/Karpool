@@ -3,7 +3,8 @@
 // mutable counter).
 //
 // Scoring changed on 2026-08-19 (D-19). Two of the three rules are no longer flat:
-//   - pooling escalates per seat, so a full car is worth disproportionately more than a solo pickup
+//   - filling the car escalates per seat, so a full car is worth disproportionately more than a
+//     solo pickup (D-42 moved this into the driver's `drive` row; it used to be `pool` rows)
 //   - a kudos is scaled by how full that car was, so rating rewards pooling rather than just driving
 //   - a no-show now costs the rider who booked the seat and didn't ride
 // Historic ledger rows are never rewritten: entries carry the points they were worth when written.
@@ -16,33 +17,76 @@ export interface LedgerAward {
 
 export interface CloseWeights {
   driveWeight: number;
+  // Prices the driver's fill bonus: the nth seat adds poolWeight + (n-1)·poolStep to their drive
+  // award. D-42 — this is NOT what a rider earns.
   poolWeight: number;
-  // Added to each successive seat: the nth rider is worth poolWeight + (n-1)·poolStep.
   poolStep: number;
+  // What one ride as a passenger is worth to the rider. Flat: a seat's escalating value is the
+  // driver's incentive to fill the car, and a rider does not choose how full it is.
+  riderPoolWeight: number;
+}
+
+export interface CloseRider {
+  // Null for a guest. A guest fills a seat, so they still pay the driver's fill bonus, but they
+  // have no profile to hold points and so earn nothing themselves (D-09).
+  profileId: string | null;
+  name: string;
+}
+
+export interface CloseAwards {
+  // One row, always. Carries the flat drive weight plus the whole fill bonus.
+  driver: LedgerAward;
+  // One row per registered confirmed rider, on the RIDER's own ledger.
+  riders: { profileId: string; award: LedgerAward }[];
 }
 
 /**
- * What the nth confirmed rider on a trip is worth to the driver (`seatIndex` is 0-based).
- * With the defaults (3, step 2) the seats pay 3, 5, 7 — filling the car beats three solo trips,
+ * What the nth confirmed rider on a trip adds to the DRIVER's award (`seatIndex` is 0-based).
+ * With the defaults (3, step 2) the seats pay 3, 5, 7 — filling the car beats driving it empty,
  * which is the behaviour the whole app exists to encourage.
  */
 export function poolPointsForSeat(seatIndex: number, poolWeight: number, poolStep: number): number {
   return poolWeight + seatIndex * poolStep;
 }
 
-// Closing a trip awards the DRIVER, not the riders: 1 "drive" entry, plus 1 "pool" entry per
-// confirmed rider (registered or guest — guests have no profile to hold their own points, so their
-// contribution can only ever land on the driver; "Guest riders still count toward your pooled
-// score" per the sketch's close-overlay copy applies uniformly to every confirmed rider).
-export function computeCloseAwards(riderNames: string[], weights: CloseWeights): LedgerAward[] {
-  return [
-    { kind: "drive", points: weights.driveWeight, reason: "Drove the trip" },
-    ...riderNames.map((name, index) => ({
-      kind: "pool" as const,
-      points: poolPointsForSeat(index, weights.poolWeight, weights.poolStep),
-      reason: `Pooled ${name}`,
-    })),
-  ];
+/** The driver's whole fill bonus for carrying `seatCount` riders — every seat, summed. */
+export function seatBonus(seatCount: number, poolWeight: number, poolStep: number): number {
+  let total = 0;
+  for (let seat = 0; seat < seatCount; seat += 1) {
+    total += poolPointsForSeat(seat, poolWeight, poolStep);
+  }
+  return total;
+}
+
+/**
+ * Closing a trip pays two different people for two different things (D-42):
+ *   - the DRIVER gets one `drive` row: the flat drive weight plus the fill bonus for every seat
+ *     they filled, guests included.
+ *   - each registered confirmed RIDER gets one `pool` row of their own, because being pooled is
+ *     the thing a rider did. Guests are skipped — no profile, nowhere to put it.
+ *
+ * The driver deliberately gets no `pool` row: they drove, they were not pooled. That inversion is
+ * exactly what D-42 exists to correct.
+ */
+export function computeCloseAwards(riders: CloseRider[], weights: CloseWeights, driverName?: string): CloseAwards {
+  const bonus = seatBonus(riders.length, weights.poolWeight, weights.poolStep);
+  return {
+    driver: {
+      kind: "drive",
+      points: weights.driveWeight + bonus,
+      reason: riders.length === 0 ? "Drove the trip" : `Drove the trip (${riders.length} pooled)`,
+    },
+    riders: riders
+      .filter((rider): rider is CloseRider & { profileId: string } => !!rider.profileId)
+      .map((rider) => ({
+        profileId: rider.profileId,
+        award: {
+          kind: "pool" as const,
+          points: weights.riderPoolWeight,
+          reason: driverName ? `Pooled with ${driverName}` : "Pooled on a trip",
+        },
+      })),
+  };
 }
 
 /**

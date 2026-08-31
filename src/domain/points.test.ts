@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeCloseAwards,
+  seatBonus,
   computeKudosAward,
   computeLateLeavePenalty,
   computeNoShowPenalty,
@@ -8,7 +9,10 @@ import {
   poolPointsForSeat,
 } from "./points";
 
-const WEIGHTS = { driveWeight: 10, poolWeight: 3, poolStep: 2 };
+const WEIGHTS = { driveWeight: 10, poolWeight: 3, poolStep: 2, riderPoolWeight: 3 };
+
+const rider = (name: string, profileId: string | null = `p-${name}`) => ({ profileId, name });
+const guest = (name: string) => ({ profileId: null, name });
 
 describe("poolPointsForSeat", () => {
   it("escalates: the defaults pay 3, 5, 7 across the seats", () => {
@@ -23,37 +27,69 @@ describe("poolPointsForSeat", () => {
   });
 });
 
+describe("seatBonus", () => {
+  it("sums every seat the driver filled", () => {
+    expect(seatBonus(0, 3, 2)).toBe(0);
+    expect(seatBonus(1, 3, 2)).toBe(3);
+    expect(seatBonus(4, 3, 2)).toBe(24); // 3 + 5 + 7 + 9
+  });
+});
+
 describe("computeCloseAwards", () => {
-  it("always includes a drive award for the driver", () => {
-    const awards = computeCloseAwards([], WEIGHTS);
-    expect(awards).toEqual([{ kind: "drive", points: 10, reason: "Drove the trip" }]);
+  it("pays a lone driver the flat drive weight and nobody else", () => {
+    expect(computeCloseAwards([], WEIGHTS)).toEqual({
+      driver: { kind: "drive", points: 10, reason: "Drove the trip" },
+      riders: [],
+    });
   });
 
-  it("adds one escalating pool award per confirmed rider, registered or guest alike", () => {
-    const awards = computeCloseAwards(["Alex Morgan", "Sam Guest"], WEIGHTS);
-    expect(awards).toEqual([
-      { kind: "drive", points: 10, reason: "Drove the trip" },
-      { kind: "pool", points: 3, reason: "Pooled Alex Morgan" },
-      { kind: "pool", points: 5, reason: "Pooled Sam Guest" },
-    ]);
+  it("gives the driver NO pool row — they drove, they were not pooled (D-42)", () => {
+    const awards = computeCloseAwards([rider("Alex"), rider("Sam")], WEIGHTS);
+    expect(awards.driver.kind).toBe("drive");
+    expect(awards.riders.map((r) => r.profileId)).toEqual(["p-Alex", "p-Sam"]);
   });
 
-  it("makes a full car beat the same riders carried one at a time", () => {
-    const together = computeCloseAwards(["A", "B", "C"], WEIGHTS).reduce((sum, a) => sum + a.points, 0);
-    const separately = ["A", "B", "C"]
-      .map((name) => computeCloseAwards([name], WEIGHTS).reduce((sum, a) => sum + a.points, 0))
-      .reduce((sum, total) => sum + total, 0);
-    expect(together).toBe(25);
-    expect(separately).toBe(39);
-    // Three solo trips still out-earn one full car in raw points — three drives is genuinely more
-    // driving — but each *additional* seat on a single trip is worth more than the last, which is
-    // the incentive D-19 asked for.
-    expect(together).toBeGreaterThan(computeCloseAwards(["A"], WEIGHTS).reduce((s, a) => s + a.points, 0) * 1.9);
+  it("folds the whole fill bonus into the driver's single drive row", () => {
+    // The exact case from the developer's screenshot: one drive, four riders.
+    const awards = computeCloseAwards([rider("A"), rider("B"), rider("C"), rider("D")], WEIGHTS);
+    expect(awards.driver.points).toBe(34); // 10 + (3 + 5 + 7 + 9)
+    expect(awards.driver.reason).toBe("Drove the trip (4 pooled)");
+  });
+
+  it("pays each rider a flat pooled award, however full the car was", () => {
+    const awards = computeCloseAwards([rider("A"), rider("B"), rider("C")], WEIGHTS);
+    expect(awards.riders.map((r) => r.award.points)).toEqual([3, 3, 3]);
+  });
+
+  it("names the driver on the rider's row when one is given", () => {
+    const awards = computeCloseAwards([rider("A")], WEIGHTS, "Alejandro Rivera");
+    expect(awards.riders[0]!.award.reason).toBe("Pooled with Alejandro Rivera");
+    expect(computeCloseAwards([rider("A")], WEIGHTS).riders[0]!.award.reason).toBe("Pooled on a trip");
+  });
+
+  it("lets a guest pay the driver's bonus but earn nothing themselves", () => {
+    const awards = computeCloseAwards([rider("Alex"), guest("Sam Guest")], WEIGHTS);
+    expect(awards.driver.points).toBe(18); // 10 + (3 + 5) — the guest filled the second seat
+    expect(awards.riders).toHaveLength(1);
+    expect(awards.riders[0]!.profileId).toBe("p-Alex");
+  });
+
+  it("still makes each extra seat worth more than the last, to the driver", () => {
+    const points = (n: number) =>
+      computeCloseAwards(Array.from({ length: n }, (_, i) => rider(String(i))), WEIGHTS).driver.points;
+    expect(points(2) - points(1)).toBe(5);
+    expect(points(3) - points(2)).toBe(7);
   });
 
   it("uses the group's configured weights, not the domain defaults", () => {
-    const awards = computeCloseAwards(["Rider", "Second"], { driveWeight: 20, poolWeight: 5, poolStep: 4 });
-    expect(awards.map((a) => a.points)).toEqual([20, 5, 9]);
+    const awards = computeCloseAwards([rider("A"), rider("B")], {
+      driveWeight: 20,
+      poolWeight: 5,
+      poolStep: 4,
+      riderPoolWeight: 7,
+    });
+    expect(awards.driver.points).toBe(34); // 20 + (5 + 9)
+    expect(awards.riders.map((r) => r.award.points)).toEqual([7, 7]);
   });
 });
 

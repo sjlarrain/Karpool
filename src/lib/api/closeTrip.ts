@@ -80,7 +80,7 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
 
   const { data: group } = await admin
     .from("group")
-    .select("drive_weight, pool_weight, pool_step, no_show_penalty")
+    .select("drive_weight, pool_weight, pool_step, rider_pool_weight, no_show_penalty")
     .eq("id", trip.group_id)
     .maybeSingle();
   if (!group) {
@@ -154,24 +154,33 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
     }
   }
 
-  const { data: confirmedProfiles } =
-    confirmedProfileIds.length > 0
-      ? await admin.from("profile").select("id, display_name").in("id", confirmedProfileIds)
-      : { data: [] as { id: string; display_name: string }[] };
-  const nameByProfileId = new Map((confirmedProfiles ?? []).map((p) => [p.id, p.display_name]));
+  // The driver is fetched alongside the riders so a rider's own `pool` row can name who carried
+  // them — "Pooled with Alejandro Rivera" reads as something that happened to them, which is the
+  // whole point of D-42.
+  const { data: namedProfiles } = await admin
+    .from("profile")
+    .select("id, display_name")
+    .in("id", [...new Set([...confirmedProfileIds, trip.driver_id])]);
+  const nameByProfileId = new Map((namedProfiles ?? []).map((p) => [p.id, p.display_name]));
 
-  const riderNames = [
-    ...confirmedProfileIds.map((pid) => nameByProfileId.get(pid) ?? "A rider"),
-    ...insertedGuests.map((g) => g.guest_name ?? "Guest"),
+  const riders = [
+    ...confirmedProfileIds.map((pid) => ({ profileId: pid, name: nameByProfileId.get(pid) ?? "A rider" })),
+    // Guests fill a seat and so pay the driver's bonus, but hold no profile and earn nothing.
+    ...insertedGuests.map((g) => ({ profileId: null, name: g.guest_name ?? "Guest" })),
   ];
 
   // D-35 answer (A): every close pays, whoever tapped it. A leg that was driven is a leg that was
   // driven, and the driver should not lose the award because they forgot the last tap.
-  const awards = computeCloseAwards(riderNames, {
-    driveWeight: group.drive_weight,
-    poolWeight: group.pool_weight,
-    poolStep: group.pool_step,
-  });
+  const awards = computeCloseAwards(
+    riders,
+    {
+      driveWeight: group.drive_weight,
+      poolWeight: group.pool_weight,
+      poolStep: group.pool_step,
+      riderPoolWeight: group.rider_pool_weight,
+    },
+    nameByProfileId.get(trip.driver_id),
+  );
 
   const noShowProfileIds = noShowIds
     .map((rid) => activeById.get(rid)?.profile_id)
@@ -179,8 +188,17 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
   const noShowPenalty = computeNoShowPenalty(group.no_show_penalty);
 
   const { error: ledgerError } = await admin.from("points_ledger").insert([
-    ...awards.map((award) => ({
+    {
       profile_id: trip.driver_id,
+      group_id: trip.group_id,
+      trip_id: tripId,
+      kind: awards.driver.kind,
+      points: awards.driver.points,
+      reason: awards.driver.reason,
+    },
+    // D-42: these land on the RIDERS, not the driver. Being pooled is the rider's achievement.
+    ...awards.riders.map(({ profileId, award }) => ({
+      profile_id: profileId,
       group_id: trip.group_id,
       trip_id: tripId,
       kind: award.kind,
@@ -253,7 +271,8 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
     trip: updated,
     confirmedCount: confirmedProfileIds.length + insertedGuests.length,
     noShowCount: noShowIds.length,
-    pointsAwarded: awards.reduce((sum, a) => sum + a.points, 0),
+    // The driver's own award — this is echoed straight back at them as "+N pts" on close.
+    pointsAwarded: awards.driver.points,
     backTripId,
     backTripSeatedProfileIds,
   };

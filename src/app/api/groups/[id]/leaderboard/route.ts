@@ -27,7 +27,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const { data: group } = await supabase
     .from("group")
-    .select("drive_weight, pool_weight, kudos_weight, pool_step")
+    .select("drive_weight, pool_weight, kudos_weight, pool_step, rider_pool_weight")
     .eq("id", id)
     .maybeSingle();
   if (!group) {
@@ -80,6 +80,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       driveWeight: group.drive_weight,
       poolWeight: group.pool_weight,
       poolStep: group.pool_step,
+      riderPoolWeight: group.rider_pool_weight,
       kudosWeight: group.kudos_weight,
     }),
     viewerProfileId: user.id,

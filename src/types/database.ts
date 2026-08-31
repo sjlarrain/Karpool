@@ -155,6 +155,7 @@ export type Database = {
           origin_label: string
           no_show_penalty: number
           pool_step: number
+          rider_pool_weight: number
           pool_weight: number
         }
         Insert: {
@@ -172,6 +173,7 @@ export type Database = {
           origin_label: string
           no_show_penalty?: number
           pool_step?: number
+          rider_pool_weight?: number
           pool_weight?: number
         }
         Update: {
@@ -189,6 +191,7 @@ export type Database = {
           origin_label?: string
           no_show_penalty?: number
           pool_step?: number
+          rider_pool_weight?: number
           pool_weight?: number
         }
         Relationships: [

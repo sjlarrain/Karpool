@@ -18,6 +18,9 @@ export interface ProfileStats {
   points: number;
 }
 
+// D-42: `pooled` counts the caller's own `pool` rows, and those now belong to the RIDER who took
+// the ride. A driver reads "1 driven · 0 pooled" for a ride they drove, which is what the words
+// mean — before D-42 the driver collected a pool row per passenger and the passengers got none.
 export function aggregateLedger(rows: LedgerRow[]): Map<string, ProfileStats> {
   const stats = new Map<string, ProfileStats>();
   for (const row of rows) {
@@ -55,13 +58,16 @@ export function rankLeaderboard(entries: LeaderboardEntry[]): RankedRow[] {
 }
 
 // The caption sits in a 10.5px slot next to "Leaderboard", so it states the shape of the scoring
-// rather than the full formula: pooling escalates per seat, kudos scale with the car (D-19).
+// rather than the full formula. Four terms, in the order the points are earned: driving, filling
+// the car (paid to the driver through their drive award), being pooled (paid to the rider, D-42),
+// and kudos (scaled by how full the car was, D-19).
 export function formatWeightsCaption(weights: {
   driveWeight: number;
   poolWeight: number;
   poolStep: number;
+  riderPoolWeight: number;
   kudosWeight: number;
 }): string {
-  const pool = weights.poolStep === 0 ? `${weights.poolWeight}·pool` : `pool ${weights.poolWeight}+${weights.poolStep}/seat`;
-  return `${weights.driveWeight}·drive · ${pool} · ${weights.kudosWeight}·kudos×riders`;
+  const seat = weights.poolStep === 0 ? `${weights.poolWeight}/seat` : `${weights.poolWeight}+${weights.poolStep}/seat`;
+  return `${weights.driveWeight}·drive · ${seat} · ${weights.riderPoolWeight}·pool · ${weights.kudosWeight}·kudos×riders`;
 }

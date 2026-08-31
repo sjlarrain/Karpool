@@ -115,6 +115,7 @@ verification with `CRON_SECRET`.
 | `pnpm db:diff` | Diff local schema against migrations |
 | `pnpm db:audit-ledger` | Read-only. Prints every `points_ledger` row grouped by trip, with that trip's riders and a per-profile total, so a duplicated close is visible at a glance. Writes nothing |
 | `pnpm db:dedupe-ledger -- --yes` | Repairs award rows duplicated by a replayed close (see [D-41]). A close writes all its awards in one insert, so a shared `created_at` is the batch key: the earliest batch per trip is kept and later ones deleted. Dry-run without `--yes`; writes a JSON backup to `scripts/backups/` before deleting |
+| `pnpm db:repool-ledger -- --yes` | One-shot D-42 backfill. Rewrites already-closed trips from driver-side pooling to rider-side: the driver's fill bonus folds into their `drive` row and each confirmed rider gains a `pool` row. Idempotent — skips trips already in the new shape. Dry-run without `--yes`; backs up to `scripts/backups/` first |
 | `pnpm db:reset-data --yes` | **Destructive.** Empties the activity tables (`trip`, `trip_rider`, `kudos`, `points_ledger`, `notification`, `audit_log`, `feedback`, `rate_limit_hit`) in the linked project, leaving accounts, groups, memberships, pickup places and push subscriptions intact. Refuses to run without `--yes`; pass `--dry-run` to see the row counts first |
 
 ## Project structure
@@ -152,6 +153,7 @@ scripts/
   reset-data.ts       Clears trip and log data, keeps accounts and groups — see `pnpm db:reset-data`
   audit-ledger.ts     Read-only points_ledger dump grouped by trip — see `pnpm db:audit-ledger`
   dedupe-close-ledger.ts  Removes award rows duplicated by a replayed close — see `pnpm db:dedupe-ledger`
+  repool-ledger.ts    Backfills closed trips into the D-42 rider-side pooling — see `pnpm db:repool-ledger`
 supabase/migrations/ Schema migrations, applied in order
 tests/
   e2e/             Playwright core-loop + ride-share-link tests, shared journey helpers,

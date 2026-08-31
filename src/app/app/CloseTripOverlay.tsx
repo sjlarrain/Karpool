@@ -85,7 +85,7 @@ export function CloseTripOverlay({ tripId, riders, onClose, onClosed }: Props) {
       </div>
       <div className="scroll" style={{ padding: 18 }}>
         <p style={{ font: "600 13px var(--font-body)", lineHeight: 1.5, color: "rgba(0,0,0,.55)", margin: "0 0 16px" }}>
-          Confirm who rode with you. Everyone confirmed gets pooled points and a nudge to leave you kudos.
+          Confirm who rode with you. Everyone confirmed earns their pooled points and a nudge to leave you kudos.
         </p>
 
         {riders.length > 0 && (
@@ -183,7 +183,7 @@ export function CloseTripOverlay({ tripId, riders, onClose, onClosed }: Props) {
           </div>
         )}
         <p style={{ font: "500 11px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "2px 2px 20px" }}>
-          Guest riders still count toward your pooled score.
+          Guest riders fill a seat, so they still count toward your drive bonus.
         </p>
 
         {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "0 0 12px" }}>{error}</p>}

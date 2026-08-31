@@ -1,5 +1,28 @@
 # Worklog
 
+## Shipped (2026-08-31 — "pooled" belongs to the rider, not the driver)
+- **Shipped:** [D-42]. The developer rejected the [D-41] repair — "Alejandro drove once and he
+  wasn't pooled that time. The others must have one pooled" — and they were right about something
+  bigger than the duplicate rows: [D-19] wrote the `pool` row onto the **driver**, so the word meant
+  its own opposite and riders could never score at all. Reshaped so the driver takes one `drive` row
+  carrying `drive_weight` + the whole fill bonus, and each confirmed registered rider takes one
+  `pool` row worth the new per-group `rider_pool_weight`. Developer picked **3** for the rider and
+  **keep the fill bonus, folded into `drove`** — so no driver's total moves, only the label. New
+  `computeCloseAwards` returns `{ driver, riders }` instead of a flat array; migration `0018` adds
+  the column; `scripts/repool-ledger.ts` backfilled the three closed trips (bonus taken from the rows
+  actually written, not recomputed, so totals are preserved). Live leaderboard now reads Alejandro
+  `1 driven · 0 pooled · 34` and Felipe/Manolo/Agustin/sjlarrain `1 pooled · 3` each.
+- **In progress:** nothing mid-flight.
+- **Next:** the [D-41] double-pay race — `closeTrip` still reads trip status then writes without a
+  conditional update, so two concurrent closes both pass `transition()` and both pay. Then D-35, D-30.
+- **Blocked on:** **migration `0018` is NOT applied** — `supabase db push --linked` was refused by
+  this environment's permission layer, so the developer must run it, and it must land *before* the
+  new code deploys (the close and leaderboard routes now select `rider_pool_weight`).
+  `src/types/database.ts` was hand-patched for the column in the meantime; re-run `pnpm
+  db:types:linked` after the push. Note `0017` turned out to be applied already — the [D-39] claim
+  that it was pending is stale. Still the developer's: `carpool-tick` Vault secrets, `VAPID_SUBJECT`.
+- **Gates now green:** `pnpm verify` — typecheck, lint, **220/220 tests across 17 suites**.
+
 ## Shipped (2026-08-31 — the duplicated close awards, repaired on the live leaderboard)
 - **Shipped:** the data cleanup [D-39] said would be needed. Developer sent a Ranks screenshot —
   "He pooled 4 people not 12" — and they were right. `scripts/audit-ledger.ts` (read-only) found

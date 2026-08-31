@@ -3,6 +3,8 @@ import { aggregateLedger, rankLeaderboard, formatWeightsCaption } from "./leader
 import type { LedgerRow, LeaderboardEntry } from "./leaderboard";
 
 describe("aggregateLedger", () => {
+  // D-42: a `pool` row belongs to the rider who took the ride, so profile "a" here is someone
+  // who drove once and was pooled twice on other people's trips — not a driver with passengers.
   it("sums points and counts drive/pool/kudos entries per profile", () => {
     const rows: LedgerRow[] = [
       { profileId: "a", kind: "drive", points: 10 },
@@ -59,21 +61,21 @@ describe("rankLeaderboard", () => {
 });
 
 describe("formatWeightsCaption", () => {
-  it("states the shape of the scoring, not just the weights (D-19)", () => {
-    expect(formatWeightsCaption({ driveWeight: 10, poolWeight: 3, poolStep: 2, kudosWeight: 2 })).toBe(
-      "10·drive · pool 3+2/seat · 2·kudos×riders",
+  it("names four terms: drive, the driver's seat bonus, the rider's pool, kudos (D-42)", () => {
+    expect(formatWeightsCaption({ driveWeight: 10, poolWeight: 3, poolStep: 2, riderPoolWeight: 3, kudosWeight: 2 })).toBe(
+      "10·drive · 3+2/seat · 3·pool · 2·kudos×riders",
     );
   });
 
   it("reflects non-default weights", () => {
-    expect(formatWeightsCaption({ driveWeight: 20, poolWeight: 5, poolStep: 4, kudosWeight: 1 })).toBe(
-      "20·drive · pool 5+4/seat · 1·kudos×riders",
+    expect(formatWeightsCaption({ driveWeight: 20, poolWeight: 5, poolStep: 4, riderPoolWeight: 7, kudosWeight: 1 })).toBe(
+      "20·drive · 5+4/seat · 7·pool · 1·kudos×riders",
     );
   });
 
-  it("drops the per-seat wording when a group turns escalation off", () => {
-    expect(formatWeightsCaption({ driveWeight: 10, poolWeight: 3, poolStep: 0, kudosWeight: 2 })).toBe(
-      "10·drive · 3·pool · 2·kudos×riders",
+  it("drops the escalation wording when a group turns it off, keeping the seat term", () => {
+    expect(formatWeightsCaption({ driveWeight: 10, poolWeight: 3, poolStep: 0, riderPoolWeight: 3, kudosWeight: 2 })).toBe(
+      "10·drive · 3/seat · 3·pool · 2·kudos×riders",
     );
   });
 });

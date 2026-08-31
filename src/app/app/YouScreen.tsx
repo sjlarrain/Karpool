@@ -199,7 +199,7 @@ export function YouScreen({
 
       <div style={{ display: "flex", gap: 9, marginBottom: 10 }}>
         {tile(stats?.driven ?? 0, "Trips driven", "var(--purple)")}
-        {tile(stats?.pooled ?? 0, "People pooled", "var(--teal)")}
+        {tile(stats?.pooled ?? 0, "Times pooled", "var(--teal)")}
         {tile(stats?.kudos ?? 0, "Kudos earned", "var(--green)")}
       </div>
 
