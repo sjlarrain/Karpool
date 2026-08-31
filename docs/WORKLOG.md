@@ -1,5 +1,62 @@
 # Worklog
 
+## Shipped (2026-08-31 — riders stop earning points, and keep their count)
+- **Shipped:** [D-49], the last decision left open by the audit. The developer said "Remove rider
+  points — we don't need points for riders." [D-49] had already logged that sentence as blocked
+  because it reads two ways, and one of them silently reverses [D-42] from the same morning. Put
+  back to them as the two leaderboards it produces rather than as the abstract question; they chose
+  **(a)**: a rider still reads `1 pooled`, worth **0 points**. Both of the day's instructions hold
+  at once — "the others must have one pooled" (a count) and "shouldn't have any point" (no score).
+- **The register's own plan for (a) was wrong, and would have broken every close.** [D-49] said it
+  was "a one-value change, `rider_pool_weight = 0`, no migration". `points_ledger` carries
+  `check (points <> 0)` (`0001_init.sql:115`), so a zero-point `pool` row is rejected by the
+  database and takes the whole close insert with it — the identical trap [D-43] documented behind
+  `kudos_weight = 0`, one decision earlier. Caught before writing any of it.
+- **So `pooled` moved off the ledger.** It is now a count of the rider's `confirmed` `trip_rider`
+  seats on closed trips — windowed on `trip.closed_at` for the month view so both halves of a
+  member's line cover the same period, all-time for `/api/me/points`. `aggregateLedger()` takes the
+  count as a **required** argument (optional would let a caller fall back to `0 pooled` for
+  everyone — the exact bug [D-42] existed to fix) and seeds profiles holding no ledger row at all,
+  which is the case that matters: a member who has only ever ridden earns nothing, appears nowhere
+  in the ledger, and must still show their rides. Side benefit — the display no longer depends on
+  the ledger, so a duplicated award cannot read as "12 pooled" on screen the way [D-41] did.
+- **Driver untouched.** Still `drive_weight` + the escalating seat bonus, guests included, so
+  [D-19]'s economics keep their value exactly; a new test pins the 1/2/3-rider totals at 13/18/25 so
+  a future change cannot move them by accident.
+- Dropping the rider award made the close's profile-name lookup dead — it existed only to caption a
+  rider's row "Pooled with <driver>" — so that query is gone from the close path too.
+- Migration `0019` re-comments `rider_pool_weight` as deprecated rather than dropping it (dropping
+  is irreversible without a restore; an int per group is cheap). Applied to the live project.
+- `scripts/repool-ledger.ts` is superseded and now **pinned to its own historical shape** instead of
+  calling the live `computeCloseAwards()`, which has moved on. A backfill must reproduce what it was
+  written for, not follow today's rules.
+
+## In Progress
+- Nothing mid-flight. The code is complete and green; one data step is waiting on the developer.
+
+## Next
+- Nothing new proposed. The backlog after this is unchanged: [D-30] is next per the developer's
+  ordering, and the [D-43] triage list (D-44..D-48) is still unbuilt.
+
+## Blocked On
+- **`pnpm db:unpool-ledger -- --yes`** — deletes the 5 existing rider `pool` rows (−15 pts, one
+  per rider; no driver row touched). Dry run reviewed and correct; the delete itself was refused by
+  the sandbox's permission classifier, so the developer runs it. **Until it runs, live riders read
+  `1 pooled · 3` instead of `1 pooled · 0`** — the code is right, the old rows are not.
+- `CLAUDE.md` §4 still states `10·driven + 3·pooled + 2·kudos`. That line was already stale after
+  [D-19]; [D-49] makes the `3·pooled` term actively wrong. The file is immutable to the agent — the
+  developer applies it.
+- The [D-41] double-pay race is closed for `close`, but the rest of [D-43]'s triage (D-44..D-48) is
+  still open and unbuilt.
+
+## Gates Green
+- `pnpm verify` — typecheck, lint, **221/221 unit tests**. Same pre-existing `next lint` deprecation
+  warning, still non-blocking.
+- `tests/integration/close-and-kudos.test.ts` updated: the end-to-end assertion now reads "the whole
+  award lands on the driver and no rider row is written". That one assertion has now been wrong
+  twice ([D-19] put the pool row on the driver, [D-42] on the rider), which is the argument for
+  keeping it at the integration layer.
+
 ## Shipped (2026-08-31 — the full audit, and the two ways points went wrong)
 - **Shipped:** [D-43]. The developer asked for a complete audit — link errors, whether the driver
   is paid and driven/pooled are classified right, decisions not built as designed, and "why do we

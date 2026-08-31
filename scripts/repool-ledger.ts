@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { computeCloseAwards, type CloseRider } from "../src/domain/points";
+import type { CloseRider } from "../src/domain/points";
 
 // D-42 backfill. Rewrites the close awards of already-closed trips from the old driver-side
 // pooling to the new rider-side shape:
@@ -17,6 +17,12 @@ import { computeCloseAwards, type CloseRider } from "../src/domain/points";
 // no profile to hold points. Kudos, no-show and late-leave rows are never touched.
 //
 // Dry-run by default; --yes to execute. Every row removed is backed up first.
+//
+// SUPERSEDED by D-49 and by scripts/unpool-ledger.ts, which removes the rider `pool` rows this
+// script created. Kept as the record of what was done to the ledger on 2026-08-31, and pinned:
+// it used to call computeCloseAwards(), but that function has since moved on to the D-49 shape
+// and no longer emits rider awards at all. A backfill must reproduce the shape it was written
+// for, not silently follow the live scoring rules, so the one line it needed is inlined below.
 
 const DEFAULT_RIDER_POOL_WEIGHT = 3;
 
@@ -107,12 +113,20 @@ async function main() {
     // weights — those rows are what the driver was paid, and the driver's total must not move.
     const bonus = driverPool.reduce((sum, r) => sum + r.points, 0);
     const riderPoolWeight = await riderPoolWeightOf(admin, trip.group_id);
-    const shape = computeCloseAwards(closeRiders, {
-      driveWeight: 0,
-      poolWeight: 0,
-      poolStep: 0,
-      riderPoolWeight,
-    }, nameOf.get(trip.driver_id));
+    const driverName = nameOf.get(trip.driver_id);
+    // The D-42 rider award, as it stood when this script ran: one flat row per registered rider,
+    // guests skipped (no profile to hold points).
+    const shape = {
+      riders: closeRiders
+        .filter((r): r is CloseRider & { profileId: string } => !!r.profileId)
+        .map((r) => ({
+          profileId: r.profileId,
+          award: {
+            points: riderPoolWeight,
+            reason: driverName ? `Pooled with ${driverName}` : "Pooled on a trip",
+          },
+        })),
+    };
 
     console.log(`\n  trip ${tripId} — driver ${nameOf.get(trip.driver_id) ?? trip.driver_id}`);
     console.log(`    drive ${driveRow.points} + bonus ${bonus} -> ${driveRow.points + bonus}, ${driverPool.length} driver pool row(s) removed`);

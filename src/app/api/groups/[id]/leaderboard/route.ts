@@ -27,7 +27,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const { data: group } = await supabase
     .from("group")
-    .select("drive_weight, pool_weight, kudos_weight, pool_step, rider_pool_weight")
+    .select("drive_weight, pool_weight, kudos_weight, pool_step")
     .eq("id", id)
     .maybeSingle();
   if (!group) {
@@ -56,12 +56,40 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .gte("created_at", monthStart)
     .lt("created_at", monthEnd);
 
+  // D-49: `pooled` is a count of rides taken, not of ledger rows — riding earns nothing, so
+  // there is no ledger row to count. Sourced from the seats themselves and windowed on
+  // `trip.closed_at`, which is when the matching `drive` row was written, so both halves of a
+  // member's line cover exactly the same calendar month.
+  const { data: closedThisMonth } = await supabase
+    .from("trip")
+    .select("id")
+    .eq("group_id", id)
+    .eq("status", "closed")
+    .gte("closed_at", monthStart)
+    .lt("closed_at", monthEnd);
+  const closedTripIds = (closedThisMonth ?? []).map((t) => t.id);
+
+  const { data: pooledSeats } = closedTripIds.length > 0
+    ? await supabase
+        .from("trip_rider")
+        .select("profile_id")
+        .in("trip_id", closedTripIds)
+        .eq("state", "confirmed")
+        .not("profile_id", "is", null)
+    : { data: [] };
+
+  const pooledRides = new Map<string, number>();
+  for (const seat of pooledSeats ?? []) {
+    if (!seat.profile_id) continue;
+    pooledRides.set(seat.profile_id, (pooledRides.get(seat.profile_id) ?? 0) + 1);
+  }
+
   const rows: LedgerRow[] = (ledgerRows ?? []).map((r) => ({
     profileId: r.profile_id,
     kind: r.kind,
     points: r.points,
   }));
-  const stats = aggregateLedger(rows);
+  const stats = aggregateLedger(rows, pooledRides);
 
   const entries: LeaderboardEntry[] = (profiles ?? []).map((p) => {
     const s = stats.get(p.id) ?? { driven: 0, pooled: 0, kudos: 0, points: 0 };
@@ -80,7 +108,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       driveWeight: group.drive_weight,
       poolWeight: group.pool_weight,
       poolStep: group.pool_step,
-      riderPoolWeight: group.rider_pool_weight,
       kudosWeight: group.kudos_weight,
     }),
     viewerProfileId: user.id,

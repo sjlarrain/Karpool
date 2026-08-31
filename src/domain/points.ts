@@ -21,23 +21,20 @@ export interface CloseWeights {
   // award. D-42 — this is NOT what a rider earns.
   poolWeight: number;
   poolStep: number;
-  // What one ride as a passenger is worth to the rider. Flat: a seat's escalating value is the
-  // driver's incentive to fill the car, and a rider does not choose how full it is.
-  riderPoolWeight: number;
 }
 
+// Kept for the callers that still need to tell a registered rider from a guest when building the
+// confirmed-rider list. Both count identically toward the driver's fill bonus; since D-49 neither
+// earns anything, so the distinction no longer changes any award.
 export interface CloseRider {
-  // Null for a guest. A guest fills a seat, so they still pay the driver's fill bonus, but they
-  // have no profile to hold points and so earn nothing themselves (D-09).
   profileId: string | null;
   name: string;
 }
 
 export interface CloseAwards {
-  // One row, always. Carries the flat drive weight plus the whole fill bonus.
+  // The only row a close writes. Carries the flat drive weight plus the whole fill bonus.
+  // D-49: riders get no award of any kind — see computeCloseAwards.
   driver: LedgerAward;
-  // One row per registered confirmed rider, on the RIDER's own ledger.
-  riders: { profileId: string; award: LedgerAward }[];
 }
 
 /**
@@ -59,33 +56,30 @@ export function seatBonus(seatCount: number, poolWeight: number, poolStep: numbe
 }
 
 /**
- * Closing a trip pays two different people for two different things (D-42):
- *   - the DRIVER gets one `drive` row: the flat drive weight plus the fill bonus for every seat
- *     they filled, guests included.
- *   - each registered confirmed RIDER gets one `pool` row of their own, because being pooled is
- *     the thing a rider did. Guests are skipped — no profile, nowhere to put it.
+ * Closing a trip pays exactly one person: the DRIVER (D-49).
  *
- * The driver deliberately gets no `pool` row: they drove, they were not pooled. That inversion is
- * exactly what D-42 exists to correct.
+ * They get one `drive` row worth the flat drive weight plus the fill bonus for every seat they
+ * filled, guests included. Riders earn nothing — the developer's call on 2026-08-31: driving is
+ * the behaviour the app pays for, and riding is not.
+ *
+ * That is NOT a reversal of D-42. D-42 asked that a rider be able to see how often they were
+ * pooled, and they still can: `pooled` is now a count of confirmed rides (see
+ * `leaderboard.ts#aggregateLedger`), sourced from `trip_rider` rather than from the ledger. The
+ * count survives; only its point value is gone.
+ *
+ * Deriving the count that way is also the only shape that works. `points_ledger` carries
+ * `check (points <> 0)`, so "keep the row, make it worth zero" is not expressible — a zero-point
+ * `pool` row is rejected by the database and would fail the whole close, the same trap D-43 found
+ * behind `kudos_weight = 0`.
  */
-export function computeCloseAwards(riders: CloseRider[], weights: CloseWeights, driverName?: string): CloseAwards {
-  const bonus = seatBonus(riders.length, weights.poolWeight, weights.poolStep);
+export function computeCloseAwards(riderCount: number, weights: CloseWeights): CloseAwards {
+  const bonus = seatBonus(riderCount, weights.poolWeight, weights.poolStep);
   return {
     driver: {
       kind: "drive",
       points: weights.driveWeight + bonus,
-      reason: riders.length === 0 ? "Drove the trip" : `Drove the trip (${riders.length} pooled)`,
+      reason: riderCount === 0 ? "Drove the trip" : `Drove the trip (${riderCount} pooled)`,
     },
-    riders: riders
-      .filter((rider): rider is CloseRider & { profileId: string } => !!rider.profileId)
-      .map((rider) => ({
-        profileId: rider.profileId,
-        award: {
-          kind: "pool" as const,
-          points: weights.riderPoolWeight,
-          reason: driverName ? `Pooled with ${driverName}` : "Pooled on a trip",
-        },
-      })),
   };
 }
 

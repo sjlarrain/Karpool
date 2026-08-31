@@ -304,11 +304,11 @@ award, because a leg that was driven was driven regardless of who tapped the but
 
 - **Auth**: required, caller must be the trip's driver or a group admin of its group
 - **Request**: `{ confirmedTripRiderIds?: string[] (uuid, trip_rider row ids — not profile ids — of active riders who rode; default []), guestNames?: string[] (1-80 chars each, max 20; default []) }`. Any id in `confirmedTripRiderIds` that isn't an active rider on this trip is silently ignored, not trusted.
-- **Response**: `{ trip, mode: "full" | "restricted", confirmedCount: number, noShowCount: number, pointsAwarded: number, backTripId: string | null }` — `pointsAwarded` is the **driver's** own award (drive weight + fill bonus); riders' pooled points are not included in it.
+- **Response**: `{ trip, mode: "full" | "restricted", confirmedCount: number, noShowCount: number, pointsAwarded: number, backTripId: string | null }` — `pointsAwarded` is the **driver's** own award (drive weight + fill bonus), which since D-49 is the only award a close writes.
 - **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `403 not_permitted` (caller is neither the driver nor a group admin — riders included), `409 wrong_status` (the trip is not `started` — **including the case where another close won the race, see Exactly-once below**), `500 confirm_failed` / `no_show_failed` / `guest_add_failed` / `back_leg_failed` / `ledger_write_failed` / `update_failed`
 - **Exactly-once**: closing is guarded by a compare-and-swap — `update trip set status='closed' where id=? and status='started'` — taken **before** the guest rows and the ledger are written. Two closes in flight together therefore produce one `200` and one `409 wrong_status`, never two payments. Without it both callers passed the state-machine check (a read) and both wrote a full award set; that was reproduced against the live database on 2026-08-31 and is the concurrent sibling of the sequential duplication D-41 had to clean out of the leaderboard by hand. The realistic trigger is not a double-tap but D-35 mechanic (ii): the scheduler closes round trips at T−2h before `return_at` every five minutes, so a driver tapping Close in that window races a cron job. Any failure between the claim and the ledger **releases the claim** (status back to `started`, `closed_at` cleared), so the close stays retryable exactly as before; if that release itself fails the error message says so, because the trip is then closed and unpaid.
-- **Scoring (D-19, reshaped by D-42)**: the **driver** gets exactly one `drive` entry, worth `group.drive_weight` plus a fill bonus of every seat they filled (`pool_weight + (n-1)·pool_step` summed — 3+5+7 at the defaults, guests included). Each confirmed **registered rider** gets one `pool` entry of their own worth `group.rider_pool_weight` (default 3), flat regardless of how full the car was. The driver receives **no** `pool` entry: they drove, they were not pooled. Each registered rider marked `no_show` is charged `group.no_show_penalty` (default −10) on **their own** profile, not the driver's; guests are never penalised and earn nothing.
-- **Side effects**: updates confirmed riders' `trip_rider.state` to `"confirmed"`, unconfirmed active riders to `"no_show"`; inserts a `trip_rider` row per guest (`state: "confirmed"`, `profile_id: null`); inserts `points_ledger` rows — one `drive` entry on the **driver** (`group.drive_weight` + the seat fill bonus, guests included) and one `pool` entry on **each confirmed registered rider** (`group.rider_pool_weight`). Guests fill a seat, so they still pay the driver's bonus, but hold no profile and earn nothing themselves (D-09); inserts a `rate`-type `notification` row for each confirmed *registered* rider **whose ride ends here** (see below); updates `trip.status` and `closed_at`.
+- **Scoring (D-19, reshaped by D-42, then D-49)**: the **driver** gets exactly one `drive` entry, worth `group.drive_weight` plus a fill bonus of every seat they filled (`pool_weight + (n-1)·pool_step` summed — 3+5+7 at the defaults, guests included). That is the **only** award a close writes: since D-49 a rider earns nothing for riding, so no `pool` entry is created for anyone. Riders still see a `pooled` count — it is now a count of their confirmed seats on closed trips rather than of ledger rows (see `GET /api/groups/:id/leaderboard`). `group.rider_pool_weight` is deprecated and read by nothing. Each registered rider marked `no_show` is still charged `group.no_show_penalty` (default −10) on **their own** profile, not the driver's; guests are never penalised and earn nothing.
+- **Side effects**: updates confirmed riders' `trip_rider.state` to `"confirmed"`, unconfirmed active riders to `"no_show"`; inserts a `trip_rider` row per guest (`state: "confirmed"`, `profile_id: null`); inserts `points_ledger` rows — one `drive` entry on the **driver** (`group.drive_weight` + the seat fill bonus, guests included), plus a `no_show` entry per no-showing registered rider. No rider award of any kind is written (D-49). Guests fill a seat, so they still pay the driver's bonus, but hold no profile and earn nothing themselves (D-09); inserts a `rate`-type `notification` row for each confirmed *registered* rider **whose ride ends here** (see below); updates `trip.status` and `closed_at`.
 - **Return leg (D-35)**: if the trip is `direction: "round"` with a `return_at`, calls `generate_back_trip()` (`supabase/migrations/0013_round_trip_back_leg.sql`), which creates a `direction: "back"` trip at `return_at` with `parent_trip_id` set, inheriting the outbound's `capacity` and `back_stop_id`, and seats every **confirmed** rider whose `trip_rider.wants_return` is true (oldest join first, guests skipped). The generator is **idempotent** — a unique index on `trip.parent_trip_id` means the driver's close, a rider's close, an admin's close and (later) the cron tick can all call it while only one leg is ever created. If the driver already hand-published a `back` trip at that hour it is **adopted** rather than duplicated (the D-36 collision). Riders seated on it get a `change`-type notification. Generation happens **before** the ledger write, and a failure in it releases the close's claim, so it leaves the close safely retryable rather than leaving a closed trip whose return leg does not exist.
 - **Kudos targeting (D-35 answer (B))**: kudos is one prompt per rider per **ride**, not per leg. Riders carried on to the return leg are *not* prompted here — they are prompted when that leg closes — so a rider travelling both ways is asked exactly once, at the end.
 
@@ -322,7 +322,7 @@ live database with concurrent requests on a 1-seat trip.
 - **Request**: `{ wantsReturn: boolean }` — **required, no default** (D-35 answer (C)). Joining a round trip asks outright whether the rider is coming back with the same driver; there is deliberately no opt-in/opt-out default, so a join that never asked the question is a `400` rather than a silent "not returning". Forced to `false` on a one-way trip, which has no return leg to declare for.
 - **Response**: `201 { tripRider }`
 - **Errors**: `401 unauthenticated`, `400 invalid_request` (missing `wantsReturn`), `404 not_found`, `429 rate_limited` (20/10min per caller), `409 is_driver`, `409 wrong_status` (not scheduled), `409 already_joined`, `409 full`, `409 departed` (D-23 — departure time has passed; only the driver can seat anyone after that)
-- **Side effects**: inserts a `trip_rider` row (`state: "joined"`, `wants_return` as answered). No ledger writes on join — the rider's pooled points are awarded on close, once the driver confirms they actually rode (D-42). The declaration does nothing until the outbound closes, at which point a `true` seats the rider on the generated return leg and a `false` is what frees that seat for everyone else — never before (D-35).
+- **Side effects**: inserts a `trip_rider` row (`state: "joined"`, `wants_return` as answered). No ledger writes on join, and none on close either: a rider earns no points at all (D-49). The seat itself is what the rider's `pooled` count is drawn from once the trip closes. The declaration does nothing until the outbound closes, at which point a `true` seats the rider on the generated return leg and a `false` is what frees that seat for everyone else — never before (D-35).
 
 ### `POST /api/trips/:id/leave`
 Drop a seat you're holding.
@@ -384,10 +384,12 @@ giving kudos, so it stays cleared on every device instead of reappearing on the 
 
 ### `GET /api/groups/:id/leaderboard`
 Calendar-month ranking (D-12 — the ledger itself stays all-time; only this view's window resets
-monthly), weighted per the group's own `drive_weight`/`pool_weight`/`rider_pool_weight`/`kudos_weight` (D-11). `driven`
-and `pooled` are **row counts** of the caller's own `drive` and `pool` entries, so after D-42 `pooled`
-means rides taken as a passenger, not passengers carried. Every
-group member appears, even with zero points this month.
+monthly), weighted per the group's own `drive_weight`/`pool_weight`/`kudos_weight` (D-11). `driven` is a **row count** of
+the caller's own `drive` entries. `pooled` is **not** a ledger figure since D-49: riding earns nothing, so it is
+counted from the caller's `confirmed` `trip_rider` seats on trips closed in the window. It means rides
+taken as a passenger, not passengers carried (D-42's correction, kept). Every group member appears,
+even with zero points this month — and a member who has only ever ridden appears with their `pooled`
+count and a score of `0`.
 
 - **Auth**: required, caller must be a member of `:id`
 - **Request**: none
@@ -397,7 +399,9 @@ group member appears, even with zero points this month.
 
 ### `GET /api/me/points`
 The caller's own lifetime totals — all-time, across every group they belong to (D-12: only the
-group leaderboard view is month-scoped, the ledger itself never resets).
+group leaderboard view is month-scoped, the ledger itself never resets). `pooled` is the one figure
+here that is not a ledger total: since D-49 riding earns nothing, so it counts the caller's
+`confirmed` seats on closed trips instead (all-time, like the rest).
 
 - **Auth**: required
 - **Request**: none

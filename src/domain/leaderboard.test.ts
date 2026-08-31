@@ -3,19 +3,38 @@ import { aggregateLedger, rankLeaderboard, formatWeightsCaption } from "./leader
 import type { LedgerRow, LeaderboardEntry } from "./leaderboard";
 
 describe("aggregateLedger", () => {
-  // D-42: a `pool` row belongs to the rider who took the ride, so profile "a" here is someone
-  // who drove once and was pooled twice on other people's trips — not a driver with passengers.
-  it("sums points and counts drive/pool/kudos entries per profile", () => {
+  const NO_RIDES = new Map<string, number>();
+
+  // D-49: `driven`, `kudos` and `points` come from the ledger; `pooled` no longer does. Riding
+  // earns nothing, so there is no `pool` row to count — the count is passed in, sourced from the
+  // rider's confirmed seats on closed trips.
+  it("sums points and counts drive/kudos entries per profile", () => {
     const rows: LedgerRow[] = [
       { profileId: "a", kind: "drive", points: 10 },
-      { profileId: "a", kind: "pool", points: 3 },
-      { profileId: "a", kind: "pool", points: 3 },
       { profileId: "a", kind: "kudos", points: 2 },
       { profileId: "b", kind: "drive", points: 10 },
     ];
-    const stats = aggregateLedger(rows);
-    expect(stats.get("a")).toEqual({ driven: 1, pooled: 2, kudos: 1, points: 18 });
+    const stats = aggregateLedger(rows, new Map([["a", 2]]));
+    expect(stats.get("a")).toEqual({ driven: 1, pooled: 2, kudos: 1, points: 12 });
     expect(stats.get("b")).toEqual({ driven: 1, pooled: 0, kudos: 0, points: 10 });
+  });
+
+  // The case the whole change exists for: someone who only ever rides. They hold no ledger row at
+  // all, so the ledger pass never sees them — they must still appear, with their rides and a
+  // score of zero. Before D-49 this person was the one reading "0 pooled" forever.
+  it("shows a rider who has never driven: their rides, and no points", () => {
+    const stats = aggregateLedger([], new Map([["rider", 3]]));
+    expect(stats.get("rider")).toEqual({ driven: 0, pooled: 3, kudos: 0, points: 0 });
+  });
+
+  it("ignores a legacy pool row's kind but still honours its points", () => {
+    // Rows written before D-49 are history and are never rewritten (CLAUDE.md §3.5: the ledger is
+    // append-only). If one survives the cleanup its points still count; it just no longer drives
+    // the pooled tile, which now comes from the rides.
+    const rows: LedgerRow[] = [{ profileId: "a", kind: "pool", points: 3 }];
+    expect(aggregateLedger(rows, new Map([["a", 1]]))).toEqual(
+      new Map([["a", { driven: 0, pooled: 1, kudos: 0, points: 3 }]]),
+    );
   });
 
   it("counts late_leave and admin_adjust toward points but not any tile", () => {
@@ -23,11 +42,11 @@ describe("aggregateLedger", () => {
       { profileId: "a", kind: "drive", points: 10 },
       { profileId: "a", kind: "late_leave", points: -5 },
     ];
-    expect(aggregateLedger(rows).get("a")).toEqual({ driven: 1, pooled: 0, kudos: 0, points: 5 });
+    expect(aggregateLedger(rows, NO_RIDES).get("a")).toEqual({ driven: 1, pooled: 0, kudos: 0, points: 5 });
   });
 
-  it("returns an empty map for no rows", () => {
-    expect(aggregateLedger([]).size).toBe(0);
+  it("returns an empty map for no rows and no rides", () => {
+    expect(aggregateLedger([], NO_RIDES).size).toBe(0);
   });
 });
 
@@ -61,21 +80,21 @@ describe("rankLeaderboard", () => {
 });
 
 describe("formatWeightsCaption", () => {
-  it("names four terms: drive, the driver's seat bonus, the rider's pool, kudos (D-42)", () => {
-    expect(formatWeightsCaption({ driveWeight: 10, poolWeight: 3, poolStep: 2, riderPoolWeight: 3, kudosWeight: 2 })).toBe(
-      "10·drive · 3+2/seat · 3·pool · 2·kudos×riders",
+  it("names three terms: drive, the driver's seat bonus, kudos (D-49 dropped the rider's)", () => {
+    expect(formatWeightsCaption({ driveWeight: 10, poolWeight: 3, poolStep: 2, kudosWeight: 2 })).toBe(
+      "10·drive · 3+2/seat · 2·kudos×riders",
     );
   });
 
   it("reflects non-default weights", () => {
-    expect(formatWeightsCaption({ driveWeight: 20, poolWeight: 5, poolStep: 4, riderPoolWeight: 7, kudosWeight: 1 })).toBe(
-      "20·drive · 5+4/seat · 7·pool · 1·kudos×riders",
+    expect(formatWeightsCaption({ driveWeight: 20, poolWeight: 5, poolStep: 4, kudosWeight: 1 })).toBe(
+      "20·drive · 5+4/seat · 1·kudos×riders",
     );
   });
 
   it("drops the escalation wording when a group turns it off, keeping the seat term", () => {
-    expect(formatWeightsCaption({ driveWeight: 10, poolWeight: 3, poolStep: 0, riderPoolWeight: 3, kudosWeight: 2 })).toBe(
-      "10·drive · 3/seat · 3·pool · 2·kudos×riders",
+    expect(formatWeightsCaption({ driveWeight: 10, poolWeight: 3, poolStep: 0, kudosWeight: 2 })).toBe(
+      "10·drive · 3/seat · 2·kudos×riders",
     );
   });
 });

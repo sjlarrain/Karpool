@@ -23,6 +23,7 @@
     "db:audit-ledger": "tsx scripts/audit-ledger.ts",
     "db:dedupe-ledger": "tsx scripts/dedupe-close-ledger.ts",
     "db:repool-ledger": "tsx scripts/repool-ledger.ts",
+    "db:unpool-ledger": "tsx scripts/unpool-ledger.ts",
     "verify": "pnpm typecheck && pnpm lint && pnpm test"
   },
   "dependencies": {

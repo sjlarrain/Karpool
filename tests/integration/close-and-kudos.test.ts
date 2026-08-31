@@ -201,10 +201,10 @@ describe.skipIf(!canRun)("close + kudos never duplicate or drop a points_ledger 
     expect((await ledgerRows(tripId)).filter((r) => r.kind === "drive")).toHaveLength(1);
   }, 60_000);
 
-  // D-42's split, asserted end to end rather than only in the pure function: the driver takes the
-  // drive row carrying the fill bonus, and the rider takes their own pool row. Before D-42 the pool
-  // row landed on the driver, so the word meant its own opposite.
-  it("puts the drive row on the driver and the pool row on the rider", async () => {
+  // D-49, asserted end to end rather than only in the pure function: a close pays the driver and
+  // nobody else. This is the test that would have caught the old shape — D-42 put a `pool` row on
+  // the rider, and before that on the driver, so this one assertion has now been wrong twice.
+  it("puts the whole award on the driver and writes no rider row", async () => {
     const tripId = await publishTrip();
     const seatId = await joinAsRider(tripId);
     await startTrip(tripId);
@@ -214,16 +214,15 @@ describe.skipIf(!canRun)("close + kudos never duplicate or drop a points_ledger 
 
     const rows = await ledgerRows(tripId);
     const drive = rows.filter((r) => r.kind === "drive");
-    const pool = rows.filter((r) => r.kind === "pool");
 
     expect(drive).toHaveLength(1);
     expect(drive[0]!.profile_id).toBe(driverId);
-    // 10 drive + a 3-point first seat, the fill bonus folded in (D-42).
+    // 10 drive + a 3-point first seat, the fill bonus still folded in (D-19 economics untouched).
     expect(drive[0]!.points).toBe(13);
 
-    expect(pool).toHaveLength(1);
-    expect(pool[0]!.profile_id).toBe(riderId);
-    expect(pool[0]!.points).toBe(3);
+    // The rider earns nothing at all — no `pool` row, and no row of any other kind either.
+    expect(rows.filter((r) => r.kind === "pool")).toHaveLength(0);
+    expect(rows.filter((r) => r.profile_id === riderId)).toHaveLength(0);
   }, 60_000);
 
   // The kudos award insert used to discard its error. Because the `kudos` row is written first under

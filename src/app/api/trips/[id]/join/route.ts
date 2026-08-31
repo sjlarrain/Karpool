@@ -32,8 +32,9 @@ const MESSAGE_BY_ERROR: Record<string, string> = {
 // POST /api/trips/:id/join — join an open seat. Calls join_trip() (supabase/migrations/0002),
 // a Postgres function that locks the trip row for the duration of the capacity check + insert, so
 // two riders racing for the last seat produce exactly one winner (G4-adjacent correctness, not a
-// count-then-insert race in application code). No ledger writes here — pooled points are awarded
-// on close (Phase 4's close flow), not on join.
+// count-then-insert race in application code). No ledger writes here, and none later either for
+// the rider: since D-49 riding earns no points at all. Joining is recorded as a seat, and the
+// seat is what the rider's "pooled" count is drawn from once the trip closes.
 //
 // D-35: the body carries the rider's answer to "are you coming back with this driver?". It is
 // stored on the seat and does nothing until the outbound closes, at which point the riders who

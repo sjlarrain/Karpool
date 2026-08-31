@@ -16,9 +16,6 @@ export async function GET() {
 
   const { data: ledgerRows } = await supabase.from("points_ledger").select("profile_id, kind, points").eq("profile_id", user.id);
 
-  const rows: LedgerRow[] = (ledgerRows ?? []).map((r) => ({ profileId: r.profile_id, kind: r.kind, points: r.points }));
-  const stats = aggregateLedger(rows).get(user.id) ?? { driven: 0, pooled: 0, kudos: 0, points: 0 };
-
   // D-29: how many rides the caller took *through a stop* this calendar month — the motivation
   // counter. Deliberately not a ledger entry: it scores nothing, so it can't inflate the
   // leaderboard, can't be gamed by tagging, and can be dropped again without touching history.
@@ -34,6 +31,17 @@ export async function GET() {
     .eq("profile_id", user.id)
     .eq("state", "confirmed");
   const riddenIds = [...new Set((riddenRows ?? []).map((r) => r.trip_id))];
+
+  // D-49: riding earns no points and writes no ledger row, so `pooled` is counted from the rides
+  // themselves — every closed trip this profile was confirmed on. All-time, matching the totals
+  // above (D-12: only the group leaderboard is month-scoped).
+  const { data: closedRidden } = riddenIds.length > 0
+    ? await supabase.from("trip").select("id").in("id", riddenIds).eq("status", "closed")
+    : { data: [] };
+
+  const rows: LedgerRow[] = (ledgerRows ?? []).map((r) => ({ profileId: r.profile_id, kind: r.kind, points: r.points }));
+  const pooledRides = new Map<string, number>([[user.id, (closedRidden ?? []).length]]);
+  const stats = aggregateLedger(rows, pooledRides).get(user.id) ?? { driven: 0, pooled: 0, kudos: 0, points: 0 };
 
   const [{ data: drovenWithStop }, { data: riddenWithStop }] = await Promise.all([
     supabase

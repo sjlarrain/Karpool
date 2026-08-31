@@ -85,7 +85,7 @@ export function CloseTripOverlay({ tripId, riders, onClose, onClosed }: Props) {
       </div>
       <div className="scroll" style={{ padding: 18 }}>
         <p style={{ font: "600 13px var(--font-body)", lineHeight: 1.5, color: "rgba(0,0,0,.55)", margin: "0 0 16px" }}>
-          Confirm who rode with you. Everyone confirmed earns their pooled points and a nudge to leave you kudos.
+          Confirm who rode with you. Everyone confirmed counts toward your drive bonus and gets a nudge to leave you kudos.
         </p>
 
         {riders.length > 0 && (
