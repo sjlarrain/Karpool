@@ -44,6 +44,17 @@
   confirmed from outside** — that needs the Vercel dashboard, or the user-visible tell: the join
   sheet on a round trip now asks whether you are coming back.
 
+- **Migration `0014` — backfill `wants_return` (WRITTEN, NOT APPLIED).** 0013 gave the column
+  `default false`, which is right for rows written after it and wrong for every row written before:
+  those riders were never asked, and under the pre-D-35 model joining a round trip held the return
+  seat — D-30 says exactly that in its own problem statement. Left alone, the first close of a
+  pre-existing round trip seats nobody on the back leg: a car that went out full comes back empty
+  and those riders lose their ride home with no card and no notification, which is the failure D-35
+  exists to prevent, delivered to the users who predate it. The migration sets `true` for active
+  registered riders on `round` trips still `scheduled`/`started`; closed and cancelled trips are
+  left as history, and guests stay false because `generate_back_trip()` skips them anyway.
+  **Blocked: the push was denied by the permission classifier — the developer runs it.**
+
 ## In Progress
 - Nothing. The slice is complete and `pnpm verify` is green.
 

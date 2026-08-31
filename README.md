@@ -6,6 +6,12 @@ route, publish and join trips, and earn points (Driven / Pooled / Kudos) on a le
 Core loop: driver publishes a trip → riders join → driver starts, then closes it → the system
 awards points and prompts riders for kudos.
 
+On a **round trip** the close does one more thing (D-35): it materialises the return leg as a real
+trip of its own, seating the riders who said at join time that they were coming back, and freeing
+the seats of those who said they weren't. A round trip is therefore two rows with one departure
+each, not one row with two — which is what lets `started_at`, `closed_at`, the T−2h start guard and
+the 24h expiry each mean something unambiguous.
+
 **Status:** Phases 0, 1, 2, 3, 4, 5, 7, 8, and 9 of `docs/02_IMPLEMENTATION_PLAN.md` are complete —
 auth, groups, the full trip lifecycle (publish/join/start/close), the append-only points ledger,
 kudos, the leaderboard, Web Push, the admin console + audit log, and hardening (E2E, rate limits,
@@ -16,10 +22,10 @@ still open.
 
 ## Stack
 
-Next.js 15 (App Router, TypeScript) on Vercel, Supabase (Postgres + Auth + a Postgres function for
-the transactional trip-join), Web Push (VAPID, via the `web-push` package), and deferred Vercel Cron.
-Google Maps
-Directions API lands last. Hand-written CSS with design tokens ported from the interaction sketch —
+Next.js 15 (App Router, TypeScript) on Vercel, Supabase (Postgres + Auth + Postgres functions for
+the transactional trip-join and the return-leg generator), Web Push (VAPID, via the `web-push`
+package), and Supabase `pg_cron` + `pg_net` for scheduling — **not** Vercel Cron, whose Hobby tier
+caps at one run a day (D-21). Google Maps Directions API lands last. Hand-written CSS with design tokens ported from the interaction sketch —
 no Tailwind, no component library. See `docs/Carpool_App_Infrastructure_Plan_1.md` for the full
 infrastructure plan.
 
@@ -173,6 +179,14 @@ After any schema change, regenerate types:
 ```bash
 pnpm db:types:linked
 ```
+
+⚠️ **Read `src/types/database.ts`'s header before you commit the result.** The generator emits plain
+`string` for every CHECK-constrained text column, which flattens the literal-union types the rest of
+the app type-checks against — `trip.status`, `trip.direction`, `trip_rider.state`,
+`membership.group_role`, `profile.platform_role`, `points_ledger.kind`, `notification.type` — and
+`pnpm typecheck` fails immediately with a handful of "Type 'string' is not assignable to" errors.
+Those unions are hand-maintained on purpose. Reapply them, or regenerate to a scratch file and copy
+across only the parts that actually changed.
 
 and reapply the literal-union patches documented in the comment at the top of
 `src/types/database.ts` (the generator returns CHECK-constrained columns like `trip.status` as
