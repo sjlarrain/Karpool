@@ -111,7 +111,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // return, and scaling by that alone would pay the driver less for having carried more people.
   const award = computeKudosAward(group.kudos_weight, await confirmedRiderCountForRide(id));
 
-  await admin.from("points_ledger").insert({
+  const { error: ledgerError } = await admin.from("points_ledger").insert({
     profile_id: trip.driver_id,
     group_id: trip.group_id,
     trip_id: id,
@@ -119,6 +119,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     points: award.points,
     reason: award.reason,
   });
+
+  // This error used to be discarded, and discarding it lost the driver's points permanently. The
+  // `kudos` row is inserted first and is protected by unique(trip_id, from_profile_id), so a failure
+  // here left the rider with a 201, the driver with nothing, and no way back: pressing the button
+  // again answers `409 already_given`, and there is no other route that writes a kudos award.
+  //
+  // The kudos row is removed rather than kept, so the rider's one chance to rate this ride is
+  // handed back to them along with the error. A stray kudos row with no award is worse than none:
+  // it silently spends the rider's single rating and pays nobody. If even the rollback fails, say
+  // so — that is the one case where an admin has to put the points in by hand.
+  if (ledgerError) {
+    const { error: rollbackError } = await admin.from("kudos").delete().eq("id", kudos.id);
+    return NextResponse.json(
+      {
+        error: "kudos_award_failed",
+        message: rollbackError
+          ? "Your kudos was recorded but the points didn't land, and it couldn't be undone. Tell your admin."
+          : "Couldn't award those points — nothing was saved. Try again.",
+      },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({ kudos }, { status: 201 });
 }
