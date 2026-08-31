@@ -60,8 +60,15 @@
 - **Needs a data audit, not code:** trips closed in production since push subscriptions first
   existed may carry **duplicate `points_ledger` award rows** and may still be `started`.
 
+- **Swept the same fault out of every other handler** (`src/lib/http/readJsonBody.ts`, 21 call sites
+  across 11 components). Two things fell out of it: the notification poll had **no `res.ok` check at
+  all**, so an error page parsed into `undefined` and blanked a good feed; and four handlers read
+  fields off a successful reply (`group.id`, `needsEmailConfirmation`, `changed`/`notifiedRiders`,
+  `pointsAwarded`) that would have dereferenced null. The three `.then(res.ok ? res.json() :
+  reject)` loaders never had the defect and were left alone.
+
 ## In Progress
-- Nothing mid-flight. Eight commits on `dev`, not merged and not pushed.
+- Nothing mid-flight. Ten commits on `dev`, not merged and not pushed.
 
 ## Next
 - **Developer actions, in this order** — none are doable from code: (1) set a valid `VAPID_SUBJECT`
