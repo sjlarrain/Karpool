@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { env } from "@/env";
 import { loadGroupTrips } from "@/lib/trips/loadGroupTrips";
+import { viewerTimeZone } from "@/lib/time/viewerTimeZone";
 import { AppShell } from "./AppShell";
 
 export default async function AppHome({ searchParams }: { searchParams: Promise<{ g?: string; trip?: string }> }) {
@@ -45,7 +46,10 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
 
   const otherGroups = (allGroupRows ?? []).filter((row) => row.id !== activeGroupId);
 
-  const tripsResult = await loadGroupTrips(supabase, activeGroupId, userData.user.id, new Date());
+  // Trip times are rendered here, on the server, so the server has to be told which zone the
+  // reader is in — its own is UTC in production.
+  const timeZone = await viewerTimeZone();
+  const tripsResult = await loadGroupTrips(supabase, activeGroupId, userData.user.id, new Date(), timeZone);
 
   return (
     <AppShell

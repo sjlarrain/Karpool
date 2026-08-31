@@ -99,7 +99,8 @@ export function CarpoolsScreen({ trips, onOpenTrip, onQuickJoin }: Props) {
       days: groupByDay(
         decorated.filter((t) => !t.isPast),
         (t) => t.dayLabel,
-        (a, b) => a.time.localeCompare(b.time),
+        // By instant. Sorting the rendered strings put "7:45" after "17:30".
+        (a, b) => new Date(a.departAt).getTime() - new Date(b.departAt).getTime(),
       ),
       // The feed arrives ordered by departure ascending, so reversing puts the most recent finished
       // trip at the top of the Past section — which is the one someone is looking for.

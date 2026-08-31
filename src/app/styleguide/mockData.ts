@@ -5,6 +5,7 @@ import type { TripView } from "@/domain/types";
 export const mockTrips: TripView[] = [
   {
     id: "t1",
+    departAt: "2026-05-18T07:45:00-07:00",
     dayLabel: "Today · Mon 18",
     time: "7:45",
     from: "Riverside",
@@ -26,6 +27,7 @@ export const mockTrips: TripView[] = [
   },
   {
     id: "t2",
+    departAt: "2026-05-18T08:10:00-07:00",
     dayLabel: "Today · Mon 18",
     time: "8:10",
     from: "Riverside",
@@ -48,6 +50,7 @@ export const mockTrips: TripView[] = [
   },
   {
     id: "t3",
+    departAt: "2026-05-19T07:30:00-07:00",
     dayLabel: "Tomorrow · Tue 19",
     time: "7:30",
     from: "Riverside",
@@ -66,6 +69,7 @@ export const mockTrips: TripView[] = [
   },
   {
     id: "t4",
+    departAt: "2026-05-19T08:30:00-07:00",
     dayLabel: "Tomorrow · Tue 19",
     time: "8:30",
     from: "Riverside",
@@ -88,6 +92,7 @@ export const mockTrips: TripView[] = [
   },
   {
     id: "t5",
+    departAt: "2026-05-20T08:00:00-07:00",
     dayLabel: "Wed 20",
     time: "8:00",
     from: "Riverside",

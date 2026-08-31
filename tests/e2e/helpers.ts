@@ -64,14 +64,36 @@ export async function joinGroupByCode(page: Page, code: string) {
 // joining a ride that has already left — the specs were relying on a bug. The default of 60 minutes
 // keeps the trip inside the T-2h start window (D-16) and still ahead of now, so the same trip is
 // both joinable and startable.
-export async function publishTrip(page: Page, minutesFromNow = 60) {
+//
+// `timeZone` is the zone the *browser context* is in (Playwright's `timezoneId`), because that is
+// the zone the form's date/time inputs speak; it defaults to this machine's. Returns what was
+// filled in plus `displayTime` — the same wall clock as the app renders it on a card ("7:45", no
+// leading zero) — so a spec can assert the ride reads back at the time it was published for.
+export async function publishTrip(
+  page: Page,
+  minutesFromNow = 60,
+  timeZone?: string,
+): Promise<{ date: string; time: string; displayTime: string }> {
   const depart = new Date(Date.now() + minutesFromNow * 60_000);
-  const date = `${depart.getFullYear()}-${String(depart.getMonth() + 1).padStart(2, "0")}-${String(depart.getDate()).padStart(2, "0")}`;
-  const time = `${String(depart.getHours()).padStart(2, "0")}:${String(depart.getMinutes()).padStart(2, "0")}`;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(depart);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)!.value;
+  const date = `${part("year")}-${part("month")}-${part("day")}`;
+  const time = `${part("hour")}:${part("minute")}`;
+  const displayTime = `${Number(part("hour"))}:${part("minute")}`;
 
   await page.locator(".tab", { hasText: "Carpools" }).click();
   await page.locator(".fab").click();
   await page.locator("input[type=date]").first().fill(date);
   await page.locator("input[type=time]").first().fill(time);
   await page.locator("button.btnP", { hasText: "Publish to" }).click();
+
+  return { date, time, displayTime };
 }

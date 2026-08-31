@@ -4,6 +4,7 @@ import type { TripView } from "./types";
 
 const base: TripView = {
   id: "t1",
+  departAt: "2026-05-18T07:45:00-07:00",
   dayLabel: "Today · Mon 18",
   time: "7:45",
   from: "Riverside",

@@ -82,8 +82,11 @@ export function toTripView(params: {
   originLabel: string;
   destLabel: string;
   now: Date;
+  // IANA zone the reader is in. Explicit because the server has no business rendering trip times
+  // in its own zone (UTC on Vercel) — see src/domain/timeZone.ts.
+  timeZone: string;
 }): TripView {
-  const { trip, driver, activeRiders, viewerId, originLabel, destLabel, now } = params;
+  const { trip, driver, activeRiders, viewerId, originLabel, destLabel, now, timeZone } = params;
 
   const role = deriveRole(trip.driverId, activeRiders, viewerId);
   const back = trip.direction === "back";
@@ -94,15 +97,16 @@ export function toTripView(params: {
 
   return {
     id: trip.id,
-    dayLabel: dayLabel(departDate, now),
-    time: formatTripTime(departDate),
+    departAt: trip.departAt,
+    dayLabel: dayLabel(departDate, now, timeZone),
+    time: formatTripTime(departDate, timeZone),
     from,
     to,
     direction: trip.direction,
     role,
     driver: trip.driverId === viewerId ? "You" : driver.displayName,
     capacity: trip.capacity,
-    returnTime: trip.returnAt ? formatTripTime(new Date(trip.returnAt)) : null,
+    returnTime: trip.returnAt ? formatTripTime(new Date(trip.returnAt), timeZone) : null,
     status: trip.status,
     departed: departDate.getTime() <= now.getTime(),
     cancelledReason: trip.cancelledReason ?? null,

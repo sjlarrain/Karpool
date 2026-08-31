@@ -38,6 +38,10 @@ export interface TripRiderView {
 
 export interface TripView {
   id: string;
+  // The absolute instant. `dayLabel`/`time` are renderings of it in the viewer's zone; anything
+  // that needs to *compare* two trips (ordering, "has it left yet") uses this, never the strings —
+  // "7:45" sorts after "17:30" as text.
+  departAt: string; // ISO
   dayLabel: string;
   time: string;
   from: string;

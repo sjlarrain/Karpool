@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { SEATS } from "@/domain/constants";
 import { loadGroupTrips } from "@/lib/trips/loadGroupTrips";
+import { viewerTimeZone } from "@/lib/time/viewerTimeZone";
 import { resolveTripStops } from "@/lib/trips/resolveStops";
 import { checkRateLimit } from "@/lib/rateLimit";
 
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const result = await loadGroupTrips(supabase, groupId, user.id, new Date());
+  const result = await loadGroupTrips(supabase, groupId, user.id, new Date(), await viewerTimeZone());
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.error === "not_found" ? 404 : 500 });
   }

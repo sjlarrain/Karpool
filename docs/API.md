@@ -186,6 +186,15 @@ Lifecycle transitions (`start`/`cancel`/`close`) are enforced by the pure state 
 each route: `scheduled→started` (driver only, not before T-2h per D-16), `started→closed` (driver
 only), `scheduled→cancelled` (driver only). Every other transition is rejected.
 
+**Times and time zones.** Every instant on the wire is an absolute ISO timestamp (`depart_at`,
+`return_at`, `departAt`) — `timestamptz` in the database, never a wall-clock string. A `TripView`
+also carries *rendered* strings for the UI (`time`, `returnTime`, `dayLabel`), and those are
+rendered **in the reader's time zone**, not the server's. The zone reaches the server in the
+`carpool_tz` cookie, written by `<TimeZoneSync/>` (`src/app/TimeZoneSync.tsx`) from the browser's
+own IANA zone; if it is absent the server falls back to Vercel's `x-vercel-ip-timezone` header and
+then to UTC (`src/lib/time/viewerTimeZone.ts`). Anything that *compares* two trips must use the ISO
+instant, never the rendered string — "7:45" sorts after "17:30" as text.
+
 ### `GET /api/trips?groupId=&scope=all|mine`
 Trip feed for a group: all `scheduled`/`started` trips, plus every `closed`/`cancelled` trip that
 departed within the last 30 days (`PAST_TRIPS_WINDOW_DAYS`), for the Carpools tab's Past section
@@ -195,7 +204,7 @@ departed within the last 30 days (`PAST_TRIPS_WINDOW_DAYS`), for the Carpools ta
 
 - **Auth**: required, caller must be a member of `groupId`
 - **Request**: query params `groupId` (required), `scope` (`all` default, or `mine` — trips where the caller is driving or an active rider)
-- **Response**: `{ trips: TripView[] }` (role/badge/day-label already derived for the caller; see `src/domain/types.ts`). Each carries `direction` and `outStop`/`backStop` — the D-29 stop on each leg, or `null`; the decorated form adds `stopNotices`, the same stops in travel order with their leg wording
+- **Response**: `{ trips: TripView[] }` (role/badge/day-label already derived for the caller, in the reader's zone — see the time-zone note above; each view also carries `departAt`, the ISO instant behind those strings; see `src/domain/types.ts`). Each carries `direction` and `outStop`/`backStop` — the D-29 stop on each leg, or `null`; the decorated form adds `stopNotices`, the same stops in travel order with their leg wording
 - **Errors**: `401 unauthenticated`, `400 invalid_request` (missing groupId), `404 not_found` (not a member), `500 trip_lookup_failed` / `rider_lookup_failed` / `driver_lookup_failed`
 - **Side effects**: none
 

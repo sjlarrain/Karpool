@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/api/auth";
 import { SEATS } from "@/domain/constants";
 import { resolveTripStops } from "@/lib/trips/resolveStops";
 import { toTripView } from "@/domain/toTripView";
+import { viewerTimeZone } from "@/lib/time/viewerTimeZone";
 import type { TripRiderRowInput, TripRowInput } from "@/domain/toTripView";
 import { decorateTrip } from "@/domain/decorateTrip";
 import { notifyProfiles } from "@/lib/notify/tripNotify";
@@ -100,6 +101,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     originLabel: group.origin_label,
     destLabel: group.dest_label,
     now: new Date(),
+    timeZone: await viewerTimeZone(),
   });
 
   const pickups = (riderRows ?? []).map((r) => {

@@ -13,6 +13,7 @@ export async function loadGroupTrips(
   groupId: string,
   viewerId: string,
   now: Date,
+  timeZone: string,
 ): Promise<{ ok: true; trips: TripView[] } | { ok: false; error: "not_found" | "lookup_failed" }> {
   const { data: group } = await supabase.from("group").select("origin_label, dest_label").eq("id", groupId).maybeSingle();
   if (!group) {
@@ -114,6 +115,7 @@ export async function loadGroupTrips(
       originLabel: group.origin_label,
       destLabel: group.dest_label,
       now,
+      timeZone,
     });
   });
 

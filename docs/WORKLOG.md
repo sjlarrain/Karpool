@@ -1,5 +1,47 @@
 # Worklog
 
+## Shipped (2026-08-30 — trip times rendered in the reader's time zone, not the server's)
+- **The bug (developer, from production): a ride published for 7:45 read back as 14:45.** Storage was
+  never wrong — `depart_at`/`return_at` are `timestamptz` and the browser sends a correct absolute
+  instant. The *rendering* was wrong: `formatTripTime`/`dayLabel` used `getHours`/`getDate`, i.e. the
+  clock of whatever runtime called them. Those run on the server, and the server on Vercel is UTC, so
+  every time on every card was shifted by the reader's UTC offset — exactly 7h in `America/Los_Angeles`.
+  Invisible in `next dev`, where the server and the browser share one zone, which is why it survived
+  every previous manual pass.
+- **`src/domain/tripDay.ts` is now zone-explicit** — `formatTripTime(date, tz)`, `dayLabel(date, now, tz)`,
+  a shared `zonedParts()` on memoised `Intl.DateTimeFormat`s. No function in it can read a local clock
+  any more, so this class of bug cannot come back by omission: leaving the zone out is a type error.
+- **The zone travels browser → server in the `carpool_tz` cookie.** `<TimeZoneSync/>` (mounted in the
+  root layout) writes the browser's IANA zone on mount and `router.refresh()`es if it changed;
+  `viewerTimeZone()` reads cookie → Vercel's `x-vercel-ip-timezone` → UTC. Chosen over formatting in
+  the client so the server-rendered HTML is already right: no post-hydration flicker, no mismatch.
+- **`TripView` gained `departAt`** (the instant behind the strings), and the Carpools feed now sorts by
+  it. It was sorting `a.time.localeCompare(b.time)`, which puts "7:45" *after* "17:30" — a second,
+  quieter time bug in the same code.
+- **Regression cover at both levels.** Unit: the same instant renders 7:45 / 14:45 / 16:45 in LA / UTC /
+  Madrid, DST included, plus the day-boundary case where one instant is Monday in California and
+  Tuesday in UTC. E2E (`tests/e2e/trip-time.spec.ts`): the browser context is pinned to Europe/Madrid
+  and the spec asserts a published ride reads back at the time it was published for — run against a
+  dev server forced to `TZ=UTC`, which is the production shape, and green.
+- Recorded as **[D-37]**: rendering in the *reader's* zone is what shipped; a group-owned zone is the
+  alternative, and the only case they differ is a member away from the route.
+
+## In Progress
+- Nothing mid-flight.
+
+## Next
+- **Deploy** — this fix is worthless until it is on Vercel, and that is exactly where the bug lives.
+- D-37's remaining question for the developer: reader's zone (shipped) vs a `group.time_zone`.
+
+## Blocked On
+- Nothing for this fix. [D-21] (Vault secrets for the tick) and the D-30/D-36 backlog are unchanged.
+
+## Gates Green
+- `pnpm verify`: typecheck + lint + **184 tests** (14 suites; 18 new/rewritten across `tripDay`,
+  `toTripView`, `timeZone`). Same pre-existing `next lint` font warning.
+- `pnpm build`: clean.
+- `tests/e2e/trip-time.spec.ts`: 1/1 against a `TZ=UTC` server with a Madrid browser.
+
 ## Shipped (2026-08-30 — D-35 first slice: the round trip's return leg becomes a real trip)
 - **Migration `0013_round_trip_back_leg.sql`.** `trip.parent_trip_id` with a unique partial index —
   load-bearing, because four separate paths can now ask for a return leg and nothing else on the row

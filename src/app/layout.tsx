@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { TimeZoneSync } from "./TimeZoneSync";
 
 export const metadata: Metadata = {
   title: "Karpool",
@@ -32,7 +33,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {/* Tells the server which zone to render trip times in. Renders nothing. */}
+        <TimeZoneSync />
+        {children}
+      </body>
     </html>
   );
 }
