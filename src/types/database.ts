@@ -1,10 +1,15 @@
 // Generated via `pnpm db:types:linked` (`supabase gen types typescript --linked`) against the live
 // project, then hand-patched: columns backed by a CHECK constraint (not a native Postgres enum)
 // come back as `string` from the generator, so this restores literal-union types for those columns
-// (trip.status, trip.direction, trip_rider.state — including join_trip()'s Returns shape —
-// membership.group_role, profile.platform_role, points_ledger.kind, notification.type) to match
-// supabase/migrations/*.sql. Regenerate with `pnpm db:types:linked` and reapply those patches if the
-// schema changes.
+// (feedback.category, membership.group_role, notification.type, pickup_place.icon/kind,
+// points_ledger.kind, profile.platform_role, trip.direction/status, trip_rider.state — including
+// the join_trip and generate_back_trip Returns shapes) to match supabase/migrations/*.sql.
+// Regenerate with `pnpm db:types:linked` and reapply those patches if the schema changes.
+//
+// The 2026-08-31 regen (after migration 0018) also picked up three things the previous
+// hand-maintained copy had drifted away from: trip_rider.kudos_declined_at and
+// .penalty_waived_at, the carpool_cron_status/carpool_cron_tick functions, and the removal of
+// a stale seat_member entry for a function that no longer exists in the database.
 
 export type Json =
   | string
@@ -18,7 +23,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.5"
   }
   graphql_public: {
     Tables: {
@@ -152,11 +157,11 @@ export type Database = {
           late_penalty: number
           late_window_minutes: number
           name: string
-          origin_label: string
           no_show_penalty: number
+          origin_label: string
           pool_step: number
-          rider_pool_weight: number
           pool_weight: number
+          rider_pool_weight: number
         }
         Insert: {
           code: string
@@ -170,11 +175,11 @@ export type Database = {
           late_penalty?: number
           late_window_minutes?: number
           name: string
-          origin_label: string
           no_show_penalty?: number
+          origin_label: string
           pool_step?: number
-          rider_pool_weight?: number
           pool_weight?: number
+          rider_pool_weight?: number
         }
         Update: {
           code?: string
@@ -188,11 +193,11 @@ export type Database = {
           late_penalty?: number
           late_window_minutes?: number
           name?: string
-          origin_label?: string
           no_show_penalty?: number
+          origin_label?: string
           pool_step?: number
-          rider_pool_weight?: number
           pool_weight?: number
+          rider_pool_weight?: number
         }
         Relationships: [
           {
@@ -599,10 +604,24 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "trip_back_stop_id_fkey"
+            columns: ["back_stop_id"]
+            isOneToOne: false
+            referencedRelation: "pickup_place"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "trip_driver_id_fkey"
             columns: ["driver_id"]
             isOneToOne: false
             referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "group"
             referencedColumns: ["id"]
           },
           {
@@ -613,17 +632,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "trip_back_stop_id_fkey"
-            columns: ["back_stop_id"]
+            foreignKeyName: "trip_parent_trip_id_fkey"
+            columns: ["parent_trip_id"]
             isOneToOne: false
-            referencedRelation: "pickup_place"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "trip_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "group"
+            referencedRelation: "trip"
             referencedColumns: ["id"]
           },
         ]
@@ -710,21 +722,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      // Hand-added (0009): the generator can't see cron.* through the linked introspection, and
-      // this wrapper is the only way the app reads the scheduler's health.
-      carpool_cron_status: {
-        Args: Record<string, never>
-        Returns: {
-          jobname: string
-          schedule: string
-          active: boolean
-          last_run_at: string | null
-          last_status: string | null
-        }[]
-      }
-      compute_initials: { Args: { full_name: string }; Returns: string }
-      is_member: { Args: { p_group_id: string }; Returns: boolean }
-      // Hand-added (0010): D-24's driver-seats-a-member counterpart to join_trip, same row lock.
       add_trip_rider: {
         Args: { p_added_by: string; p_profile_id: string; p_trip_id: string }
         Returns: {
@@ -732,10 +729,12 @@ export type Database = {
           guest_name: string | null
           id: string
           joined_at: string
+          kudos_declined_at: string | null
           left_at: string | null
+          penalty_waived_at: string | null
           pickup_place_id: string | null
           profile_id: string | null
-          state: "joined" | "left" | "confirmed" | "no_show"
+          state: string
           stop_order: number | null
           trip_id: string
           wants_return: boolean
@@ -747,9 +746,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      // Hand-added (0013): D-35's return-leg generator. Returns the back trip — the existing one
-      // if it has already been materialised, which is what makes every close path idempotent — or
-      // null for a trip that has no return leg to build.
+      carpool_cron_status: {
+        Args: never
+        Returns: {
+          active: boolean
+          jobname: string
+          last_run_at: string
+          last_status: string
+          schedule: string
+        }[]
+      }
+      carpool_cron_tick: { Args: never; Returns: undefined }
+      compute_initials: { Args: { full_name: string }; Returns: string }
       generate_back_trip: {
         Args: { p_parent_trip_id: string }
         Returns: {
@@ -768,7 +776,7 @@ export type Database = {
           return_at: string | null
           started_at: string | null
           status: "scheduled" | "started" | "closed" | "cancelled"
-        } | null
+        }
         SetofOptions: {
           from: "*"
           to: "trip"
@@ -776,14 +784,21 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      is_member: { Args: { p_group_id: string }; Returns: boolean }
       join_trip: {
-        Args: { p_profile_id: string; p_trip_id: string; p_wants_return: boolean }
+        Args: {
+          p_profile_id: string
+          p_trip_id: string
+          p_wants_return: boolean
+        }
         Returns: {
           added_by_profile_id: string | null
           guest_name: string | null
           id: string
           joined_at: string
+          kudos_declined_at: string | null
           left_at: string | null
+          penalty_waived_at: string | null
           pickup_place_id: string | null
           profile_id: string | null
           state: "joined" | "left" | "confirmed" | "no_show"

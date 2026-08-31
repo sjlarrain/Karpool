@@ -15,12 +15,17 @@
 - **In progress:** nothing mid-flight.
 - **Next:** the [D-41] double-pay race — `closeTrip` still reads trip status then writes without a
   conditional update, so two concurrent closes both pass `transition()` and both pay. Then D-35, D-30.
-- **Blocked on:** **migration `0018` is NOT applied** — `supabase db push --linked` was refused by
-  this environment's permission layer, so the developer must run it, and it must land *before* the
-  new code deploys (the close and leaderboard routes now select `rider_pool_weight`).
-  `src/types/database.ts` was hand-patched for the column in the meantime; re-run `pnpm
-  db:types:linked` after the push. Note `0017` turned out to be applied already — the [D-39] claim
-  that it was pending is stale. Still the developer's: `carpool-tick` Vault secrets, `VAPID_SUBJECT`.
+- **Blocked on:** nothing here. **Migration `0018` was applied by the developer the same session**
+  (`supabase db push --linked` had been refused by this environment's permission layer) — confirmed
+  live: every group carries `rider_pool_weight = 3`, and the backfill re-run reports "nothing to
+  migrate", so it is idempotent as intended. `pnpm db:types:linked` was re-run and the CHECK-column
+  literal unions reapplied; that regen also closed three drifts the hand-maintained copy had
+  accumulated — `trip_rider.kudos_declined_at`/`.penalty_waived_at` were missing, the
+  `carpool_cron_status`/`carpool_cron_tick` functions were missing, and a stale `seat_member` entry
+  described a function that no longer exists in the database (referenced nowhere in `src/` or any
+  migration). Note `0017` turned out to be applied already — the [D-39] claim that it was pending is
+  stale. **The new code still needs deploying.** Still the developer's: `carpool-tick` Vault
+  secrets, `VAPID_SUBJECT`.
 - **Gates now green:** `pnpm verify` — typecheck, lint, **220/220 tests across 17 suites**.
 
 ## Shipped (2026-08-31 — the duplicated close awards, repaired on the live leaderboard)
