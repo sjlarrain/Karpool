@@ -44,8 +44,24 @@
   `scheduler.stale`. D-21's lesson applied to push: "nobody got a notification" and "the VAPID
   subject is not a mailto: URL" look identical from outside.
 
+## Also this session (a production report that confirmed the diagnosis, and raised it)
+- The developer sent a screenshot mid-session: **Close trip on `karpool-nu.vercel.app` answering
+  "Couldn't reach the server"**, four riders confirmed. It is the VAPID throw, reached through the
+  close route — and it is **not cosmetic**. `closeTrip` orders its writes so that everything before
+  the `points_ledger` insert is idempotent and a failure there is safe to retry; but both
+  `notifyProfiles` calls sat **between that ledger insert and the status flip**. The throw landed in
+  the one non-idempotent window: past the ledger (driver paid), before the status update (trip stays
+  `started`, so the state machine allows another close). **Every retry paid the driver again**, and
+  the riders never got their kudos prompt. The client hid it — an unhandled fault returns HTML, so
+  `res.json()` threw and the catch blamed the *connection* for a clean 500.
+- Fixed in two commits: the status flip now follows the ledger immediately and notifications come
+  last (a missed kudos prompt is recoverable; a duplicated payment is not), and `CloseTripOverlay`
+  parses defensively and says "the trip may already have closed" instead of "check your connection".
+- **Needs a data audit, not code:** trips closed in production since push subscriptions first
+  existed may carry **duplicate `points_ledger` award rows** and may still be `started`.
+
 ## In Progress
-- Nothing mid-flight. Five commits on `dev`, not merged and not pushed.
+- Nothing mid-flight. Eight commits on `dev`, not merged and not pushed.
 
 ## Next
 - **Developer actions, in this order** — none are doable from code: (1) set a valid `VAPID_SUBJECT`
@@ -54,6 +70,8 @@
   secrets, without which the scheduler still has no caller and jobs 1–5 never run in production;
   (4) add the deployed origin to the Supabase Site URL / redirect allow-list. `GET
   /api/admin/health` now reports (1) and (3) directly.
+- **Audit `points_ledger` for duplicate award rows per `trip_id`**, and re-close any trip left
+  `started` with points already written (see above).
 - Answer [D-39](3): driver or riders for the unclosed-trip nudge.
 
 ## Blocked On
