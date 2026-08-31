@@ -93,7 +93,6 @@ test("edit and cancel: riders are told, and a changed trip costs nothing to leav
     await driver.locator(".ov input[type=date]").last().fill(moved.date);
     await driver.locator(".ov input[type=time]").first().fill(moved.time);
 
-
     const saved = driver.waitForResponse(
       (r) => /\/api\/trips\/[^/]+$/.test(new URL(r.url()).pathname) && r.request().method() === "PATCH",
     );

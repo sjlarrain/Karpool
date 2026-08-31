@@ -32,12 +32,12 @@
   a change still counts, whether a `started` trip can be abandoned (it cannot — the sharpest gap), and
   whether a serially-cancelling driver is accountable at all.
 
-## Also this session (verification attempt)
-- **The developer reported running migration `0016`; it is not on the live database.** Proven, not
-  inferred: the trip detail route now answers
-  `500 rider_lookup_failed / "column trip_rider.penalty_waived_at does not exist"`, and
-  `supabase migration list --linked` shows no remote row for 0016. **Everything else is verified and
-  waiting on that one statement.**
+## Also this session (verification)
+- **Migration `0016` is applied and D-38 is verified end-to-end against the live database.** The
+  developer's first attempt had not reached the project — proven, not inferred, by the trip detail
+  route answering `500 rider_lookup_failed / "column trip_rider.penalty_waived_at does not exist"`
+  with no remote row in `migration list`. `supabase db push --linked` then applied it, and the
+  full e2e suite is **5/5 green**, including the new D-38 spec.
 - **Two bugs found by trying to verify, both fixed and committed separately from the feature.**
   (1) `GET /api/trips/:id` and `POST .../leave` destructured only `data` from the `trip_rider`
   query, so a failed query read as "nobody has joined": the detail screen answered **200 with an
@@ -56,14 +56,11 @@
   notification rows actually reached the rider.
 
 ## In Progress
-- **`tests/e2e/trip-edit-cancel.spec.ts` is written and currently red on the missing column.** It is
-  the verification; re-run it the moment `0016` lands.
+- Nothing mid-flight.
 
 ## Next
-- **Apply migration `0016`** — the agent's sandbox refuses `supabase db push`, and the developer's
-  first attempt did not reach the live project (see above). **The committed code selects
-  `penalty_waived_at`, so it must not be deployed before the migration lands.** Then re-run
-  `npx playwright test tests/e2e/trip-edit-cancel.spec.ts`.
+- **Deploy.** The migration is live and `main` is 6 commits ahead of production; nothing else gates
+  the release.
 - [D-38] (c): an "abandon" path from `started`, if the developer wants one.
 
 ## Blocked On
@@ -75,10 +72,13 @@
 ## Gates Green
 - G1 (`pnpm verify`): typecheck, lint and **195/195** tests green (11 new in `tripEdit.test.ts`).
   Same pre-existing `next lint` custom-font warning, still non-blocking.
-- **G5 was red and nobody knew.** `core-loop.spec.ts` has been failing since D-35's join question
-  shipped; it is fixed here but **still not green**, because the same missing column now stops it at
-  the trip detail screen. G5 is claimable only once `0016` is applied.
-- **Not claimed:** live verification of this feature, for the same one reason.
+- **G5 is green for the first time since D-35 shipped**, and had been red without anyone knowing —
+  two causes, both fixed here: the mandatory "Coming back too?" join question, and `.card` first()
+  picking the newly-materialised return leg instead of the closed outbound the kudos step is about.
+- **Full e2e suite 5/5 green against the live database**, including `trip-edit-cancel.spec.ts`:
+  the −5 charge on an unchanged trip, `changed: []` on an untouched save, `notifiedRiders: 1` on a
+  real edit, the waived leave (`latePenalty: null`, `penaltyWaived: true`), the cancellation reason
+  reaching the rider verbatim, and both notification rows actually delivered.
 
 ## Shipped (2026-08-30 — trip times rendered in the reader's time zone, not the server's)
 - **The bug (developer, from production): a ride published for 7:45 read back as 14:45.** Storage was
