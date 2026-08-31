@@ -42,9 +42,21 @@ export function CloseTripOverlay({ tripId, riders, onClose, onClosed }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirmedTripRiderIds, guestNames }),
       });
-      const body = await res.json();
+
+      // Parsed defensively, because an unhandled server fault answers with an HTML error page, not
+      // JSON. `await res.json()` then threw, landed in the catch below, and reported "couldn't
+      // reach the server — check your connection" for a request that reached the server perfectly
+      // well and got a 500. That wording sent the driver to their signal bars while the trip was
+      // being half-closed and the driver double-paid on every retry. A reply we cannot read is a
+      // server problem and now says so.
+      const body = await res.json().catch(() => null);
+
       if (!res.ok) {
-        setError(body.message ?? "Couldn't close that trip.");
+        setError(body?.message ?? "Something went wrong closing that trip. It may already be closed — reopen it to check before trying again.");
+        return;
+      }
+      if (!body) {
+        setError("The trip may have closed even though this failed — reopen it to check before trying again.");
         return;
       }
       onClosed(`Trip closed · +${body.pointsAwarded} pts, riders notified`);
