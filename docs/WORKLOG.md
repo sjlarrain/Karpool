@@ -1,5 +1,81 @@
 # Worklog
 
+## Shipped (2026-08-31 — the full audit, and the two ways points went wrong)
+- **Shipped:** [D-43]. The developer asked for a complete audit — link errors, whether the driver
+  is paid and driven/pooled are classified right, decisions not built as designed, and "why do we
+  have test if when I run the app mistakes arise". Findings recorded as [D-43] through [D-49]; the
+  two that corrupt `points_ledger` were fixed this session, on the developer's instruction to take
+  those first.
+  **(1) The close double-pay race, reproduced rather than argued.** `transition()` is a read, so two
+  closes in flight together both saw `started`, both were told the close was legal, and both wrote a
+  full award set. Fired two simultaneous closes at the live project and got **two `drive` rows, one
+  ride paid twice** (test data removed afterwards). This is the *concurrent* sibling of [D-41]; the
+  [D-39] reordering closed the sequential retry and never this, which is why the worklog has carried
+  it as "Next" for two entries. **The realistic trigger is not a driver double-tapping** — the UI
+  disables its own button — it is that [D-35] mechanic (ii) has the **scheduler** close round
+  trips at T−2h before `return_at` every five minutes, so a driver tapping Close in that window
+  races a cron job. Fixed with a compare-and-swap claim (`... where id=? and status='started'`)
+  taken **before** the guest rows and the ledger, and every failure between the claim and the ledger
+  now *releases* it, so the close stays as retryable as it was before.
+  **(2) Kudos points could vanish and never come back.** The award insert dropped its error. The
+  `kudos` row is written first under `unique(trip_id, from_profile_id)`, so a failure left the rider
+  with a `201`, the driver with nothing, and no route to recover: a second attempt answers
+  `409 already_given` for ever. Now the kudos row is rolled back and the call answers
+  `500 kudos_award_failed`. Reachable with no infrastructure fault at all — `points_ledger` has
+  `check (points <> 0)`, so a group admin setting `kudos_weight = 0` to switch kudos scoring off was
+  silently eating every rating.
+- **[D-42] audited clean.** Against the live ledger: driver `1 driven · 0 pooled · 34`, the four
+  riders `1 pooled · 3` each; the drive row carries the whole fill bonus, guests fill seats and earn
+  nothing, no-shows are charged to the rider. Now asserted end-to-end rather than only in the pure
+  function.
+- **In progress:** nothing mid-flight.
+- **Next:** [D-49] is blocking and is the developer's — "the rider shouldn't have any point" can
+  mean `rider_pool_weight = 0` (rider still reads `1 pooled`, worth nothing) or no rider `pool` row
+  at all (rider reads `0 pooled`, undoing this morning's [D-42]). Do not guess. Then [D-47] (already
+  decided: reject `return_at <= depart_at` in zod **and** a DB CHECK), [D-44] (push deep link, one
+  line), [D-45] (the "Couldn't load this trip" dead end), [D-46] (the invite link's swallowed
+  insert), [D-48] (what the commit gate should cover).
+- **Blocked on:** [D-49] only. **Two blockers recorded in [D-39] are stale and now cleared:** the
+  `carpool-tick` Vault secrets (the scheduler reports `active: true`, `last_status: succeeded`,
+  `last_run_at: 22:00`) and migration `0017` (applied — a `close_reminder` row exists). Still the
+  developer's: a valid `VAPID_SUBJECT`, though `src/domain/vapidSubject.ts` now repairs a
+  scheme-less value, so check `GET /api/admin/health` → `push.channel` before assuming it is broken.
+- **Gates now green:** `pnpm verify` — typecheck, lint, **220/220 across 17 suites**; `pnpm e2e`
+  **6/6** against the live database; new `pnpm test:integration` **4/4**. Both new tests were proved
+  non-vacuous by reverting each fix and watching the matching one fail — `[200, 200]` for the
+  race, `201` instead of `500` for the kudos.
+
+## Also this session (the answer to "why do we have tests")
+- **The commit gate cannot see the layer the bugs live in, and that is the whole answer.**
+  `pnpm verify` is `typecheck && lint && test`, and `vitest.config.ts` includes only
+  `src/**/*.test.ts`. All 17 suites / 220 tests live in `src/domain/`, and — checked import by
+  import — every one imports nothing but its own sibling module and `vitest`. **Zero touch an API
+  route, a component, the database, RLS or a migration.** The suites that do execute real behaviour
+  each sit behind their own config and none is in `verify`. So the tests are not lying; they test
+  220 things that were never broken, while every production defect this project has had (the VAPID
+  throw, the close double-pay, the `.maybeSingle()` dedupe inversion, the swallowed rider lookup)
+  lived in the gap. Recorded as [D-48], with the question of how far to take it left open.
+- New `tests/integration/` + `vitest.integration.config.ts` + `pnpm test:integration` — HTTP-level
+  tests against a running dev server, the same shape as `tests/admin`. The concurrency test
+  **cannot** be written any other way: the bug only appears with two requests in flight, so no unit
+  test and no single-threaded Playwright journey can reach it. README now states plainly what a
+  green `verify` does and does not mean.
+- **Counted while looking:** 60 call sites across `src/app/api` and `src/lib` destructure only
+  `data` from a Supabase query and drop the error. Most are harmless `maybeSingle()` lookups where
+  absent and broken both mean 404; the ones that are not turn a failure into "there is nothing
+  here" — the leaderboard renders empty, the cron sweeps nothing, `cancel` notifies no riders,
+  `push/send` finds no devices. Not swept this session; scoped in [D-48].
+
+## Also this session (link paths, checked in a real browser)
+- **The share and invite dead-ends are all correct** — verified live: `/t/<bad-uuid>`,
+  `/t/<a trip in another group>` and `/j/ZZZZZZ` each render a friendly, accurate page. The
+  `href="#"` links in `AuthGate`/`LockedGate` all `preventDefault()`. So the link *pages* are fine;
+  the three faults are elsewhere and are [D-44], [D-45] and [D-46].
+- The one reproduced in the browser is [D-45]: `/app?trip=<a trip you cannot see>` renders
+  **"Couldn't load this trip."** over a Retry button that can never succeed, because
+  `TripDetailOverlay.load()` collapses 401/403/404/500 into one boolean. `/t/:id` already handles
+  the identical case properly, and its wording is what to reuse.
+
 ## Shipped (2026-08-31 — "pooled" belongs to the rider, not the driver)
 - **Shipped:** [D-42]. The developer rejected the [D-41] repair — "Alejandro drove once and he
   wasn't pooled that time. The others must have one pooled" — and they were right about something
