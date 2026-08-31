@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 // Shared journey steps for the e2e specs: signing in with the fixed seeded accounts, standing up a
 // group, and joining one by code. Extracted from core-loop.spec.ts when the share-link spec needed
@@ -56,6 +56,33 @@ export async function joinGroupByCode(page: Page, code: string) {
   await page.waitForURL((url) => /\/app/.test(url.href) && url.href !== urlBefore, { timeout: 10_000 });
 }
 
+// A wall clock `minutesFromNow` from now, in the shape the form's three fields speak: a
+// `<input type=date>` value, an `<input type=time>` value, and the same moment as a card renders it
+// ("7:45", no leading zero). Both halves come off ONE instant, so a run near midnight rolls onto
+// tomorrow rather than filling today's date with tomorrow's time. Shared by publishTrip and by any
+// spec that has to move a departure after the fact (D-38's edit).
+export function wallClock(
+  minutesFromNow: number,
+  timeZone?: string,
+): { date: string; time: string; displayTime: string } {
+  const at = new Date(Date.now() + minutesFromNow * 60_000);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(at);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)!.value;
+  return {
+    date: `${part("year")}-${part("month")}-${part("day")}`,
+    time: `${part("hour")}:${part("minute")}`,
+    displayTime: `${Number(part("hour"))}:${part("minute")}`,
+  };
+}
+
 // Publishes a trip departing `minutesFromNow` from now, deriving BOTH the day and the time from
 // the same instant so a run near midnight rolls onto tomorrow instead of publishing into the past.
 //
@@ -74,20 +101,7 @@ export async function publishTrip(
   minutesFromNow = 60,
   timeZone?: string,
 ): Promise<{ date: string; time: string; displayTime: string }> {
-  const depart = new Date(Date.now() + minutesFromNow * 60_000);
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(depart);
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)!.value;
-  const date = `${part("year")}-${part("month")}-${part("day")}`;
-  const time = `${part("hour")}:${part("minute")}`;
-  const displayTime = `${Number(part("hour"))}:${part("minute")}`;
+  const { date, time, displayTime } = wallClock(minutesFromNow, timeZone);
 
   await page.locator(".tab", { hasText: "Carpools" }).click();
   await page.locator(".fab").click();
@@ -96,4 +110,22 @@ export async function publishTrip(
   await page.locator("button.btnP", { hasText: "Publish to" }).click();
 
   return { date, time, displayTime };
+}
+
+// D-35 answer (C): joining a **round** trip asks "Coming back too?" before the join is submitted,
+// with no default and no way past it. `publishTrip` leaves the create form on its "Round trip"
+// default, so every join in this suite meets that sheet — the specs were clicking "Request to
+// join" and then waiting for a confirmation that could never arrive while the question was still
+// on screen.
+export async function joinTrip(page: Page, card: Locator, wantsReturn = false) {
+  await card.click();
+  await expect(page.getByText("Request to join")).toBeVisible({ timeout: 10_000 });
+  await page.getByText("Request to join").click();
+
+  const question = page.getByRole("heading", { name: "Coming back too?" });
+  if (await question.isVisible({ timeout: 3_000 }).catch(() => false)) {
+    await page.getByText(wantsReturn ? "Yes, both ways" : "Just the way there").click();
+  }
+
+  await expect(page.getByText(/riding this trip/)).toBeVisible({ timeout: 10_000 });
 }

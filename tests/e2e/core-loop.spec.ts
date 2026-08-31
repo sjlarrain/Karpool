@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { E2E_DRIVER_EMAIL, E2E_RIDER_EMAIL, E2E_PASSWORD } from "./global-setup";
-import { createGroup, getGroupCode, joinGroupByCode, signIn, publishTrip } from "./helpers";
+import { createGroup, getGroupCode, joinGroupByCode, signIn, publishTrip, joinTrip } from "./helpers";
 
 // G5 — the core loop, driven through the real UI (not the API directly): sign in, publish a trip,
 // a second account joins it, the driver starts and closes it, the rider gives kudos, and the
@@ -36,10 +36,7 @@ test("core loop: publish, join, start, close, kudos, leaderboard", async ({ brow
 
   await test.step("rider joins the trip", async () => {
     await rider.locator(".tab", { hasText: "Carpools" }).click();
-    await rider.locator(".card").first().click();
-    await expect(rider.getByText("Request to join")).toBeVisible({ timeout: 10_000 });
-    await rider.getByText("Request to join").click();
-    await expect(rider.getByText(/riding this trip/)).toBeVisible({ timeout: 10_000 });
+    await joinTrip(rider, rider.locator(".card").first());
   });
 
   await test.step("driver starts and closes the trip, confirming the rider", async () => {
