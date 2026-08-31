@@ -71,22 +71,33 @@
 - Nothing mid-flight. Ten commits on `dev`, not merged and not pushed.
 
 ## Next
-- **Developer actions, in this order** — none are doable from code: (1) set a valid `VAPID_SUBJECT`
-  (`mailto:` or `https:`); (2) apply migration `0017` (`supabase db push --linked`) — until then
-  close reminders fail the CHECK constraint and are counted, not raised; (3) set the [D-21] Vault
-  secrets, without which the scheduler still has no caller and jobs 1–5 never run in production;
-  (4) add the deployed origin to the Supabase Site URL / redirect allow-list. `GET
-  /api/admin/health` now reports (1) and (3) directly.
+- **The developer completed every dashboard-side action on 2026-08-31** — `VAPID_SUBJECT`,
+  `NEXT_PUBLIC_APP_URL`, `CRON_SECRET`, the Supabase Site URL and redirect allow-list, and the
+  [D-21] Vault secrets. **The scheduler therefore has a caller for the first time.** Migration
+  `0017` is applied and **verified by this agent** against the live project (`migration list
+  --linked`: `0017 | 0017`) — the `0016` lesson observed rather than repeated.
+- `dev` is **merged into `main`** (`2e121cc`, `--no-ff`). `main` is **12 commits ahead of
+  `origin/main` and not pushed** — production is still on `915e45d`, so none of the eleven fixes
+  are live yet and the now-awake scheduler is driving the *old* tick. Pushing is the next action
+  and needs the developer's word (CLAUDE.md §2.3).
+- Then: `GET /api/admin/health` (`push.channel.configured: true`, `scheduler.stale: false`), and
+  the duplicate-`points_ledger` audit, which is only meaningful once the fixes are deployed.
 - **Audit `points_ledger` for duplicate award rows per `trip_id`**, and re-close any trip left
   `started` with points already written (see above).
 - Answer [D-39](3): driver or riders for the unclosed-trip nudge.
 
 ## Blocked On
-- **Live verification of all three patches.** `.env.local` is unreadable by design (CLAUDE.md §2.6)
-  and this session's attempt to load it for a database probe was correctly refused, so nothing here
-  was exercised against the real project — unlike [D-38], which was verified end-to-end. The
-  reasoning is from code and from a browser check of `/` and `/j/:code`; the e2e suite needs the
-  live database and has not been run.
+- **The push to `origin/main`**, which is what actually deploys any of this.
+- **Live verification of the three patches.** `.env.local` is unreadable by design (CLAUDE.md §2.6)
+  and this session's attempt to load it for a database probe was correctly refused, as was
+  `supabase db push` — so the *code* was never exercised against the real project, unlike [D-38].
+  What was verified live: migration `0017` (read-only CLI), and the new `readJsonBody` behaviour in
+  a real browser against the real API — a bad password shows the route's own message, an injected
+  HTML 500 shows the server-fault message rather than the connection one, and a genuine fetch
+  rejection still shows the connection one. The e2e suite needs the live database and has not run.
+- **The sharing-link diagnosis is the weakest of the three** and remains unconfirmed: whether
+  Confirm email is on or off decides whether the signup-email round trip — the path
+  `redeemPendingInvite` protects — is even on a user's route. Asked twice, still unanswered.
 - Unchanged: [D-21] Vault secrets, custom SMTP, the Supabase URL config.
 
 ## Gates Green
