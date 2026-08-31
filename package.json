@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "test:rls": "vitest run --config vitest.rls.config.ts",
     "test:admin": "vitest run --config vitest.admin.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "e2e": "playwright test",
     "db:types": "supabase gen types typescript --local > src/types/database.ts",
     "db:types:linked": "supabase gen types typescript --linked > src/types/database.ts",

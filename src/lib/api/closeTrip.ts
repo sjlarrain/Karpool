@@ -120,13 +120,71 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
     if (error) return { ok: false, error: "no_show_failed", status: 500, message: error.message };
   }
 
+  // THE CLAIM. Exactly one caller may pass this line for a given trip, and it sits ahead of both
+  // writes that a second run would duplicate: the guest rows just below, and the points_ledger
+  // insert further down.
+  //
+  // `transition()` above is only a read. Two callers can both see `started`, both be told the close
+  // is legal, and both go on to pay. That is not theoretical — it was reproduced against this
+  // project's own database on 2026-08-31 (two simultaneous closes, two `drive` rows, one ride paid
+  // twice), and it is the concurrent sibling of [D-41], whose sequential form already had to be
+  // cleaned out of the live leaderboard by hand. The realistic trigger is not a driver
+  // double-tapping — the UI disables its own button — it is that D-35 mechanic (ii) has the
+  // SCHEDULER close round trips at T-2h before `return_at` every five minutes, so a driver tapping
+  // Close inside that window races a cron job. A group admin closing at the same moment as the
+  // driver is the same shape.
+  //
+  // `.eq("status", "started")` turns the update into a compare-and-swap: Postgres serialises the two
+  // writers on the row, the loser matches no rows, and `.maybeSingle()` returns null rather than a
+  // second licence to pay. The loser answers `wrong_status` — exactly what it would have been told
+  // had it arrived a moment later.
+  const { data: claimed, error: claimError } = await admin
+    .from("trip")
+    .update({ status: result.nextStatus, closed_at: new Date().toISOString() })
+    .eq("id", tripId)
+    .eq("status", "started")
+    .select()
+    .maybeSingle();
+
+  if (claimError) {
+    return { ok: false, error: "update_failed", status: 500, message: claimError.message };
+  }
+  if (!claimed) {
+    // Someone else closed it between our read and this write. We have paid nothing and added
+    // nobody, so there is nothing to undo.
+    return { ok: false, error: "wrong_status", status: 409 };
+  }
+
+  // Giving the claim back, for every failure between here and the ledger.
+  //
+  // Without this, any of them would leave a trip that is `closed`, paid nobody, and can never be
+  // closed again — the state machine only closes a `started` trip. Everything the claim guards is
+  // either idempotent (generate_back_trip(), confirming riders) or re-runnable, so handing the
+  // status back restores exactly the retryable close this route had before the claim existed.
+  //
+  // Guarded on `closed` so it can only ever undo OUR OWN claim, never a close someone else has
+  // since completed. A failed revert is reported rather than swallowed: an unpaid closed trip is
+  // recoverable with an admin ledger adjustment, but only by someone who knows it happened.
+  async function releaseClaim(failure: CloseTripFailure): Promise<CloseTripFailure> {
+    const { error: revertError } = await admin
+      .from("trip")
+      .update({ status: "started", closed_at: null })
+      .eq("id", tripId)
+      .eq("status", "closed");
+    if (!revertError) return failure;
+    return {
+      ...failure,
+      message: `${failure.message ?? failure.error} (and the trip could not be reopened: ${revertError.message})`,
+    };
+  }
+
   let insertedGuests: { id: string; guest_name: string | null }[] = [];
   if (namedGuests.length > 0) {
     const { data, error } = await admin
       .from("trip_rider")
       .insert(namedGuests.map((guestName) => ({ trip_id: tripId, guest_name: guestName, state: "confirmed" as const })))
       .select("id, guest_name");
-    if (error) return { ok: false, error: "guest_add_failed", status: 500, message: error.message };
+    if (error) return releaseClaim({ ok: false, error: "guest_add_failed", status: 500, message: error.message });
     insertedGuests = data ?? [];
   }
 
@@ -140,7 +198,7 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
   if (shouldGenerateBackLeg({ direction: trip.direction, returnAt: trip.return_at })) {
     const { data: backTrip, error: backError } = await admin.rpc("generate_back_trip", { p_parent_trip_id: tripId });
     if (backError) {
-      return { ok: false, error: "back_leg_failed", status: 500, message: backError.message };
+      return releaseClaim({ ok: false, error: "back_leg_failed", status: 500, message: backError.message });
     }
     const generated = Array.isArray(backTrip) ? backTrip[0] : backTrip;
     if (generated?.id) {
@@ -215,37 +273,14 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
     })),
   ]);
   if (ledgerError) {
-    return { ok: false, error: "ledger_write_failed", status: 500, message: ledgerError.message };
+    return releaseClaim({ ok: false, error: "ledger_write_failed", status: 500, message: ledgerError.message });
   }
 
-  // The status flip closes the retry window, so it comes straight after the ledger and BEFORE any
-  // notification. Everything above it is idempotent by design — generate_back_trip() is, and
-  // confirming riders is — which is what makes a failure before the ledger safe to retry. The
-  // ledger insert is the one step that is not: points_ledger is append-only with no idempotency
-  // key, so a second run pays the driver twice.
-  //
-  // That window was live in production. Both notifyProfiles calls used to sit here, between the
-  // ledger and this update, and on a project whose VAPID_SUBJECT is not a valid mailto:/https: URL
-  // the push layer *threw* — past the ledger, so the driver was paid; before this update, so the
-  // trip stayed `started` and the state machine let the close run again. The driver saw only
-  // "Couldn't reach the server", tapped Close again, and was paid again on every attempt while the
-  // riders never got their kudos prompt. Two separate faults had to line up: the throw (fixed in
-  // src/lib/push/send.ts) and this ordering. Either one alone is harmless; together they duplicate
-  // money-like data.
-  const { data: updated, error } = await admin
-    .from("trip")
-    .update({ status: result.nextStatus, closed_at: new Date().toISOString() })
-    .eq("id", tripId)
-    .select()
-    .single();
-
-  if (error || !updated) {
-    return { ok: false, error: "update_failed", status: 500, message: error?.message };
-  }
+  const updated = claimed;
 
   // Notifications last, and deliberately after the point of no return: the ride is closed and paid
   // whether or not anyone's phone lights up. A failure here costs a missed kudos prompt, which is
-  // recoverable; a failure before the update cost a duplicated payment, which is not.
+  // recoverable; a failure before the claim cost a duplicated payment, which is not.
   //
   // D-35 answer (B): kudos is once per rider per ride. Riders carried on to the return leg are not
   // asked yet — their ride is not over — so only the ones stopping here get the prompt.

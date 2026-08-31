@@ -107,6 +107,7 @@ verification with `CRON_SECRET`.
 | `pnpm test:watch` | Unit tests, watch mode |
 | `pnpm test:rls` | RLS integration tests (needs a running Postgres — see [Tests](#tests)) |
 | `pnpm test:admin` | Admin route integration tests — G9 (403 for non-admin) + G10 (audit row per mutation). Needs `pnpm dev` running (see [Tests](#tests)) |
+| `pnpm test:integration` | Points-ledger route tests — exactly-once close (incl. concurrent), the D-42 drive/pool split, kudos award rollback. Needs `pnpm dev` running (see [Tests](#tests)) |
 | `pnpm e2e` | Playwright E2E — the core publish → join → start → close → kudos loop, driven through a real browser against two seeded accounts |
 | `pnpm admin:bootstrap` | Promotes the account matching `ADMIN_BOOTSTRAP_EMAIL` to `platform_admin`. Idempotent — safe to re-run |
 | `pnpm verify` | `typecheck && lint && test` — must pass before every commit |
@@ -200,6 +201,14 @@ plain `string`, not a literal union).
 
 ## Tests
 
+**Know what the commit gate does and does not cover.** `pnpm verify` is `typecheck && lint && test`,
+and `pnpm test` includes only `src/**/*.test.ts` — every one of which is a pure function in
+`src/domain/` importing nothing but its own sibling module. So a green `verify` says nothing about
+whether any API route, React component, SQL migration or RLS policy works. Every production defect
+this project has had lived in exactly that gap. The four suites below that *do* execute real
+behaviour each need a live Supabase project, and none of them runs as part of `verify` — run them
+before shipping anything that touches a route or the schema.
+
 ```bash
 pnpm test          # unit tests — pure domain logic, no I/O, run anywhere
 pnpm test:rls       # RLS cross-group isolation — needs a real Postgres connection (Docker locally,
@@ -207,6 +216,12 @@ pnpm test:rls       # RLS cross-group isolation — needs a real Postgres connec
 pnpm test:admin     # G9 (403 for non-admin) + G10 (audit row per mutation) — needs `pnpm dev`
                     # already running in another terminal; creates and cleans up its own throwaway
                     # admin/member test accounts against the real dev Supabase project
+pnpm test:integration
+                    # points_ledger correctness at the route level: a close is paid exactly once
+                    # even with two requests in flight at the same instant, D-42's drive/pool split
+                    # lands on the right people, and a kudos whose award cannot be written is
+                    # refused rather than silently dropped. Same requirements as test:admin
+                    # (`pnpm dev` running + a real Supabase project); throwaway accounts, cleaned up
 pnpm e2e            # Playwright — starts the dev server itself, seeds two fixed accounts
                     # (e2e-driver@carpool.test / e2e-rider@carpool.test) idempotently, and cleans up
                     # each account's trip/group data before every run
