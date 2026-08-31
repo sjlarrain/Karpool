@@ -41,11 +41,13 @@
 ## Blocked On
 - **`pnpm db:unpool-ledger -- --yes`** — deletes the 5 existing rider `pool` rows (−15 pts, one
   per rider; no driver row touched). Dry run reviewed and correct; the delete itself was refused by
-  the sandbox's permission classifier, so the developer runs it. **Until it runs, live riders read
-  `1 pooled · 3` instead of `1 pooled · 0`** — the code is right, the old rows are not.
-- `CLAUDE.md` §4 still states `10·driven + 3·pooled + 2·kudos`. That line was already stale after
-  [D-19]; [D-49] makes the `3·pooled` term actively wrong. The file is immutable to the agent — the
-  developer applies it.
+  the sandbox's permission classifier, so **the developer runs it — they said they would.** Until it
+  runs, live riders read `1 pooled · 3` instead of `1 pooled · 0`: the code is right, the old rows
+  are not.
+- ~~`CLAUDE.md` §4's scoring line~~ — **done.** The developer instructed the edit directly rather
+  than applying it by hand, so §4 now carries the driver/rider split, the `pooled` count and the
+  no-show penalty, and the guest-rider row (which said guests "count toward pooled") is corrected
+  too. Only §4 was touched; §2's hard rules are untouched.
 - The [D-41] double-pay race is closed for `close`, but the rest of [D-43]'s triage (D-44..D-48) is
   still open and unbuilt.
 

@@ -69,7 +69,10 @@ Any route added, changed, or removed updates `docs/API.md` **in the same commit*
 
 | Constant | Value |
 |---|---|
-| Score | `10·driven + 3·pooled + 2·kudos` (per-group overridable) |
+| Score — driver | `drive_weight` + a fill bonus of every seat filled (`pool_weight + (n−1)·pool_step` summed, guests included), + `kudos_weight × confirmed riders` per kudos received. Defaults 10 / 3 / 2 / 2 (D-19, D-42) |
+| Score — rider | **Nothing.** Riding earns no points at all (D-49). Riders are *counted, not scored* — see `pooled` below |
+| `pooled` | A rider's count of `confirmed` seats on **closed** trips — deliberately **not** a ledger figure (`points_ledger` has `check (points <> 0)`, so a zero-point row is unstorable). Means *rides taken*, never *passengers carried* (D-42, D-49) |
+| No-show | Registered rider who booked and didn't ride: **−10 pts**, charged to the rider (D-19) |
 | Kudos | Binary, one per rider per trip, optional comment |
 | Late cancellation | Within **60 min** of departure: **−5 pts** |
 | Seats | default 3, min 1, max 7 |
@@ -77,8 +80,12 @@ Any route added, changed, or removed updates `docs/API.md` **in the same commit*
 | Viewer role | derived: `driving` / `joined` / `open` |
 | Route | owned by the **group**; trips pick round-trip or a one-way leg |
 | Group code | 6 chars, uppercase, unique |
-| Guest riders | name-only, no account, still count toward pooled |
+| Guest riders | name-only, no account; fill a seat so they still pay the **driver's** fill bonus, but hold no profile and earn nothing (D-09) |
 | No group | authenticated user sees the **locked** state, zero trips |
+
+Every weight above is a per-group column and overridable (D-11); the figures are the defaults. The
+ledger is append-only, so changing a weight never rewrites history — each row keeps what it was worth
+when written.
 
 ## 5. Design tokens (from the sketch)
 
