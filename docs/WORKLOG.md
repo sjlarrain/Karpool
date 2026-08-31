@@ -67,6 +67,26 @@
   `pointsAwarded`) that would have dereferenced null. The three `.then(res.ok ? res.json() :
   reject)` loaders never had the defect and were left alone.
 
+## Also 2026-08-31 (post-deploy: the scheduler lives, and the last fault named itself)
+- **`main` deployed (`dd319ee`). `GET /api/admin/health` reports the scheduler `scheduled: true,
+  active: true, lastStatus: "succeeded", stale: false` — [D-21] is closed after weeks dead.** That
+  `succeeded` is also the `send.ts` fix proving itself in production: one push subscription is on
+  file and the VAPID config is still broken, which on the old code would have thrown and aborted
+  the tick.
+- **The remaining fault named itself through the new field:** `push.channel.configured: false`,
+  `error: "Vapid subject is not a valid URL. karpool-nu.vercel.app/contact"` — no scheme, so
+  `new URL()` has nothing to parse. Recognisably what was meant, unusable only for a missing
+  prefix, and the *second* time this variable has taken push down (flagged 2026-08-16, still broken
+  today). `src/domain/vapidSubject.ts` now completes a scheme-less subject — `mailto:` for a bare
+  address, `https:` for a bare host — and **only** that: never rewriting a scheme that is already
+  present (an `http:` subject is passed through to be reported, since choosing https for someone is
+  a judgement about their infrastructure, not a missing prefix). Every repair is announced via
+  `push.channel.normalizedFrom`, because config that silently fixes itself is config nobody
+  corrects at the source.
+- `failingSubscriptions: 0` alongside a dead channel is also correct by design: the config-error
+  path returns before the per-subscription loop, so a broken channel cannot smear `failure_count`
+  across healthy subscriptions.
+
 ## In Progress
 - Nothing mid-flight. Ten commits on `dev`, not merged and not pushed.
 

@@ -626,13 +626,13 @@ reasoning as the audit log (D-14).
 ### `GET /api/admin/health`
 Push delivery stats (subscription/failure/dead counts), the scheduler's own pulse, recent cron auto-closes, and a placeholder for Maps health (`status: "not_applicable"` — Phase 6 isn't built yet).
 
-`push.channel` reports the **sending** side, where the counts report the receiving side. It is the D-21 lesson applied to push: a healthy-looking set of subscriptions with `configured: false` is the exact state in which every notification is written to the bell and none of them ever reaches a phone, and "nobody got a notification" and "the VAPID subject is not a `mailto:` URL" look identical from the outside. `error` carries `web-push`'s own message.
+`push.channel` reports the **sending** side, where the counts report the receiving side. It is the D-21 lesson applied to push: a healthy-looking set of subscriptions with `configured: false` is the exact state in which every notification is written to the bell and none of them ever reaches a phone, and "nobody got a notification" and "the VAPID subject is not a `mailto:` URL" look identical from the outside. `error` carries `web-push`'s own message. `normalizedFrom` is non-null when `VAPID_SUBJECT` arrived without a scheme and was completed to one (`src/domain/vapidSubject.ts`) — it names the value as configured, so the repair is announced rather than silent. A config that quietly fixes itself is a config nobody ever corrects at the source.
 
 `scheduler` reads the `carpool-tick` pg_cron job through `public.carpool_cron_status()` (migration `0009`). It exists because an empty `recentCronAutoCloses` means either "nothing was abandoned" or "the scheduler is dead", and for weeks it silently meant the second (D-21). `scheduled: false` = the job was never created; `stale: true` = no successful run in the last 20 minutes (four missed ticks).
 
 - **Auth**: `platform_admin`
 - **Request**: none
-- **Response**: `{ push: { totalSubscriptions, failingSubscriptions, deadSubscriptions, channel: { configured, error } }, scheduler: { scheduled, active, schedule, lastRunAt, lastStatus, stale }, recentCronAutoCloses, maps: { status, message } }`
+- **Response**: `{ push: { totalSubscriptions, failingSubscriptions, deadSubscriptions, channel: { configured, error, normalizedFrom } }, scheduler: { scheduled, active, schedule, lastRunAt, lastStatus, stale }, recentCronAutoCloses, maps: { status, message } }`
 - **Errors**: `401 unauthenticated`, `403 forbidden`
 - **Side effects**: none.
 

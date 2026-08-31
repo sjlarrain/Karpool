@@ -1,6 +1,7 @@
 import webpush from "web-push";
 import { env } from "@/env";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { normalizeVapidSubject } from "@/domain/vapidSubject";
 
 // Configured lazily, on first actual send, rather than at module import time — a bad VAPID_SUBJECT
 // (web-push requires https: or mailto:) would otherwise crash every route that merely imports this
@@ -14,12 +15,18 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 // A misconfigured push channel is not a reason to fail the action the notification is about.
 let vapidConfigured = false;
 let vapidError: string | null = null;
+let vapidNormalizedFrom: string | null = null;
 
 function ensureVapidConfigured(): string | null {
   if (vapidConfigured) return null;
   if (vapidError) return vapidError;
+  // A scheme-less subject is completed rather than refused — see src/domain/vapidSubject.ts. The
+  // value is remembered so health can say what was done; a config that quietly repairs itself is a
+  // config nobody ever fixes.
+  const { subject, normalizedFrom } = normalizeVapidSubject(env.VAPID_SUBJECT);
+  vapidNormalizedFrom = normalizedFrom;
   try {
-    webpush.setVapidDetails(env.VAPID_SUBJECT, env.NEXT_PUBLIC_VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
+    webpush.setVapidDetails(subject, env.NEXT_PUBLIC_VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
     vapidConfigured = true;
     return null;
   } catch (error) {
@@ -32,9 +39,13 @@ function ensureVapidConfigured(): string | null {
 // Whether the push channel can be used at all, for GET /api/admin/health. The D-21 lesson applied
 // to push: "nobody got a notification" and "the VAPID subject is not a mailto: URL" look identical
 // from the outside, and the second is a five-second fix nobody can make while it is invisible.
-export function pushChannelStatus(): { configured: boolean; error: string | null } {
+export function pushChannelStatus(): {
+  configured: boolean;
+  error: string | null;
+  normalizedFrom: string | null;
+} {
   const error = ensureVapidConfigured();
-  return { configured: error === null, error };
+  return { configured: error === null, error, normalizedFrom: vapidNormalizedFrom };
 }
 
 export interface PushPayload {
