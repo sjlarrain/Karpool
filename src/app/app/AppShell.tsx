@@ -14,6 +14,7 @@ import { NotificationsSheet, type NotificationItem } from "./NotificationsSheet"
 import { ReturnQuestionSheet } from "./ReturnQuestionSheet";
 import { stopView } from "@/domain/toTripView";
 import type { TripStopView } from "@/domain/types";
+import { readJsonBody } from "@/lib/http/readJsonBody";
 
 type Group = Database["public"]["Tables"]["group"]["Row"];
 type PickupPlace = Database["public"]["Tables"]["pickup_place"]["Row"];
@@ -56,8 +57,11 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
     try {
       const res = await fetch("/api/notifications");
       if (!res.ok) return;
-      const body = await res.json();
-      setNotifications(body.notifications as NotificationItem[]);
+      const body = await readJsonBody<{ notifications: NotificationItem[] }>(res);
+      // A failed poll is not worth telling anyone about, but it must not overwrite a good feed
+      // with nothing either — which is what parsing an error page into `undefined` used to do.
+      if (!res.ok || !body) return;
+      setNotifications(body.notifications);
     } catch {
       // A failed poll leaves the last known feed in place; the bell is not worth a visible error.
     } finally {
@@ -123,9 +127,9 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ wantsReturn }),
       });
-      const body = await res.json();
+      const body = await readJsonBody(res);
       if (!res.ok) {
-        flash(body.message ?? (body.error === "full" ? "That trip just filled up." : "Couldn't join that trip."));
+        flash(body?.message ?? (body?.error === "full" ? "That trip just filled up." : "Couldn't join that trip."));
         return;
       }
       flash(wantsReturn ? "Joined both ways — seat home held 🎉" : "Joined — added to your trips 🎉");

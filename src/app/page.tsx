@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { redeemPendingInvite } from "@/lib/api/redeemPendingInvite";
 import { AuthGate } from "./AuthGate";
 import { LockedGate } from "./LockedGate";
 
@@ -31,6 +32,11 @@ export default async function RootPage({ searchParams }: { searchParams: Promise
     .limit(1);
 
   if (!memberships || memberships.length === 0) {
+    // Before showing the locked screen, honour an invite that never made it through the
+    // confirmation email — see src/lib/api/redeemPendingInvite.ts. Asking someone to type a code
+    // they already clicked is the failure this catches.
+    if (await redeemPendingInvite(userData.user)) redirect("/app");
+
     return (
       <main style={{ minHeight: "100vh" }}>
         <div style={{ maxWidth: 430, margin: "0 auto" }}>

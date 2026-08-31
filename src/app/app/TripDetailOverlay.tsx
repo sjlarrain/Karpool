@@ -10,6 +10,7 @@ import { shareOrCopy } from "@/lib/share";
 import { CloseTripOverlay } from "./CloseTripOverlay";
 import { ReturnQuestionSheet } from "./ReturnQuestionSheet";
 import { EditTripOverlay } from "./EditTripOverlay";
+import { readJsonBody } from "@/lib/http/readJsonBody";
 
 interface Pickup {
   id: string;
@@ -85,8 +86,15 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/trips/${tripId}`);
-      if (!res.ok) throw new Error(`status ${res.status}`);
-      setData(await res.json());
+      // A read, so there is nothing to half-succeed and no message to show: any reply that is not a
+      // readable trip is simply a failed load. Routed through readJsonBody all the same, so that
+      // "no handler parses a response directly" stays a rule with no exceptions to remember.
+      const body = res.ok ? await readJsonBody<DetailResponse>(res) : null;
+      if (!body) {
+        setLoadFailed(true);
+        return;
+      }
+      setData(body);
       setLoadFailed(false);
     } catch {
       setLoadFailed(true);
@@ -109,9 +117,9 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
           ? {}
           : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
       });
-      const body = await res.json();
+      const body = await readJsonBody(res);
       if (!res.ok) {
-        setError(body.message ?? "That didn't work.");
+        setError(body?.message ?? "That didn't work.");
         return false;
       }
       setConfirmingLeave(false);
@@ -139,9 +147,9 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
             body: JSON.stringify({ comment: kudosComment.trim() || undefined }),
           })
         : await fetch(`/api/trips/${tripId}/kudos/decline`, { method: "POST" });
-      const body = await res.json();
+      const body = await readJsonBody(res);
       if (!res.ok) {
-        setError(body.message ?? (givingKudos ? "Couldn't send kudos." : "Couldn't close the prompt."));
+        setError(body?.message ?? (givingKudos ? "Couldn't send kudos." : "Couldn't close the prompt."));
         return;
       }
       await load();
@@ -216,9 +224,9 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profileId }),
       });
-      const body = await res.json();
+      const body = await readJsonBody(res);
       if (!res.ok) {
-        setError(body.message ?? "Couldn't add that passenger.");
+        setError(body?.message ?? "Couldn't add that passenger.");
         return;
       }
       setAddingPassenger(false);
@@ -236,9 +244,9 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
     setBusy(true);
     try {
       const res = await fetch(`/api/trips/${tripId}/riders/${riderId}`, { method: "DELETE" });
-      const body = await res.json();
+      const body = await readJsonBody(res);
       if (!res.ok) {
-        setError(body.message ?? "Couldn't remove that passenger.");
+        setError(body?.message ?? "Couldn't remove that passenger.");
         return;
       }
       await load();

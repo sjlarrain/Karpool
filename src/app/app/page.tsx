@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { env } from "@/env";
+import { redeemPendingInvite } from "@/lib/api/redeemPendingInvite";
 import { loadGroupTrips } from "@/lib/trips/loadGroupTrips";
 import { viewerTimeZone } from "@/lib/time/viewerTimeZone";
 import { AppShell } from "./AppShell";
@@ -19,7 +20,13 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
     .eq("profile_id", userData.user.id)
     .order("joined_at", { ascending: true });
 
-  if (!memberships || memberships.length === 0) redirect("/");
+  if (!memberships || memberships.length === 0) {
+    // Same rescue as the root page: an invite stranded by the confirmation email is redeemed here
+    // rather than shown as a locked screen. Redirecting re-runs this component, which then finds
+    // the membership that was just created.
+    const redeemed = await redeemPendingInvite(userData.user);
+    redirect(redeemed ? `/app?g=${redeemed}` : "/");
+  }
 
   const activeGroupId = g && memberships.some((m) => m.group_id === g) ? g : memberships[0]!.group_id;
   const activeMembership = memberships.find((m) => m.group_id === activeGroupId);

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAdminFetch, LoadingOrError, th, td, fmtDate } from "./adminUi";
+import { readJsonBody } from "@/lib/http/readJsonBody";
 
 interface TripRow {
   id: string;
@@ -107,9 +108,9 @@ function ForceCloseModal({ trip, onClose, onDone }: { trip: TripRow; onClose: ()
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: reason.trim() }),
       });
-      const body = await res.json();
+      const body = await readJsonBody(res);
       if (!res.ok) {
-        setError(body.message ?? "Couldn't force-close that trip.");
+        setError(body?.message ?? "Couldn't force-close that trip.");
         return;
       }
       onDone();

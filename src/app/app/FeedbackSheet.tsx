@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { readJsonBody } from "@/lib/http/readJsonBody";
 
 // D-25: the Profile tab's feedback form. Posts to /api/feedback, which stores the message in
 // Postgres for the admin console — deliberately not email, since the project has no SMTP (D-22).
@@ -42,9 +43,9 @@ export function FeedbackSheet({ groupId, onClose, onSent }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ category, message: trimmed, groupId }),
       });
-      const body = await res.json();
+      const body = await readJsonBody(res);
       if (!res.ok) {
-        setError(body.message ?? "Couldn't send that — try again.");
+        setError(body?.message ?? "Couldn't send that — try again.");
         return;
       }
       onSent("Thanks — your feedback is in 💚");

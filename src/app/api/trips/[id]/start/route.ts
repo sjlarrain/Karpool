@@ -56,12 +56,20 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .eq("trip_id", id)
     .in("state", ["joined", "confirmed"]);
   const riderProfileIds = (activeRiders ?? []).map((r) => r.profile_id).filter((pid): pid is string => !!pid);
-  await notifyProfiles(riderProfileIds, {
+  const notify = await notifyProfiles(riderProfileIds, {
     type: "start",
     title: "Your driver is on the way",
     body: "The trip has started — get to your pickup spot.",
     tripId: id,
   });
 
-  return NextResponse.json({ trip: updated });
+  // Reported, not thrown: the trip has started, and it stays started whether or not the phones in
+  // it lit up. Returning the counts is what turns "nobody got a notification" from a rumour into
+  // something the developer can read off a response — including `pushDelivery.configError`, which
+  // is what a bad VAPID_SUBJECT looks like from here.
+  return NextResponse.json({
+    trip: updated,
+    notifiedRiders: notify.notified,
+    pushDelivery: { sent: notify.pushed, configError: notify.pushConfigError },
+  });
 }

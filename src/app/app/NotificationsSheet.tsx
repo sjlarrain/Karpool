@@ -1,6 +1,7 @@
 "use client";
 
 import { relativeTime } from "@/domain/relativeTime";
+import type { Database } from "@/types/database";
 
 // The bell's bottom sheet (sketch: "NOTIFICATIONS (from bell)"). Rows are tinted by type, carry an
 // icon tile, and a `rate` row is the only actionable one in the sketch — here any row that carries a
@@ -8,7 +9,11 @@ import { relativeTime } from "@/domain/relativeTime";
 
 export type NotificationItem = {
   id: string;
-  type: "start" | "rate" | "change" | "comment" | "tip" | "reminder";
+  // Taken from the database row rather than restated here. AppShell casts the fetched JSON into
+  // this shape, so a hand-written union would let a new notification type reach the sheet with no
+  // icon and no tint and nothing to warn anyone — a migration adding a type now breaks the maps
+  // below at compile time instead.
+  type: Database["public"]["Tables"]["notification"]["Row"]["type"];
   title: string;
   body: string | null;
   tripId: string | null;
@@ -25,6 +30,7 @@ const ICON: Record<NotificationItem["type"], string> = {
   comment: "💬",
   tip: "💡",
   reminder: "⏱️",
+  close_reminder: "✅",
 };
 
 const CARD_BG: Record<NotificationItem["type"], string> = {
@@ -34,6 +40,7 @@ const CARD_BG: Record<NotificationItem["type"], string> = {
   comment: "var(--surface)",
   tip: "var(--notif-tip-bg)",
   reminder: "var(--amber-soft)",
+  close_reminder: "var(--amber-soft)",
 };
 
 const ICON_BG: Record<NotificationItem["type"], string> = {
@@ -43,6 +50,7 @@ const ICON_BG: Record<NotificationItem["type"], string> = {
   comment: "var(--chip)",
   tip: "var(--notif-tip-icon)",
   reminder: "var(--notif-change-icon)",
+  close_reminder: "var(--notif-change-icon)",
 };
 
 const CTA: Partial<Record<NotificationItem["type"], string>> = {
@@ -50,6 +58,7 @@ const CTA: Partial<Record<NotificationItem["type"], string>> = {
   start: "View trip",
   change: "View trip",
   reminder: "View trip",
+  close_reminder: "Close trip",
 };
 
 type Props = {

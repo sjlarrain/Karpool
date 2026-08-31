@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { readJsonBody } from "@/lib/http/readJsonBody";
 
 interface Rider {
   id: string; // trip_rider row id
@@ -42,9 +43,19 @@ export function CloseTripOverlay({ tripId, riders, onClose, onClosed }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirmedTripRiderIds, guestNames }),
       });
-      const body = await res.json();
+
+      // Parsed defensively — see src/lib/http/readJsonBody.ts. This is the handler that taught us
+      // why: an unhandled fault here returns an HTML error page, `res.json()` threw, and the driver
+      // was told to check their connection while the trip was being half-closed and they were
+      // double-paid on every retry.
+      const body = await readJsonBody<{ pointsAwarded: number }>(res);
+
       if (!res.ok) {
-        setError(body.message ?? "Couldn't close that trip.");
+        setError(body?.message ?? "Something went wrong closing that trip. It may already be closed — reopen it to check before trying again.");
+        return;
+      }
+      if (!body) {
+        setError("The trip may have closed even though this failed — reopen it to check before trying again.");
         return;
       }
       onClosed(`Trip closed · +${body.pointsAwarded} pts, riders notified`);

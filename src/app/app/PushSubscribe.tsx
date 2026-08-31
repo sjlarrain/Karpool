@@ -14,27 +14,91 @@ function urlBase64ToUint8Array(base64Url: string): Uint8Array<ArrayBuffer> {
   return array;
 }
 
+// Does an existing browser subscription still belong to the key this deployment signs with? A
+// subscription minted under a rotated-away VAPID key is not dead — the browser keeps it and
+// getSubscription() keeps returning it — but every push against it is refused by the push service
+// with a 403, which is not one of the 404/410 codes that prune a row. Left alone it is a
+// permanently silent subscription that looks perfectly healthy from both ends.
+function matchesServerKey(subscription: PushSubscription, serverKey: Uint8Array): boolean {
+  const applied = subscription.options?.applicationServerKey;
+  if (!applied) return false;
+  const current = new Uint8Array(applied);
+  if (current.length !== serverKey.length) return false;
+  return current.every((byte, i) => byte === serverKey[i]);
+}
+
+async function persist(subscription: PushSubscription): Promise<boolean> {
+  const res = await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(subscription.toJSON()),
+  });
+  return res.ok;
+}
+
 type Status = "unsupported" | "checking" | "denied" | "subscribed" | "available";
 
 export function PushSubscribe() {
   const [status, setStatus] = useState<Status>("checking");
   const [error, setError] = useState<string | null>(null);
 
+  // Re-registering the browser's existing subscription with the server on every visit is the point
+  // of this effect, not a redundancy. Push delivery needs the endpoint to exist in *two* places —
+  // the browser and push_subscription — and only the browser's half is durable. The server's half
+  // is deleted whenever a push comes back 404/410 (a transient outage from the push service reads
+  // the same as an uninstall), and disappears entirely on any environment rebuild. The old code
+  // asked the browser "are you subscribed?", got yes, and rendered nothing: the prompt was gone, so
+  // there was no way left to re-register, and the user went on believing notifications were on
+  // while the server had no address to send them to. Nothing about that state was visible to
+  // either side. An upsert keyed on endpoint makes re-sending it free, so it is sent every time.
   useEffect(() => {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-      setStatus("unsupported");
-      return;
-    }
-    if (Notification.permission === "denied") {
-      setStatus("denied");
-      return;
+    let cancelled = false;
+
+    async function sync() {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        if (!cancelled) setStatus("unsupported");
+        return;
+      }
+      if (Notification.permission === "denied") {
+        if (!cancelled) setStatus("denied");
+        return;
+      }
+
+      try {
+        const registration = await navigator.serviceWorker.register("/sw.js");
+        const existing = await registration.pushManager.getSubscription();
+        if (!existing) {
+          if (!cancelled) setStatus("available");
+          return;
+        }
+
+        const serverKey = urlBase64ToUint8Array(clientEnv.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "");
+        if (serverKey.length > 0 && !matchesServerKey(existing, serverKey)) {
+          // Stale key: drop it and mint a new one. Permission is already granted, so this needs no
+          // prompt and the user sees nothing.
+          await existing.unsubscribe();
+          const replacement = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: serverKey,
+          });
+          const saved = await persist(replacement);
+          if (!cancelled) setStatus(saved ? "subscribed" : "available");
+          return;
+        }
+
+        const saved = await persist(existing);
+        // A rejected re-register leaves the prompt on screen rather than a silent dead end, so the
+        // user has something to press and the failure is at least visible.
+        if (!cancelled) setStatus(saved ? "subscribed" : "available");
+      } catch {
+        if (!cancelled) setStatus("unsupported");
+      }
     }
 
-    navigator.serviceWorker
-      .register("/sw.js")
-      .then((registration) => registration.pushManager.getSubscription())
-      .then((sub) => setStatus(sub ? "subscribed" : "available"))
-      .catch(() => setStatus("unsupported"));
+    void sync();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function subscribe() {
@@ -46,16 +110,17 @@ export function PushSubscribe() {
         return;
       }
       const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(clientEnv.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? ""),
-      });
-      const res = await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(subscription.toJSON()),
-      });
-      if (!res.ok) {
+      const serverKey = urlBase64ToUint8Array(clientEnv.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "");
+      // subscribe() throws InvalidStateError if a subscription under a different key is still on
+      // file, so clear it first rather than surfacing that as "couldn't enable notifications".
+      const existing = await registration.pushManager.getSubscription();
+      if (existing && !matchesServerKey(existing, serverKey)) await existing.unsubscribe();
+
+      const subscription =
+        (await registration.pushManager.getSubscription()) ??
+        (await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: serverKey }));
+
+      if (!(await persist(subscription))) {
         setError("Couldn't save your subscription. Try again.");
         return;
       }
@@ -65,7 +130,7 @@ export function PushSubscribe() {
     }
   }
 
-  if (status === "unsupported" || status === "subscribed") return null;
+  if (status === "unsupported" || status === "subscribed" || status === "checking") return null;
 
   return (
     <div

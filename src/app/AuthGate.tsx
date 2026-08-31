@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { readJsonBody, UNREADABLE_REPLY } from "@/lib/http/readJsonBody";
 
 // Ported from the sketch's AUTH block: a two-step signup (credentials, then group code) and a
 // sign-in toggle, using the same primitives as /styleguide.
@@ -39,9 +40,16 @@ export function AuthGate({
           // The invite code, when there is one, rides along so it survives the email round trip.
           body: JSON.stringify({ email, password, displayName: name, groupCode: code || undefined }),
         });
-        const body = await res.json();
+        const body = await readJsonBody<{ needsEmailConfirmation?: boolean }>(res);
         if (!res.ok) {
-          setError(body.message ?? "Couldn't create your account.");
+          setError(body?.message ?? "Couldn't create your account.");
+          return;
+        }
+        // The account exists; we just cannot tell whether it needs confirming. Guessing either way
+        // strands the visitor — on a "check your email" that never comes, or on a step 2 they have
+        // no session for.
+        if (!body) {
+          setError(UNREADABLE_REPLY);
           return;
         }
         if (body.needsEmailConfirmation) {
@@ -69,9 +77,9 @@ export function AuthGate({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password }),
         });
-        const body = await res.json();
+        const body = await readJsonBody(res);
         if (!res.ok) {
-          setError(body.message ?? "Couldn't sign in.");
+          setError(body?.message ?? "Couldn't sign in.");
           return;
         }
         router.refresh();
@@ -92,9 +100,9 @@ export function AuthGate({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
       });
-      const body = await res.json();
+      const body = await readJsonBody(res);
       if (!res.ok) {
-        setError(body.message ?? "That code didn't work.");
+        setError(body?.message ?? "That code didn't work.");
         return;
       }
       router.refresh();

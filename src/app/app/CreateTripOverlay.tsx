@@ -4,6 +4,7 @@ import { useState } from "react";
 import { SEATS } from "@/domain/constants";
 import type { TripStopView } from "@/domain/types";
 import { StopPicker } from "./StopSign";
+import { readJsonBody } from "@/lib/http/readJsonBody";
 
 interface Props {
   groupId: string;
@@ -83,9 +84,9 @@ export function CreateTripOverlay({ groupId, groupName, originLabel, destLabel, 
           backStopId: direction === "out" ? undefined : backStopId || undefined,
         }),
       });
-      const body = await res.json();
+      const body = await readJsonBody(res);
       if (!res.ok) {
-        setError(body.message ?? "Couldn't publish that trip.");
+        setError(body?.message ?? "Couldn't publish that trip.");
         return;
       }
       onCreated();

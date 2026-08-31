@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAdminFetch, LoadingOrError, th, td, fmtDate } from "./adminUi";
+import { readJsonBody } from "@/lib/http/readJsonBody";
 
 interface UserRow {
   id: string;
@@ -121,9 +122,9 @@ function UserDetailPanel({ userId, onClose, onRoleChanged }: { userId: string; o
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role }),
       });
-      const body = await res.json();
+      const body = await readJsonBody(res);
       if (!res.ok) {
-        setRoleError(body.message ?? "Couldn't change that user's role.");
+        setRoleError(body?.message ?? "Couldn't change that user's role.");
         return;
       }
       reload();
@@ -275,9 +276,9 @@ function AdjustPointsForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profileId, groupId, points: pointsNum, reason: reason.trim() }),
       });
-      const body = await res.json();
+      const body = await readJsonBody(res);
       if (!res.ok) {
-        setError(body.message ?? "Couldn't apply that adjustment.");
+        setError(body?.message ?? "Couldn't apply that adjustment.");
         return;
       }
       setPoints("");
