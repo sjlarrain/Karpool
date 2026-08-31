@@ -35,13 +35,18 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "wrong_status", message: "This trip is no longer active." }, { status: 409 });
   }
 
-  const { data: seat } = await supabase
+  const { data: seat, error: seatError } = await supabase
     .from("trip_rider")
     .select("id, added_by_profile_id, penalty_waived_at")
     .eq("trip_id", id)
     .eq("profile_id", user.id)
     .in("state", ["joined", "confirmed"])
     .maybeSingle();
+  // A failed lookup is not the same answer as "you have no seat" — telling a rider who holds one
+  // that they don't would leave them on a trip they believe they left.
+  if (seatError) {
+    return NextResponse.json({ error: "seat_lookup_failed", message: seatError.message }, { status: 500 });
+  }
   if (!seat) {
     return NextResponse.json({ error: "not_found", message: "You're not riding this trip." }, { status: 404 });
   }

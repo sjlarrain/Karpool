@@ -32,7 +32,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const [{ data: group }, { data: driver }, { data: riderRows }] = await Promise.all([
+  const [{ data: group }, { data: driver }, { data: riderRows, error: ridersError }] = await Promise.all([
     supabase.from("group").select("origin_label, dest_label").eq("id", trip.group_id).maybeSingle(),
     supabase.from("profile").select("id, display_name, initials, avatar_color").eq("id", trip.driver_id).maybeSingle(),
     supabase
@@ -45,6 +45,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   if (!group || !driver) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+  // Never swallowed. A failed rider query returns `null`, which is indistinguishable from "nobody
+  // has joined" — so the route would answer 200 with an empty car, and a rider who *is* aboard
+  // would be shown "Request to join" on a seat they already hold. That is how a missing column
+  // reads as a UI bug instead of an error (it cost a debugging session on 2026-08-30).
+  if (ridersError) {
+    return NextResponse.json({ error: "rider_lookup_failed", message: ridersError.message }, { status: 500 });
   }
 
   const riderProfileIds = [...new Set((riderRows ?? []).map((r) => r.profile_id).filter((v): v is string => !!v))];
