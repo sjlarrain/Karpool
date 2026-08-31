@@ -22,3 +22,20 @@ export const RETURN_LEG_LEAD_MINUTES = 120;
 // D-27: how far back the Carpools tab's Past section reaches. Applied default, not a decision —
 // all-time history is a bigger query and a bigger screen than was asked for.
 export const PAST_TRIPS_WINDOW_DAYS = 30;
+
+// --- Scheduler reminder windows (see src/domain/tripReminders.ts) ---
+
+// How long before departure the "trip leaves soon" reminder goes out.
+export const DEPARTURE_REMINDER_LEAD_MINUTES = 15;
+
+// How late a departure reminder may still be sent. The scheduler ticks every 5 minutes, so a single
+// missed tick used to drop the reminder for good: the query only looked forward from `now`, and a
+// trip whose departure had slipped past was never eligible again. A reminder that arrives four
+// minutes late is still worth having; one that arrives after the trip left is not, which is what
+// bounds this.
+export const DEPARTURE_REMINDER_GRACE_MINUTES = 5;
+
+// How long a trip may sit in `started` before its driver is nudged to close it. Closing is what
+// writes points_ledger, so an unclosed trip pays nobody. Comfortably inside the 6h auto-close
+// (which pays nobody either) so the nudge has time to work before the safety net fires.
+export const CLOSE_REMINDER_AFTER_MINUTES = 90;
