@@ -38,6 +38,10 @@
   points and leaving the return unbuilt. Generation now runs first and the auto-close skips any round
   trip still owed a leg.
 
+- **Shim dropped 2026-08-30 (migration `0015`), applied.** The developer confirmed the live join
+  sheet asks the return question, which closed the deploy window the two-argument `join_trip` existed
+  for. Verified by regenerating types to a scratch file: `join_trip` is a single three-argument
+  function with no overload. Repo and database are in sync — `db push --dry-run` reports up to date.
 - **Deployed 2026-08-30.** All seven commits pushed to `origin/main` (`2e1d00e..8021e49`), which is
   what Vercel builds from. `pnpm build` was run locally first so a broken production build could not
   be the way we found out. The live site answers 200. **Which commit is actually serving cannot be
@@ -63,7 +67,8 @@
   the two-argument `join_trip` survives as a delegation passing `false`, because the live build still
   calls it and dropping it would have broken every join until a redeploy. **Owed: a migration that
   drops the shim once the new build is live.**
-- **Do NOT run `pnpm db:types:linked` expecting a clean result.** It was run and reverted. The CLI
+- **Do NOT run `pnpm db:types:linked` expecting a clean result** (generate to a scratch file instead
+  — that is how 0015 was verified without touching the committed types). It was run and reverted. The CLI
   emits `string` for every CHECK-constrained text column, flattening the hand-narrowed unions
   (`trip.status`, `trip.direction`, `profile.platform_role`, `trip_rider.state`, `points_ledger.kind`,
   `notification.type`) the rest of the app type-checks against — 5 type errors immediately. The header
