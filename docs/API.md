@@ -45,6 +45,7 @@ browser here, and the response is a redirect, not JSON.
 - **Auth**: none (this is what establishes the session)
 - **Request**: query params — `code` (PKCE, the default `{{ .ConfirmationURL }}` template) **or** `token_hash` + `type` (the `{{ .TokenHash }}` template); optional `next` (in-app path); Supabase's own `error`/`error_code` when the link already failed on its side
 - **Response**: `307` redirect — to `next` on success (`/app` when absent, or `/j/CODE` from `user_metadata.pending_group_code`), else to `/?auth=link_expired` or `/?auth=link_invalid`, which the auth screen renders as an explanation
+- **Note**: both invite carriers (`?next=` and `user_metadata.pending_group_code`) are read *only* here, so both are lost together if the confirmation link never reaches this route — which is exactly what happens when the Supabase project's Site URL / redirect allow-list does not include the deployed origin: Supabase refuses the requested `emailRedirectTo` and sends the visitor to the Site URL instead. `src/lib/api/redeemPendingInvite.ts` closes that hole by redeeming the stored code from the *pages* as well (`/` and `/app`, whenever an authenticated visitor has no membership), so a shared invite survives a misconfigured redirect. It clears the code once redeemed, or once the group it names no longer exists.
 - **Errors**: never a status code — every failure is a redirect carrying `?auth=…`
 - **Side effects**: exchanges the token for a session and sets the Supabase session cookie. No ledger/audit writes.
 - **Security**: `next` is sanitised by `safeNextPath` — absolute URLs, protocol-relative paths, backslash variants and control characters all fall back to `/app`, so the parameter can't be used as an open redirect.
@@ -264,9 +265,9 @@ Driver only, `scheduled→started`, not before T-2h (D-16).
 
 - **Auth**: required, caller must be the trip's driver
 - **Request**: none
-- **Response**: `{ trip }`
+- **Response**: `{ trip, notifiedRiders: number, pushDelivery: { sent: number, configError: string | null } }`. The delivery counts are reported rather than thrown: the trip has started and stays started whether or not any phone lit up, so a broken push channel must not fail the request — but it must not be invisible either. `pushDelivery.configError` is what a bad `VAPID_SUBJECT` looks like from here.
 - **Errors**: `401 unauthenticated`, `404 not_found`, `403 not_driver`, `409 wrong_status`, `409 too_early`
-- **Side effects**: updates `trip.status` and `started_at`. No ledger/audit writes; no `notification` rows yet (lands with Phase 5 push).
+- **Side effects**: updates `trip.status` and `started_at`; inserts one `notification` row per active rider (`type: "start"`) and pushes to their devices. No ledger/audit writes.
 
 ### `POST /api/trips/:id/cancel`
 Driver only, `scheduled→cancelled`.
@@ -457,11 +458,19 @@ Remove a browser's `PushSubscription`. Scoped to the caller's own subscriptions.
 ### `GET|POST /api/cron/tick`
 Called every 5 minutes by the `carpool-tick` pg_cron job in Supabase (D-21, migration `0008`),
 which posts here through `pg_net` with the `CRON_SECRET` header; `GET` is kept for triggering a tick
-by hand with curl. Four jobs per
+by hand with curl. Five jobs per
 tick, in this order: (1) departure reminders — any
-`scheduled` trip departing within 15 minutes gets a `reminder`-type notification + push to its
-driver and active riders, deduped by checking for an existing reminder notification carrying that
-trip's id; (2) **return-leg generation (D-35 mechanic (ii))** — a `round` trip still `started`
+`scheduled` trip departing within `DEPARTURE_REMINDER_LEAD_MINUTES` (15) gets a `reminder`-type
+notification + push to its driver and active riders, deduped against an existing reminder row
+carrying that trip's id. The window also reaches `DEPARTURE_REMINDER_GRACE_MINUTES` (5) *behind*
+now, so a trip whose departure slipped past between two ticks still gets a slightly late reminder
+instead of none at all; (1b) **close reminders** — a trip left `started` for
+`CLOSE_REMINDER_AFTER_MINUTES` (90) sends a `close_reminder`-type notification + push to its
+**driver only**, since the driver is the only person who can close a trip and therefore the only
+one who can act on it. Closing is what writes `points_ledger`, so until it happens the ride has paid
+nobody; the 6h auto-close in job (3) is a tidier rather than a substitute, because it awards
+nothing. Deduped the same way, on its own notification type — see [D-39]; (2) **return-leg
+generation (D-35 mechanic (ii))** — a `round` trip still `started`
 within `RETURN_LEG_LEAD_MINUTES` (120) of its `return_at`, with no leg built yet, is closed by the
 scheduler in the same **restricted** form an admin gets: every active rider confirmed, nobody marked
 `no_show`, **the driver paid in full**, and the return leg materialised. The deadline is measured
@@ -478,9 +487,9 @@ trip started between the read and the write is left alone.
 
 - **Auth**: `Authorization: Bearer <CRON_SECRET>`. The scheduler reads both the URL and the secret from Supabase Vault (`carpool_tick_url`, `carpool_cron_secret`) at call time, so neither is in any tracked file; with either missing the job returns without calling anything.
 - **Request**: none
-- **Response**: `{ remindersSent: number, returnLegsGenerated: number, autoClosed: number, expired: number }`
+- **Response**: `{ remindersSent: number, reminderFailures: number, closeRemindersSent: number, closeReminderFailures: number, returnLegsGenerated: number, autoClosed: number, expired: number }`. The `*Failures` counts are how a broken notification path becomes visible: `notifyProfiles` returns its insert error rather than discarding it, so a tick that could not write its rows reports a number instead of looking idle.
 - **Errors**: `401 unauthorized`
-- **Side effects**: inserts `notification` rows (`type: "reminder"` for departures, `type: "change"` for expiries, `type: "change"` to the back leg's riders when one is generated) + sends push; updates stale trips' `status`/`closed_at` and expired trips' `status`/`cancelled_reason`; **writes `points_ledger` for a generated return leg** — the one place the scheduler moves points, and deliberately so: the outbound was driven whether or not anyone remembered to close it; inserts an `audit_log` row per generation (`cron_generate_return_leg`), per auto-close (`cron_auto_close`) and per expiry (`cron_expire_unstarted`), all with `actor_profile_id: null` marking them system-acted.
+- **Side effects**: inserts `notification` rows (`type: "reminder"` for departures, `type: "close_reminder"` for unclosed trips, `type: "change"` for expiries, `type: "change"` to the back leg's riders when one is generated) + sends push; updates stale trips' `status`/`closed_at` and expired trips' `status`/`cancelled_reason`; **writes `points_ledger` for a generated return leg** — the one place the scheduler moves points, and deliberately so: the outbound was driven whether or not anyone remembered to close it; inserts an `audit_log` row per generation (`cron_generate_return_leg`), per auto-close (`cron_auto_close`) and per expiry (`cron_expire_unstarted`), all with `actor_profile_id: null` marking them system-acted.
 
 ## Feedback
 
@@ -617,11 +626,13 @@ reasoning as the audit log (D-14).
 ### `GET /api/admin/health`
 Push delivery stats (subscription/failure/dead counts), the scheduler's own pulse, recent cron auto-closes, and a placeholder for Maps health (`status: "not_applicable"` — Phase 6 isn't built yet).
 
+`push.channel` reports the **sending** side, where the counts report the receiving side. It is the D-21 lesson applied to push: a healthy-looking set of subscriptions with `configured: false` is the exact state in which every notification is written to the bell and none of them ever reaches a phone, and "nobody got a notification" and "the VAPID subject is not a `mailto:` URL" look identical from the outside. `error` carries `web-push`'s own message.
+
 `scheduler` reads the `carpool-tick` pg_cron job through `public.carpool_cron_status()` (migration `0009`). It exists because an empty `recentCronAutoCloses` means either "nothing was abandoned" or "the scheduler is dead", and for weeks it silently meant the second (D-21). `scheduled: false` = the job was never created; `stale: true` = no successful run in the last 20 minutes (four missed ticks).
 
 - **Auth**: `platform_admin`
 - **Request**: none
-- **Response**: `{ push: { totalSubscriptions, failingSubscriptions, deadSubscriptions }, scheduler: { scheduled, active, schedule, lastRunAt, lastStatus, stale }, recentCronAutoCloses, maps: { status, message } }`
+- **Response**: `{ push: { totalSubscriptions, failingSubscriptions, deadSubscriptions, channel: { configured, error } }, scheduler: { scheduled, active, schedule, lastRunAt, lastStatus, stale }, recentCronAutoCloses, maps: { status, message } }`
 - **Errors**: `401 unauthenticated`, `403 forbidden`
 - **Side effects**: none.
 

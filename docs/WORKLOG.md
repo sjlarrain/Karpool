@@ -1,5 +1,75 @@
 # Worklog
 
+## Shipped (2026-08-31 — branch `dev`: notifications that arrive, invites that survive, and a nudge to close)
+- **The ask (developer):** three patches on a new `dev` branch — "fix the notification system... so
+  the users receive them when the trip is starting"; "the sharing link is not working so users can
+  subscribe to the group"; "send a notification to the rider that his trip hasn't been closed yet".
+  Recorded as **[D-39]**.
+- **Notifications — four distinct faults, all in code, none of which needed the scheduler to be
+  running to bite.** (1) **A bad `VAPID_SUBJECT` took down the whole notify path.**
+  `ensureVapidConfigured()` was made lazy so it could not crash routes at import time, but the throw
+  was only *moved*: it escaped `sendPushToProfile`, escaped the `Promise.all` in `notifyProfiles`,
+  and reached the caller — so `POST /api/trips/:id/start` answered **500 for a trip that had already
+  started**, and only once somebody actually had a subscription on file, which is why it would have
+  looked intermittent. The Notes at the foot of `DECISIONS.md` have recorded since 2026-08-16 that
+  this project's `VAPID_SUBJECT` is not a valid `mailto:`/`https:` value, so this is the fault that
+  best matches "we don't get notifications when the trip starts". (2) **The departure-reminder
+  dedupe was inverted by a `.maybeSingle()`** — `notifyProfiles` writes one row *per recipient*, so
+  any trip with a rider aboard matched more than one row, `.maybeSingle()` answers that with an
+  error, only `data` was destructured, and the reminder read as never sent: every phone re-pushed on
+  each of the three ticks the window spans. The same swallowed-error shape as the two bugs in
+  [D-38]. (3) **A missed tick dropped a reminder permanently** — the window ran from `now` forward,
+  so a departure that slipped past between ticks was never eligible again. (4) **`PushSubscribe`
+  never re-registered.** Delivery needs the endpoint in *two* places and only the browser's half is
+  durable; the server's row is deleted on any 404/410 (a transient push-service outage is
+  indistinguishable from an uninstall) and vanishes on any environment rebuild. The component asked
+  the browser "are you subscribed?", got yes, and rendered nothing — removing the only way left to
+  re-register, so the user believed notifications were on while the server had no address. It now
+  re-sends on every visit (the upsert is keyed on endpoint, so it is free) and replaces a
+  subscription minted under a rotated-away VAPID key, which fails 403 and is never pruned.
+- **The sharing link.** `/j/:code` itself was correct — verified in a browser. The hole is the way
+  back from the signup email: `?next=/j/CODE` **and** `user_metadata.pending_group_code` are both
+  read *only* by `GET /auth/callback`, so both are lost together whenever the confirmation link does
+  not land there — which is precisely what a Supabase project whose Site URL / redirect allow-list
+  omits the deployed origin causes. New `src/lib/api/redeemPendingInvite.ts` redeems the stored code
+  from `/` and `/app` too, wherever an authenticated visitor turns out to have no membership.
+- **The unclosed-trip nudge** is a fifth scheduler job: 90 minutes in `started` sends a new
+  `close_reminder` (migration `0017`) to the **driver** — the only person who can close a trip.
+  Built for the driver although the ask said "rider"; flagged in [D-39] as the one thing worth
+  confirming, and a one-line change if riders were meant.
+- **Made visible rather than merely fixed**, since both blockers below are silent by nature:
+  `notifyProfiles` returns its insert error instead of discarding it, `POST /api/trips/:id/start`
+  returns `notifiedRiders` + `pushDelivery`, the tick returns `reminderFailures` /
+  `closeReminderFailures`, and `GET /api/admin/health` gains `push.channel` beside the existing
+  `scheduler.stale`. D-21's lesson applied to push: "nobody got a notification" and "the VAPID
+  subject is not a mailto: URL" look identical from outside.
+
+## In Progress
+- Nothing mid-flight. Five commits on `dev`, not merged and not pushed.
+
+## Next
+- **Developer actions, in this order** — none are doable from code: (1) set a valid `VAPID_SUBJECT`
+  (`mailto:` or `https:`); (2) apply migration `0017` (`supabase db push --linked`) — until then
+  close reminders fail the CHECK constraint and are counted, not raised; (3) set the [D-21] Vault
+  secrets, without which the scheduler still has no caller and jobs 1–5 never run in production;
+  (4) add the deployed origin to the Supabase Site URL / redirect allow-list. `GET
+  /api/admin/health` now reports (1) and (3) directly.
+- Answer [D-39](3): driver or riders for the unclosed-trip nudge.
+
+## Blocked On
+- **Live verification of all three patches.** `.env.local` is unreadable by design (CLAUDE.md §2.6)
+  and this session's attempt to load it for a database probe was correctly refused, so nothing here
+  was exercised against the real project — unlike [D-38], which was verified end-to-end. The
+  reasoning is from code and from a browser check of `/` and `/j/:code`; the e2e suite needs the
+  live database and has not been run.
+- Unchanged: [D-21] Vault secrets, custom SMTP, the Supabase URL config.
+
+## Gates Green
+- G1 (`pnpm verify`): typecheck, lint and **205/205** tests green (10 new in `tripReminders.test.ts`).
+  Same pre-existing `next lint` custom-font warning, still non-blocking.
+- G6 (push on a real device) still **not** claimable, and this session does not change that — the
+  four faults above are removed, but only a real phone proves delivery.
+
 ## Shipped (2026-08-30 — a driver can cancel or edit a trip, and riders leave a changed one for free)
 - **The ask (developer):** "add the possibility to cancel or edit a trip. Riders will be notified and
   they can jump off the trip without cost if that happens." Both API routes already existed and
