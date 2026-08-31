@@ -31,6 +31,12 @@
   calling the live `computeCloseAwards()`, which has moved on. A backfill must reproduce what it was
   written for, not follow today's rules.
 
+- **Follow-up, same session:** `scripts/audit-ledger.ts` was left reporting `pooled` the old way and
+  is fixed. It no longer reimplements the aggregation — it calls the app's own `aggregateLedger()`,
+  so the diagnostic cannot drift from the thing it diagnoses again. The bug was worse than a wrong
+  column: because the four riders hold **no ledger rows at all** after the cleanup, they vanished
+  from the totals table entirely. They are back, reading `1 pooled · 0`.
+
 ## In Progress
 - Nothing mid-flight. The code is complete and green; one data step is waiting on the developer.
 
