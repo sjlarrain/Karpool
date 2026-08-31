@@ -200,6 +200,35 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
     return { ok: false, error: "ledger_write_failed", status: 500, message: ledgerError.message };
   }
 
+  // The status flip closes the retry window, so it comes straight after the ledger and BEFORE any
+  // notification. Everything above it is idempotent by design — generate_back_trip() is, and
+  // confirming riders is — which is what makes a failure before the ledger safe to retry. The
+  // ledger insert is the one step that is not: points_ledger is append-only with no idempotency
+  // key, so a second run pays the driver twice.
+  //
+  // That window was live in production. Both notifyProfiles calls used to sit here, between the
+  // ledger and this update, and on a project whose VAPID_SUBJECT is not a valid mailto:/https: URL
+  // the push layer *threw* — past the ledger, so the driver was paid; before this update, so the
+  // trip stayed `started` and the state machine let the close run again. The driver saw only
+  // "Couldn't reach the server", tapped Close again, and was paid again on every attempt while the
+  // riders never got their kudos prompt. Two separate faults had to line up: the throw (fixed in
+  // src/lib/push/send.ts) and this ordering. Either one alone is harmless; together they duplicate
+  // money-like data.
+  const { data: updated, error } = await admin
+    .from("trip")
+    .update({ status: result.nextStatus, closed_at: new Date().toISOString() })
+    .eq("id", tripId)
+    .select()
+    .single();
+
+  if (error || !updated) {
+    return { ok: false, error: "update_failed", status: 500, message: error?.message };
+  }
+
+  // Notifications last, and deliberately after the point of no return: the ride is closed and paid
+  // whether or not anyone's phone lights up. A failure here costs a missed kudos prompt, which is
+  // recoverable; a failure before the update cost a duplicated payment, which is not.
+  //
   // D-35 answer (B): kudos is once per rider per ride. Riders carried on to the return leg are not
   // asked yet — their ride is not over — so only the ones stopping here get the prompt.
   await notifyProfiles(kudosPromptTargets({ confirmedProfileIds, seatedOnBackLegProfileIds: backTripSeatedProfileIds }), {
@@ -216,17 +245,6 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
       body: "The return leg is published — your seat is held.",
       tripId: backTripId,
     });
-  }
-
-  const { data: updated, error } = await admin
-    .from("trip")
-    .update({ status: result.nextStatus, closed_at: new Date().toISOString() })
-    .eq("id", tripId)
-    .select()
-    .single();
-
-  if (error || !updated) {
-    return { ok: false, error: "update_failed", status: 500, message: error?.message };
   }
 
   return {
