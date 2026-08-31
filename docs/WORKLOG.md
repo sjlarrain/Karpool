@@ -28,9 +28,12 @@
   comparing times as instants so `…Z` and `…+00:00` don't read as a change; and a rider looking at a
   **cancelled** trip still saw "✓ You're riding this trip" over a Leave button the API answers with
   `409` — it now says what happened and why. `PATCH` also gained `409 capacity_below_riders`.
-- Recorded as **[D-38]** with four questions for the developer: whether the waiver expires, how small
-  a change still counts, whether a `started` trip can be abandoned (it cannot — the sharpest gap), and
-  whether a serially-cancelling driver is accountable at all.
+- Recorded as **[D-38]** with four questions for the developer, **one answered the same day**: a
+  `started` trip stays uncancellable by design — "this is not a communicating platform as it is a
+  coordinating platform. If something goes bad, they can be notified in other way." Verified benign:
+  the 6h auto-close never touches `points_ledger`, so nobody is charged for a ride that stopped
+  happening. Still open: whether the waiver expires, how small a change still counts, and whether a
+  serially-cancelling driver is accountable at all.
 
 ## Also this session (verification)
 - **Migration `0016` is applied and D-38 is verified end-to-end against the live database.** The
