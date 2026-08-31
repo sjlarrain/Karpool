@@ -23,9 +23,10 @@ test("core loop: publish, join, start, close, kudos, leaderboard", async ({ brow
 
   const groupCode = await test.step("driver reads the invite code", () => getGroupCode(driver));
 
-  await test.step("driver publishes a trip departing soon", async () => {
-    await publishTrip(driver);
+  const trip = await test.step("driver publishes a trip departing soon", async () => {
+    const published = await publishTrip(driver);
     await expect(driver.getByText("YOU'RE DRIVING")).toBeVisible({ timeout: 10_000 });
+    return published;
   });
 
   await test.step("rider signs in and joins the group", async () => {
@@ -36,7 +37,7 @@ test("core loop: publish, join, start, close, kudos, leaderboard", async ({ brow
 
   await test.step("rider joins the trip", async () => {
     await rider.locator(".tab", { hasText: "Carpools" }).click();
-    await joinTrip(rider, rider.locator(".card").first());
+    await joinTrip(rider, rider.locator(".card", { hasText: trip.displayTime }).first());
   });
 
   await test.step("driver starts and closes the trip, confirming the rider", async () => {
@@ -56,7 +57,9 @@ test("core loop: publish, join, start, close, kudos, leaderboard", async ({ brow
 
   await test.step("rider gives kudos", async () => {
     await rider.reload();
-    await rider.locator(".card").first().click();
+    // Not `.card` first(): closing a round trip materialises the return leg (D-35), so the feed now
+    // holds a live back trip *above* the closed outbound this step is about.
+    await rider.locator(".card", { hasText: trip.displayTime }).first().click();
     await expect(rider.getByText("Rate your ride")).toBeVisible({ timeout: 10_000 });
     // D-18: the 💚 toggle starts off, so the submit reads "Skip & close" until the rider opts in.
     await rider.getByRole("button", { name: /Give kudos/ }).click();
