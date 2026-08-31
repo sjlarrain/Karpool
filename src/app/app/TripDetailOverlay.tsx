@@ -3,11 +3,13 @@
 import { useEffect, useState, useCallback } from "react";
 import type { DecoratedTrip } from "@/domain/decorateTrip";
 import type { TripStopView } from "@/domain/types";
+import { NOT_STARTED_REASON } from "@/domain/constants";
 import { StopSign } from "./StopSign";
 import { rideShareMessage, rideShareUrl } from "@/domain/tripShare";
 import { shareOrCopy } from "@/lib/share";
 import { CloseTripOverlay } from "./CloseTripOverlay";
 import { ReturnQuestionSheet } from "./ReturnQuestionSheet";
+import { EditTripOverlay } from "./EditTripOverlay";
 
 interface Pickup {
   id: string;
@@ -40,6 +42,19 @@ interface DetailResponse {
   seatsLeft: number;
   viewerGaveKudos: boolean;
   viewerDeclinedKudos: boolean;
+  // D-38: the driver changed this trip after the viewer took their seat, so leaving is free.
+  penaltyWaived: boolean;
+  // Everything the edit form opens with. Null unless the viewer is the driver and the trip is
+  // still scheduled — a started trip's plan is fixed.
+  editable: {
+    departAt: string;
+    returnAt: string | null;
+    capacity: number;
+    direction: string;
+    outStopId: string | null;
+    backStopId: string | null;
+    stops: TripStopView[];
+  } | null;
 }
 
 interface Props {
@@ -62,6 +77,10 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
   const [givingKudos, setGivingKudos] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
   const [addingPassenger, setAddingPassenger] = useState(false);
+  // D-38: the driver's two ways out of a plan that stopped working.
+  const [editing, setEditing] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -78,7 +97,9 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
     load();
   }, [load]);
 
-  async function act(path: string, message: string, payload?: unknown) {
+  // Returns whether the action actually went through, so a confirmation sheet can stay open —
+  // showing its error — instead of closing over a failure the driver never saw.
+  async function act(path: string, message: string, payload?: unknown): Promise<boolean> {
     setError(null);
     setBusy(true);
     try {
@@ -91,13 +112,15 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
       const body = await res.json();
       if (!res.ok) {
         setError(body.message ?? "That didn't work.");
-        return;
+        return false;
       }
       setConfirmingLeave(false);
       await load();
       onChanged(message);
+      return true;
     } catch {
       setError("Couldn't reach the server — check your connection and try again.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -150,11 +173,16 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
     );
   }
 
-  const { trip, isDriver, pickups, addableMembers, seatsLeft } = data;
+  const { trip, isDriver, pickups, addableMembers, seatsLeft, penaltyWaived, editable } = data;
   const otherPickups = pickups.filter((p) => !p.isViewer);
   // Only a ride someone could still act on is worth sharing — a closed or cancelled one would send
   // the recipient to a dead end.
   const shareable = trip.status === "scheduled" || trip.status === "started";
+  const isLive = trip.status === "scheduled" || trip.status === "started";
+  const isCancelled = trip.status === "cancelled";
+  // D-23: the scheduler ending a trip nobody started is not the driver calling it off, and must
+  // never be worded as if it were.
+  const neverStarted = isCancelled && data.cancelledReason === NOT_STARTED_REASON;
 
   // The arrow rising out of an open tray — the same glyph every phone uses for "send this
   // elsewhere", so the button reads as shareable before anyone parses the label.
@@ -336,6 +364,29 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
 
         {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "0 0 12px" }}>{error}</p>}
 
+        {isCancelled && (
+          <div
+            style={{
+              background: neverStarted ? "var(--chip)" : "rgba(192,57,43,.07)",
+              border: `1px solid ${neverStarted ? "rgba(0,0,0,.08)" : "rgba(192,57,43,.25)"}`,
+              borderRadius: 15,
+              padding: 13,
+              marginBottom: 16,
+            }}
+          >
+            <div style={{ font: "800 13.5px var(--font-display)", color: neverStarted ? "rgba(0,0,0,.6)" : "var(--danger)" }}>
+              {neverStarted ? "This ride never ran" : "This trip was cancelled"}
+            </div>
+            <div style={{ font: "500 11.5px/1.5 var(--font-body)", color: "rgba(0,0,0,.5)", marginTop: 4 }}>
+              {neverStarted
+                ? "Nobody started it within a day of departure, so it was filed away. No points were awarded and nobody was charged."
+                : data.cancelledReason
+                  ? `${isDriver ? "You called it off" : `${trip.driver} called it off`}: “${data.cancelledReason}”. Nobody lost points.`
+                  : `${isDriver ? "You called it off" : `${trip.driver} called it off`}. Nobody lost points.`}
+            </div>
+          </div>
+        )}
+
         {isDriver && (
           <>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 9 }}>
@@ -419,6 +470,26 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
                 <button className="btnP" disabled={busy} onClick={() => act("start", "Trip started — riders notified 🚗")}>
                   Start trip · notify riders
                 </button>
+                {/* D-38: plans change. Both ways out sit under the primary action, secondary in
+                    weight — the common case is still starting the ride you published. */}
+                <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                  <button
+                    className="btnG"
+                    disabled={busy || !editable}
+                    onClick={() => setEditing(true)}
+                    style={{ flex: 1 }}
+                  >
+                    Edit trip
+                  </button>
+                  <button
+                    className="btnG"
+                    disabled={busy}
+                    onClick={() => setConfirmingCancel(true)}
+                    style={{ flex: 1, background: "var(--surface)", color: "var(--danger)", border: "1px solid rgba(192,57,43,.3)" }}
+                  >
+                    Cancel trip
+                  </button>
+                </div>
               </>
             )}
             {trip.status === "started" && (
@@ -496,7 +567,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
           </div>
         )}
 
-        {!isDriver && trip.role === "joined" && trip.status !== "closed" && !confirmingLeave && (
+        {!isDriver && trip.role === "joined" && isLive && !confirmingLeave && (
           <>
             <div
               style={{
@@ -512,20 +583,41 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
             >
               ✓ You&apos;re riding this trip. {trip.driver} will pick you up.
             </div>
-            <div
-              style={{
-                background: "var(--amber-soft)",
-                border: "1px solid rgba(255,176,32,.4)",
-                borderRadius: 13,
-                padding: "11px 12px",
-                font: "500 11.5px var(--font-body)",
-                lineHeight: 1.45,
-                color: "var(--amber-ink)",
-                marginBottom: 12,
-              }}
-            >
-              ⚠️ Drop out up to <b>1 hour before departure</b> for free — later cancellations cost points.
-            </div>
+            {penaltyWaived ? (
+              // D-38. The driver moved this trip after the seat was taken, so the usual warning
+              // would be a lie — and this is the moment the rider most needs to know they are free
+              // to go, not a moment to be threatened with a penalty.
+              <div
+                style={{
+                  background: "var(--green-soft)",
+                  border: "1px solid rgba(23,201,100,.4)",
+                  borderRadius: 13,
+                  padding: "11px 12px",
+                  font: "500 11.5px var(--font-body)",
+                  lineHeight: 1.45,
+                  color: "var(--green-ink)",
+                  marginBottom: 12,
+                }}
+              >
+                🔄 <b>{trip.driver} changed this trip</b> after you joined. If the new plan doesn&apos;t work, leave
+                any time with <b>no points lost</b>.
+              </div>
+            ) : (
+              <div
+                style={{
+                  background: "var(--amber-soft)",
+                  border: "1px solid rgba(255,176,32,.4)",
+                  borderRadius: 13,
+                  padding: "11px 12px",
+                  font: "500 11.5px var(--font-body)",
+                  lineHeight: 1.45,
+                  color: "var(--amber-ink)",
+                  marginBottom: 12,
+                }}
+              >
+                ⚠️ Drop out up to <b>1 hour before departure</b> for free — later cancellations cost points.
+              </div>
+            )}
             {shareButton}
             <button
               className="btnG"
@@ -537,12 +629,14 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
           </>
         )}
 
-        {!isDriver && trip.role === "joined" && trip.status !== "closed" && confirmingLeave && (
+        {!isDriver && trip.role === "joined" && isLive && confirmingLeave && (
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 34 }}>🚪</div>
             <h3 style={{ fontSize: 18, fontWeight: 800, color: "var(--ink)", margin: "12px 0 6px" }}>Leave this carpool?</h3>
             <p style={{ font: "500 12.5px var(--font-body)", lineHeight: 1.5, color: "rgba(0,0,0,.55)", margin: "0 0 20px" }}>
-              Your seat opens up for someone else. Dropping within 1 hour of departure costs points.
+              {penaltyWaived
+                ? "Your seat opens up for someone else. This trip changed after you joined, so leaving costs you nothing."
+                : "Your seat opens up for someone else. Dropping within 1 hour of departure costs points."}
             </p>
             <div style={{ display: "flex", gap: 10 }}>
               <button className="btnG" style={{ background: "var(--chip)", color: "var(--ink)" }} onClick={() => setConfirmingLeave(false)}>
@@ -654,6 +748,83 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
           }}
           onClose={() => setAskingReturn(false)}
         />
+      )}
+
+      {editing && editable && (
+        <EditTripOverlay
+          tripId={tripId}
+          direction={editable.direction}
+          departAt={editable.departAt}
+          returnAt={editable.returnAt}
+          capacity={editable.capacity}
+          outStopId={editable.outStopId}
+          backStopId={editable.backStopId}
+          stops={editable.stops}
+          seatedCount={otherPickups.length}
+          onClose={() => setEditing(false)}
+          onSaved={(message) => {
+            setEditing(false);
+            void load();
+            onChanged(message);
+          }}
+        />
+      )}
+
+      {confirmingCancel && (
+        <div className="sheet" onClick={() => setConfirmingCancel(false)}>
+          <div className="sheetc" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ font: "800 17px var(--font-display)", color: "var(--ink)", margin: "0 0 2px" }}>
+              Cancel this trip?
+            </h3>
+            <p style={{ font: "500 11.5px/1.5 var(--font-body)", color: "rgba(0,0,0,.5)", margin: "0 0 14px" }}>
+              {otherPickups.length === 0
+                ? "Nobody has joined, so this just disappears from the feed. It can't be undone — you'd publish a new trip instead."
+                : `${otherPickups.length === 1 ? "1 rider is" : `${otherPickups.length} riders are`} counting on this ride. They'll be notified straight away and lose no points. This can't be undone.`}
+            </p>
+
+            <label className="lbl">Why? (optional)</label>
+            <textarea
+              className="field"
+              rows={2}
+              maxLength={200}
+              placeholder="Car's in the shop — sorry!"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              style={{ resize: "none", fontFamily: "var(--font-body)", marginBottom: 4 }}
+            />
+            <p style={{ font: "500 10.5px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "0 2px 14px" }}>
+              Riders see this in their notification — a line here saves five messages later.
+            </p>
+
+            {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "0 0 10px" }}>{error}</p>}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                className="btnG"
+                style={{ background: "var(--chip)", color: "var(--ink)" }}
+                disabled={busy}
+                onClick={() => setConfirmingCancel(false)}
+              >
+                Keep it
+              </button>
+              <button
+                className="btnP"
+                style={{ background: "var(--danger)", boxShadow: "none" }}
+                disabled={busy}
+                onClick={async () => {
+                  const reason = cancelReason.trim();
+                  const done = await act(
+                    "cancel",
+                    otherPickups.length > 0 ? "Trip cancelled — riders notified" : "Trip cancelled",
+                    reason ? { reason } : {},
+                  );
+                  if (done) setConfirmingCancel(false);
+                }}
+              >
+                Cancel trip
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {closing && (

@@ -11,6 +11,10 @@ import { computeLateLeavePenalty } from "@/domain/points";
 // D-24 exception: a seat the driver booked for you (added_by_profile_id set) is never penalised.
 // You didn't take that seat, so declining it isn't a late cancellation — charging for it would let
 // one person put a points risk on another without asking.
+//
+// D-38 exception, the same principle one step further: a seat whose trip changed under the rider
+// (penalty_waived_at set by PATCH /api/trips/:id) is never penalised either. The window exists to
+// stop people dropping out at the last minute on a plan that never moved; the plan moved.
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
@@ -33,7 +37,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   const { data: seat } = await supabase
     .from("trip_rider")
-    .select("id, added_by_profile_id")
+    .select("id, added_by_profile_id, penalty_waived_at")
     .eq("trip_id", id)
     .eq("profile_id", user.id)
     .in("state", ["joined", "confirmed"])
@@ -49,8 +53,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .maybeSingle();
 
   const bookedThemselves = seat.added_by_profile_id === null;
+  const planChanged = seat.penalty_waived_at !== null;
   const penalty =
-    group && bookedThemselves
+    group && bookedThemselves && !planChanged
       ? computeLateLeavePenalty(new Date(trip.depart_at), new Date(), group.late_window_minutes, group.late_penalty)
       : null;
 
@@ -77,5 +82,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     });
   }
 
-  return NextResponse.json({ tripRider: updated, latePenalty: penalty?.points ?? null });
+  return NextResponse.json({
+    tripRider: updated,
+    latePenalty: penalty?.points ?? null,
+    // Lets the client say "no points lost" for the right reason rather than guessing from a null.
+    penaltyWaived: planChanged,
+  });
 }

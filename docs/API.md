@@ -228,10 +228,10 @@ Trip detail overlay: decorated summary plus the driver's pickup list in route or
 
 - **Auth**: required, caller must be a member of the trip's group
 - **Request**: none
-- **Response**: `{ trip: DecoratedTrip, driverId, isDriver: boolean, cancelledReason: string | null, seatsLeft: number, pickups: { id, name, initials?, color?, pickupLabel: string | null, stopOrder: number | null, isViewer: boolean, addedByDriver: boolean }[], addableMembers: { id, name, initials, color }[] }`
+- **Response**: `{ trip: DecoratedTrip, driverId, isDriver: boolean, cancelledReason: string | null, seatsLeft: number, pickups: { id, name, initials?, color?, pickupLabel: string | null, stopOrder: number | null, isViewer: boolean, addedByDriver: boolean }[], addableMembers: { id, name, initials, color }[], penaltyWaived: boolean, editable: { departAt, returnAt: string | null, capacity: number, direction, outStopId: string | null, backStopId: string | null, stops: TripStopView[] } | null }`
 - **Errors**: `401 unauthenticated`, `404 not_found`
 - **Side effects**: none
-- **Notes**: `trip.stopNotices` (D-29) is the ride's stops in travel order, each with its `leg` (`out`/`back`) and the `when` wording the UI shows (`"in way"` for an outbound stop, `"back"` for a return one). Empty for a direct ride. `addableMembers` (D-24) is the passenger picker's list — group members not already on the trip. Empty unless the caller is the driver and the trip is `scheduled`/`started`. `pickups[].addedByDriver` marks a seat the driver booked for someone.
+- **Notes**: `trip.stopNotices` (D-29) is the ride's stops in travel order, each with its `leg` (`out`/`back`) and the `when` wording the UI shows (`"in way"` for an outbound stop, `"back"` for a return one). Empty for a direct ride. `addableMembers` (D-24) is the passenger picker's list — group members not already on the trip. Empty unless the caller is the driver and the trip is `scheduled`/`started`. `pickups[].addedByDriver` marks a seat the driver booked for someone. `penaltyWaived` (D-38) is true when the caller's own seat carries `trip_rider.penalty_waived_at` — the driver changed the trip after they joined, so leaving costs them nothing and the UI says so instead of showing the usual late-cancellation warning. `editable` (D-38) is the edit form's starting values plus the group's stop list, non-null only when the caller is the driver **and** the trip is still `scheduled`; `direction` is included for the form's leg rules but is **not** editable.
 
 ### `PATCH /api/trips/:id`
 Edit a trip. Driver only, and only while `status: "scheduled"` — a started or closed trip's plan is
@@ -239,14 +239,25 @@ fixed.
 
 - **Auth**: required, caller must be the trip's driver
 - **Request**: any non-empty subset of `{ departAt: string (ISO), returnAt: string (ISO) | null, capacity: number (1-7), outStopId: string (uuid) | null, backStopId: string (uuid) | null }`
-- **Response**: `{ trip }`
-- **Errors**: `401 unauthenticated`, `404 not_found`, `403 forbidden` (not the driver), `409 wrong_status` (not scheduled), `400 invalid_request`, `400 unknown_stop`, `500 update_failed`
-- **Side effects**: updates the `trip` row, and notifies active riders when the departure **or** a
-  stop changed (`notification.type: "change"`) — a rider who joined a direct ride needs to know it
-  now detours. No ledger/audit writes.
+- **Response**: `{ trip, changed: TripEditField[], notifiedRiders: number }` — `changed` lists only the fields whose value actually moved (`departAt` / `returnAt` / `capacity` / `outStopId` / `backStopId`), so a form resaved untouched comes back `changed: []` with the trip unmodified.
+- **Errors**: `401 unauthenticated`, `404 not_found`, `403 forbidden` (not the driver), `409 wrong_status` (not scheduled), `409 capacity_below_riders` (fewer seats than people already aboard), `400 invalid_request`, `400 unknown_stop`, `500 update_failed`, `500 waiver_failed`
+- **Side effects**: updates the `trip` row. When a **material** field changed — the departure, the
+  return, or either stop, as defined by `diffTripEdit` in `src/domain/tripEdit.ts` — it also
+  (a) stamps `trip_rider.penalty_waived_at` on **every seat already aboard**, so those riders can
+  leave with no late-cancellation charge (D-38), and (b) notifies them
+  (`notification.type: "change"`). A rider who joined a direct ride needs to know it now detours,
+  and a rider whose 07:45 became an 08:30 needs to know they can walk away. The waiver is written
+  **before** the notification, so a rider acting on the push the instant it lands finds the free
+  drop-out already in force. A capacity-only change notifies nobody and waives nothing — a seat
+  added or taken back changes nothing for the people already in the car. No ledger/audit writes.
 - **Notes** (D-29): pass `null` to clear a stop. The same leg rules as `POST` apply, checked against
   the trip's stored `direction`; stop ids are resolved through the caller's own session (RLS), so a
   place from another group reads as `400 unknown_stop`.
+- **Notes** (D-38): `direction` is deliberately **not** editable — turning an outbound into a return
+  is a different ride from the one people joined, not an edit of it. Times are compared as instants,
+  not strings, so the client's `…Z` and Postgres's `…+00:00` spelling of the same moment do not read
+  as a change. The seat floor is the number of **active riders**, not the number of confirmed ones:
+  there is no rule for which rider would lose their seat, and this route does not invent one.
 
 ### `POST /api/trips/:id/start`
 Driver only, `scheduled→started`, not before T-2h (D-16).
@@ -261,10 +272,15 @@ Driver only, `scheduled→started`, not before T-2h (D-16).
 Driver only, `scheduled→cancelled`.
 
 - **Auth**: required, caller must be the trip's driver
-- **Request**: `{ reason?: string (max 200) }`
-- **Response**: `{ trip }`
+- **Request**: `{ reason?: string (max 200) }` — the literal string `not_started` is refused (`400 invalid_request`): that value is D-23's expiry sentinel, and a driver typing it would dress their own cancellation up as a trip nobody started.
+- **Response**: `{ trip, notifiedRiders: number }`
 - **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `403 not_driver`, `409 wrong_status`
-- **Side effects**: updates `trip.status` and `cancelled_reason`. No ledger/audit writes.
+- **Side effects**: updates `trip.status` and `cancelled_reason`, and notifies every active rider
+  (`notification.type: "change"`, title "Trip cancelled", carrying the driver's reason verbatim when
+  they gave one) — D-38. A cancellation is the one trip event a rider cannot discover by looking, and
+  they need the time to find another way in. **Nobody is charged**: the riders keep their seats on a
+  dead trip rather than leaving them, and a cancelled trip pays and penalises no one. No ledger/audit
+  writes.
 
 ### `POST /api/trips/:id/close`
 `started→closed`. Confirms which currently-active registered riders actually rode, adds any guest
@@ -311,9 +327,9 @@ Drop a seat you're holding.
 
 - **Auth**: required, caller must hold an active seat on the trip
 - **Request**: none
-- **Response**: `{ tripRider, latePenalty: number | null }`
+- **Response**: `{ tripRider, latePenalty: number | null, penaltyWaived: boolean }`
 - **Errors**: `401 unauthenticated`, `404 not_found` (trip missing or caller isn't riding it), `409 wrong_status` (trip already closed/cancelled), `500 leave_failed`
-- **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`). If the leave falls inside the group's configured cancellation window (`group.late_window_minutes`, default 60 — from `windowMinutes` before departure through any time after), inserts a `late_leave` `points_ledger` entry (`group.late_penalty`, default -5) for the leaving rider. **Exception (D-24):** a seat the driver added (`trip_rider.added_by_profile_id` set) is never penalised — the rider never booked it.
+- **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`). If the leave falls inside the group's configured cancellation window (`group.late_window_minutes`, default 60 — from `windowMinutes` before departure through any time after), inserts a `late_leave` `points_ledger` entry (`group.late_penalty`, default -5) for the leaving rider. **Exception (D-24):** a seat the driver added (`trip_rider.added_by_profile_id` set) is never penalised — the rider never booked it. **Exception (D-38):** a seat whose trip changed under the rider (`trip_rider.penalty_waived_at` set by `PATCH /api/trips/:id`) is never penalised either, at any distance from departure — the window exists to stop people dropping out at the last minute on a plan that never moved, and the plan moved. The response's `penaltyWaived` says which rule applied.
 
 ### `POST /api/trips/:id/riders`
 Driver seats a group member who asked for the ride in person (D-24). Calls `add_trip_rider()`

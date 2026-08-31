@@ -633,6 +633,7 @@ export type Database = {
           joined_at: string
           kudos_declined_at: string | null
           left_at: string | null
+          penalty_waived_at: string | null
           pickup_place_id: string | null
           profile_id: string | null
           state: "joined" | "left" | "confirmed" | "no_show"
@@ -647,6 +648,7 @@ export type Database = {
           joined_at?: string
           kudos_declined_at?: string | null
           left_at?: string | null
+          penalty_waived_at?: string | null
           pickup_place_id?: string | null
           profile_id?: string | null
           state?: "joined" | "left" | "confirmed" | "no_show"
@@ -661,6 +663,7 @@ export type Database = {
           joined_at?: string
           kudos_declined_at?: string | null
           left_at?: string | null
+          penalty_waived_at?: string | null
           pickup_place_id?: string | null
           profile_id?: string | null
           state?: "joined" | "left" | "confirmed" | "no_show"

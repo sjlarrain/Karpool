@@ -5,11 +5,13 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { SEATS } from "@/domain/constants";
 import { resolveTripStops } from "@/lib/trips/resolveStops";
-import { toTripView } from "@/domain/toTripView";
+import { stopView, toTripView } from "@/domain/toTripView";
 import { viewerTimeZone } from "@/lib/time/viewerTimeZone";
 import type { TripRiderRowInput, TripRowInput } from "@/domain/toTripView";
+import type { TripStopView } from "@/domain/types";
 import { decorateTrip } from "@/domain/decorateTrip";
 import { notifyProfiles } from "@/lib/notify/tripNotify";
+import { diffTripEdit } from "@/domain/tripEdit";
 
 // GET /api/trips/:id — trip detail overlay: decorated summary + the driver's pickup list in route
 // order. RLS (is_member) makes this 404 rather than 403 for a non-member (plan's "404 never leaks
@@ -35,7 +37,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     supabase.from("profile").select("id, display_name, initials, avatar_color").eq("id", trip.driver_id).maybeSingle(),
     supabase
       .from("trip_rider")
-      .select("id, profile_id, guest_name, pickup_place_id, stop_order, state, added_by_profile_id")
+      .select("id, profile_id, guest_name, pickup_place_id, stop_order, state, added_by_profile_id, penalty_waived_at")
       .eq("trip_id", id)
       .in("state", ["joined", "confirmed"])
       .order("stop_order", { ascending: true, nullsFirst: false }),
@@ -140,6 +142,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     viewerDeclinedKudos = !!seat?.kudos_declined_at;
   }
 
+  // D-38: the viewer's own seat was waived by an edit, so leaving costs them nothing. Read off the
+  // rider rows already fetched above rather than a second query.
+  const viewerSeat = (riderRows ?? []).find((r) => r.profile_id === user.id);
+  const penaltyWaived = !!viewerSeat?.penalty_waived_at;
+
   // D-24: the driver's passenger picker. Group members who aren't already on this trip, resolved
   // here rather than in a second round trip so the client never has to ask "who is in my group" —
   // a question RLS should answer on the server.
@@ -171,6 +178,36 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     }
   }
 
+  // D-38: everything the edit form needs to open already filled in — the raw instants and ids the
+  // decorated view has formatted away, plus the group's stop list. Same reasoning as
+  // addableMembers: the client should not have to assemble a picture the server already has.
+  let editable: {
+    departAt: string;
+    returnAt: string | null;
+    capacity: number;
+    direction: string;
+    outStopId: string | null;
+    backStopId: string | null;
+    stops: TripStopView[];
+  } | null = null;
+  if (isDriver && trip.status === "scheduled") {
+    const { data: groupStops } = await supabase
+      .from("pickup_place")
+      .select("id, label, icon, address")
+      .eq("group_id", trip.group_id)
+      .eq("kind", "stop")
+      .order("sort_order", { ascending: true });
+    editable = {
+      departAt: trip.depart_at,
+      returnAt: trip.return_at,
+      capacity: trip.capacity,
+      direction: trip.direction,
+      outStopId: trip.out_stop_id,
+      backStopId: trip.back_stop_id,
+      stops: (groupStops ?? []).map(stopView).filter((s): s is TripStopView => s !== null),
+    };
+  }
+
   return NextResponse.json({
     trip: decorateTrip(view),
     driverId: trip.driver_id,
@@ -181,6 +218,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     seatsLeft: trip.capacity - (riderRows ?? []).length,
     viewerGaveKudos,
     viewerDeclinedKudos,
+    penaltyWaived,
+    editable,
   });
 }
 
@@ -206,7 +245,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const { data: trip } = await supabase.from("trip").select("driver_id, status, direction, group_id").eq("id", id).maybeSingle();
+  const { data: trip } = await supabase
+    .from("trip")
+    .select("driver_id, status, direction, group_id, depart_at, return_at, capacity, out_stop_id, back_stop_id")
+    .eq("id", id)
+    .maybeSingle();
   if (!trip) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -257,6 +300,52 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       : NextResponse.json({ error: "lookup_failed" }, { status: 500 });
   }
 
+  // Riders already aboard, read before the update so the waiver and the notification address
+  // exactly the people who agreed to the *old* plan. Someone joining after this point is agreeing
+  // to the new one (D-38).
+  const { data: activeRiders } = await supabase
+    .from("trip_rider")
+    .select("id, profile_id")
+    .eq("trip_id", id)
+    .in("state", ["joined", "confirmed"]);
+  const seatedCount = (activeRiders ?? []).length;
+
+  // Seats can be added or taken back, but not below the people already in the car — there is no
+  // rule for which of them would lose their seat, and inventing one is not this route's call.
+  if (parsed.data.capacity !== undefined && parsed.data.capacity < seatedCount) {
+    return NextResponse.json(
+      {
+        error: "capacity_below_riders",
+        message: `${seatedCount} ${seatedCount === 1 ? "person is" : "people are"} already riding — remove a passenger before cutting seats.`,
+      },
+      { status: 409 },
+    );
+  }
+
+  // What actually changed, compared against what is stored — not merely what the body mentioned.
+  // Resaving the form untouched must not notify five people or hand out a free drop-out.
+  const diff = diffTripEdit(
+    {
+      departAt: trip.depart_at,
+      returnAt: trip.return_at,
+      capacity: trip.capacity,
+      outStopId: trip.out_stop_id,
+      backStopId: trip.back_stop_id,
+    },
+    {
+      ...(parsed.data.departAt !== undefined && { departAt: parsed.data.departAt }),
+      ...(parsed.data.returnAt !== undefined && { returnAt: parsed.data.returnAt }),
+      ...(parsed.data.capacity !== undefined && { capacity: parsed.data.capacity }),
+      ...(parsed.data.outStopId !== undefined && { outStopId: stops.outStopId }),
+      ...(parsed.data.backStopId !== undefined && { backStopId: stops.backStopId }),
+    },
+  );
+
+  if (diff.changed.length === 0) {
+    const { data: unchanged } = await supabase.from("trip").select("*").eq("id", id).single();
+    return NextResponse.json({ trip: unchanged, changed: [], notifiedRiders: 0 });
+  }
+
   const admin = createSupabaseAdminClient();
   const { data: updated, error } = await admin
     .from("trip")
@@ -276,25 +365,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   // A rider who joined a direct ride needs to know it now detours, just as much as they need to
-  // know the time moved (D-29).
-  const timeChanged = parsed.data.departAt !== undefined || parsed.data.returnAt !== undefined;
-  const stopsChanged = parsed.data.outStopId !== undefined || parsed.data.backStopId !== undefined;
-  if (timeChanged || stopsChanged) {
-    const { data: activeRiders } = await supabase
-      .from("trip_rider")
-      .select("profile_id")
-      .eq("trip_id", id)
-      .in("state", ["joined", "confirmed"]);
+  // know the time moved (D-29) — and either way the ride they booked is no longer the ride they
+  // have, so their seat stops carrying the late-cancellation charge (D-38).
+  let notifiedRiders = 0;
+  if (diff.material && diff.notice) {
+    const seatIds = (activeRiders ?? []).map((r) => r.id);
+    if (seatIds.length > 0) {
+      // The waiver is written before the notification: a rider who acts on the push the instant it
+      // lands must find the free drop-out already in force, not a race with it.
+      const { error: waiveError } = await admin
+        .from("trip_rider")
+        .update({ penalty_waived_at: new Date().toISOString() })
+        .in("id", seatIds);
+      if (waiveError) {
+        return NextResponse.json({ error: "waiver_failed", message: waiveError.message }, { status: 500 });
+      }
+    }
+
     const riderProfileIds = (activeRiders ?? []).map((r) => r.profile_id).filter((pid): pid is string => !!pid);
-    await notifyProfiles(riderProfileIds, {
-      type: "change",
-      title: timeChanged ? "Departure changed" : "Route changed",
-      body: timeChanged
-        ? "Your driver updated this trip's time — check the new details."
-        : "Your driver changed where this trip stops — check the new details.",
-      tripId: id,
-    });
+    await notifyProfiles(riderProfileIds, { type: "change", ...diff.notice, tripId: id });
+    notifiedRiders = riderProfileIds.length;
   }
 
-  return NextResponse.json({ trip: updated });
+  return NextResponse.json({ trip: updated, changed: diff.changed, notifiedRiders });
 }

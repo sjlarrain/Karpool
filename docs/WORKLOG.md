@@ -1,5 +1,58 @@
 # Worklog
 
+## Shipped (2026-08-30 — a driver can cancel or edit a trip, and riders leave a changed one for free)
+- **The ask (developer):** "add the possibility to cancel or edit a trip. Riders will be notified and
+  they can jump off the trip without cost if that happens." Both API routes already existed and
+  **neither was reachable** — `PATCH /api/trips/:id` and `POST /api/trips/:id/cancel` had no button
+  anywhere in the app, cancel told the riders nothing at all, and leaving a trip that had moved under
+  you still cost the D-10 late-cancellation −5.
+- **Edit** — `src/app/app/EditTripOverlay.tsx`, on the driver's own scheduled trip: day, departure,
+  return, seats, stops. `direction` is deliberately not editable (that is a different ride, not an
+  edit of this one). The GET detail route now returns an `editable` block so the form opens filled in
+  without a second round trip, mirroring how `addableMembers` is served. Incidentally delivers
+  [D-35] answer (d) — the driver moving a generated return leg's departure.
+- **Cancel** — a confirmation sheet with an optional reason that now reaches the riders verbatim
+  (`notification.type: "change"`, title "Trip cancelled"). The reserved string `not_started` is
+  refused: it is D-23's expiry sentinel, and a driver typing it would dress their own cancellation up
+  as a trip nobody started.
+- **The free drop-out** — `trip_rider.penalty_waived_at` (migration `0016`), stamped on every seat
+  already aboard when a **material** field moves, honoured by `leave` as a third exception beside
+  D-24's driver-added seats. Material is judged from the rider's chair: departure, return, either
+  stop. Capacity is not — a seat added or taken back changes nothing for the people already in the
+  car. The waiver is written **before** the notification, so a rider acting on the push the instant
+  it lands finds the free drop-out already in force rather than racing it.
+- **Two bugs fixed on the way**, both made reachable by this feature rather than created by it:
+  `PATCH` notified riders on the mere *presence* of a field in the body, so resaving an untouched
+  form pushed "Departure changed" to five phones (and, once the waiver existed, would have handed out
+  a free cancellation for nothing) — it now diffs against the stored row via `src/domain/tripEdit.ts`,
+  comparing times as instants so `…Z` and `…+00:00` don't read as a change; and a rider looking at a
+  **cancelled** trip still saw "✓ You're riding this trip" over a Leave button the API answers with
+  `409` — it now says what happened and why. `PATCH` also gained `409 capacity_below_riders`.
+- Recorded as **[D-38]** with four questions for the developer: whether the waiver expires, how small
+  a change still counts, whether a `started` trip can be abandoned (it cannot — the sharpest gap), and
+  whether a serially-cancelling driver is accountable at all.
+
+## In Progress
+- Nothing mid-flight.
+
+## Next
+- Apply migration `0016` to the live project (`supabase db push`) — the agent's sandbox refused it.
+  **The new code selects `penalty_waived_at`, so it must not be deployed before the migration lands.**
+  Then verify the edit/cancel flow in a real browser against the live database.
+- [D-38] (c): an "abandon" path from `started`, if the developer wants one.
+
+## Blocked On
+- [D-38] questions (a)-(d) — none block the shipped behaviour, all four change it if answered
+  differently.
+- Unchanged: [D-21] (Vault secrets, so `/api/cron/tick` still has no caller), custom SMTP, and the
+  Supabase URL config.
+
+## Gates Green
+- G1 (`pnpm verify`): typecheck, lint and **195/195** tests green (11 new in `tripEdit.test.ts`).
+  Same pre-existing `next lint` custom-font warning, still non-blocking.
+- **Not claimed:** live verification of this feature. It cannot run until `0016` is applied — the
+  detail and leave routes select a column the live database does not yet have.
+
 ## Shipped (2026-08-30 — trip times rendered in the reader's time zone, not the server's)
 - **The bug (developer, from production): a ride published for 7:45 read back as 14:45.** Storage was
   never wrong — `depart_at`/`return_at` are `timestamptz` and the browser sends a correct absolute
