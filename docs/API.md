@@ -169,6 +169,88 @@ Remove a pickup place. `group_admin` (of the place's group) only.
 - **Errors**: `401 unauthenticated`, `404 not_found`, `403 forbidden`, `500 delete_failed`
 - **Side effects**: deletes the `pickup_place` row. No ledger/audit writes.
 
+## Guest riders (D-55)
+
+The people who ride without an account. A guest used to be free text typed at close (D-09), so the
+same colleague riding twice was two unrelated strings and nothing accumulated. A guest is now a row
+on a per-group roster: seats point at it, its rides add up, and a group admin linking it to a member
+makes **every seat it has ever held** count for that member — history included, not only forward.
+
+Deliberately **not** a `profile` row: `profile.id` is a foreign key to `auth.users`, so a ghost
+profile would mean minting fake accounts that appear in the admin Users tab, count as members and
+can be sent notifications. The merge is therefore one `UPDATE` on one column, which is also what
+makes it reversible.
+
+`points_ledger` is never touched by a merge. Riders earn nothing (D-49), so a merge moves a *count*
+— which is also how it sidesteps `check (points <> 0)`.
+
+### `GET /api/groups/:id/guests`
+The roster, with each guest's ride count and who they are linked to.
+
+- **Auth**: required, caller must be a member of the group
+- **Request**: none
+- **Response**: `{ guests: { id, displayName, initials, color, rides: number, claimedBy: { profileId, name } | null, claimedAt: string | null }[], canManage: boolean, members: { profileId, name, initials, color }[] }`
+- **Errors**: `401 unauthenticated`, `404 not_found` (not a member), `500 guest_lookup_failed`
+- **Side effects**: none
+- **Notes**: `rides` counts confirmed seats on **closed** trips — the same definition of `pooled` the leaderboard uses, so the number does not change meaning when it moves onto a member's line. `members` is the admin's link picker and is empty unless `canManage`; `initials`/`color` are derived (`initialsFor`/`avatarColorFor`), not stored.
+
+### `POST /api/groups/:id/guests`
+Add someone to the roster. `group_admin` only — the same rule D-29 set for the other admin-managed
+list ("manager-managed and fixed — tags can be overpopulated"). Drivers pick from it, never add.
+
+- **Auth**: required, `group_role: "group_admin"`
+- **Request**: `{ displayName: string (1-80) }`
+- **Response**: `{ guest }` (`201`)
+- **Errors**: `401`, `404 not_found`, `403 forbidden`, `400 invalid_request`, `409 already_exists`, `500 create_failed`
+- **Side effects**: inserts a `group_guest` row; writes an `audit_log` row (`group_guest_added`).
+- **Notes**: `409 already_exists` is the unique index on `(group_id, lower(trim(display_name)))` — the constraint that makes the roster an identity rather than a list of strings.
+
+### `DELETE /api/groups/:id/guests/:guestId`
+Remove a guest. `group_admin` only, and refused while they hold **any** seat.
+
+- **Auth**: required, `group_role: "group_admin"`
+- **Response**: `{ ok: true }`
+- **Errors**: `401`, `404 not_found`, `403 forbidden`, `409 has_rides`, `500 seat_lookup_failed`, `500 delete_failed`
+- **Side effects**: deletes the `group_guest` row; writes an `audit_log` row (`group_guest_deleted`).
+- **Notes**: the column is `on delete set null`, so the database would orphan the seats into plain named guests rather than refuse — the safe failure mode, not the intended one. Deleting is for a name typed in error; a guest with history gets linked, not removed.
+
+### `POST /api/groups/:id/guests/:guestId/claim`
+**The merge.** Link a guest to the member who turns out to be that person. `group_admin` only.
+
+- **Auth**: required, `group_role: "group_admin"`
+- **Request**: `{ profileId: uuid }` — must be a member of this group
+- **Response**: `{ guest }`
+- **Errors**: `401`, `404 not_found`, `403 forbidden`, `400 invalid_request`, `400 not_a_member`, `409 already_claimed`, `500 claim_failed`
+- **Side effects**: sets `claimed_by_profile_id`, `claimed_at`, `claimed_by_admin_id`; writes an `audit_log` row (`group_guest_claimed`). Every seat the guest holds immediately counts for the member on the leaderboard and the YOU tab — **no rows are rewritten**, both routes resolve a seat through this column.
+- **Notes**: the update is a compare-and-swap on `claimed_by_profile_id is null`, so two admins linking the same guest to two different members at once cannot silently overwrite each other. Two roster entries may point at the **same** member on purpose ("Maria", "Maria G" — the mess this table exists to clean up); each seat is still counted once.
+
+### `DELETE /api/groups/:id/guests/:guestId/claim`
+Undo a link. The rides go back to the guest and off the member's line.
+
+- **Auth**: required, `group_role: "group_admin"`
+- **Response**: `{ ok: true }`
+- **Errors**: `401`, `404 not_found`, `403 forbidden`, `409 not_claimed`, `500 unclaim_failed`
+- **Side effects**: clears the three claim columns; writes an `audit_log` row (`group_guest_unclaimed`).
+
+### `POST /api/trips/:id/guests`
+The driver seats a roster guest. The guest twin of `POST /riders`.
+
+- **Auth**: required, caller must be the trip's driver
+- **Request**: `{ groupGuestId: uuid }`
+- **Response**: `{ tripRider }` (`201`)
+- **Errors**: `401`, `404 not_found`, `404 guest_not_found`, `403 not_driver`, `403 wrong_group`, `409 wrong_status`, `409 already_joined`, `409 full`, `400 invalid_request`
+- **Side effects**: calls `add_trip_guest()` (migration `0022`), which inserts a `trip_rider` row (`state: "joined"`, `group_guest_id` set, `guest_name` copied, `added_by_profile_id` = caller) under the same `select … for update` capacity lock `add_trip_rider` uses; writes an `audit_log` row (`trip_guest_seated_by_driver`). **Notifies nobody** — a guest has no profile and no device, which is the one thing this does not share with `POST /riders`.
+- **Notes**: honours D-24 rather than reversing it. The developer rejected free-text guests in the pre-trip flow in favour of "group members only, picked from a list"; this is that list, extended to people who have no account yet. The seat counts against capacity like any other.
+
+### `DELETE /api/trips/:id/guests/:tripRiderId`
+The driver frees a seat they gave a roster guest.
+
+- **Auth**: required, caller must be the trip's driver
+- **Response**: `{ ok: true }`
+- **Errors**: `401`, `404 not_found`, `403 not_driver`, `409 wrong_status`, `500 seat_lookup_failed`, `500 remove_failed`
+- **Side effects**: sets the seat to `state: "left"` with `left_at`; writes an `audit_log` row (`trip_guest_removed_by_driver`). No ledger writes.
+- **Notes**: separate from `DELETE /riders/:riderId` because that route notifies the person whose seat was taken back. Marks `left` rather than deleting, so a guest's history stays what they actually rode — a confirmed seat on a closed trip — and never a seat booked and undone.
+
 ## Memberships
 
 ### `PATCH /api/memberships/:id`
@@ -230,7 +312,7 @@ Trip detail overlay: decorated summary plus the driver's pickup list in route or
 
 - **Auth**: required, caller must be a member of the trip's group
 - **Request**: none
-- **Response**: `{ trip: DecoratedTrip, driverId, isDriver: boolean, parkingUrl: string | null, cancelledReason: string | null, seatsLeft: number, pickups: { id, name, initials?, color?, pickupLabel: string | null, stopOrder: number | null, isViewer: boolean, addedByDriver: boolean }[], addableMembers: { id, name, initials, color }[], penaltyWaived: boolean, editable: { departAt, returnAt: string | null, capacity: number, direction, outStopId: string | null, backStopId: string | null, stops: TripStopView[] } | null }`
+- **Response**: `{ trip: DecoratedTrip, driverId, isDriver: boolean, parkingUrl: string | null, cancelledReason: string | null, seatsLeft: number, pickups: { id, name, initials?, color?, pickupLabel: string | null, stopOrder: number | null, isViewer: boolean, addedByDriver: boolean, groupGuestId: string | null }[], addableMembers: { id, name, initials, color }[], addableGuests: { id, name, initials, color }[], penaltyWaived: boolean, editable: { departAt, returnAt: string | null, capacity: number, direction, outStopId: string | null, backStopId: string | null, stops: TripStopView[] } | null }`
 - **Errors**: `401 unauthenticated`, `404 not_found`, `500 trip_lookup_failed`, `500 rider_lookup_failed`
 - **Side effects**: none
 - **Notes**: `trip.stopNotices` (D-29) is the ride's stops in travel order, each with its `leg` (`out`/`back`) and the `when` wording the UI shows (`"in way"` for an outbound stop, `"back"` for a return one). Empty for a direct ride. `addableMembers` (D-24) is the passenger picker's list — group members not already on the trip. Empty unless the caller is the driver and the trip is `scheduled`/`started`. `pickups[].addedByDriver` marks a seat the driver booked for someone. `penaltyWaived` (D-38) is true when the caller's own seat carries `trip_rider.penalty_waived_at` — the driver changed the trip after they joined, so leaving costs them nothing and the UI says so instead of showing the usual late-cancellation warning. `editable` (D-38) is the edit form's starting values plus the group's stop list, non-null only when the caller is the driver **and** the trip is still `scheduled`; `direction` is included for the form's leg rules but is **not** editable. `parkingUrl` (D-54) is the group's parking link for the leg this trip travels (`back` gets `parking_url_back`, everything else `parking_url_out`), and is **null for anyone but the driver** — the gate is here rather than in the client, so a rider never receives the URL at all.
@@ -303,12 +385,12 @@ over another. Two forms:
 | `full` | the driver | only the ids in the body | everyone else | yes | yes |
 | `restricted` | a group admin | **every** active rider | **none** | ignored | yes |
 
-A restricted close ignores `confirmedTripRiderIds` and `guestNames` entirely — judging that a
+A restricted close ignores `confirmedTripRiderIds`, `guestNames` and `groupGuestIds` entirely — judging that a
 colleague did not show up is a call only the driver was there to make — but still pays the normal
 award, because a leg that was driven was driven regardless of who tapped the button.
 
 - **Auth**: required, caller must be the trip's driver or a group admin of its group
-- **Request**: `{ confirmedTripRiderIds?: string[] (uuid, trip_rider row ids — not profile ids — of active riders who rode; default []), guestNames?: string[] (1-80 chars each, max 20; default []) }`. Any id in `confirmedTripRiderIds` that isn't an active rider on this trip is silently ignored, not trusted.
+- **Request**: `{ confirmedTripRiderIds?: string[] (uuid, trip_rider row ids — not profile ids — of active riders who rode; default []), guestNames?: string[] (1-80 chars each, max 20; default []), groupGuestIds?: uuid[] (max 20; default []) }`. Any id in `confirmedTripRiderIds` that isn't an active rider on this trip is silently ignored, not trusted.
 - **Response**: `{ trip, mode: "full" | "restricted", confirmedCount: number, noShowCount: number, pointsAwarded: number, backTripId: string | null }` — `pointsAwarded` is the **driver's** own award (drive weight + fill bonus), which since D-49 is the only award a close writes.
 - **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `403 not_permitted` (caller is neither the driver nor a group admin — riders included), `409 wrong_status` (the trip is not `started` — **including the case where another close won the race, see Exactly-once below**), `500 confirm_failed` / `no_show_failed` / `guest_add_failed` / `back_leg_failed` / `ledger_write_failed` / `update_failed`
 - **Exactly-once**: closing is guarded by a compare-and-swap — `update trip set status='closed' where id=? and status='started'` — taken **before** the guest rows and the ledger are written. Two closes in flight together therefore produce one `200` and one `409 wrong_status`, never two payments. Without it both callers passed the state-machine check (a read) and both wrote a full award set; that was reproduced against the live database on 2026-08-31 and is the concurrent sibling of the sequential duplication D-41 had to clean out of the leaderboard by hand. The realistic trigger is not a double-tap but D-35 mechanic (ii): the scheduler closes round trips at T−2h before `return_at` every five minutes, so a driver tapping Close in that window races a cron job. Any failure between the claim and the ledger **releases the claim** (status back to `started`, `closed_at` cleared), so the close stays retryable exactly as before; if that release itself fails the error message says so, because the trip is then closed and unpaid.
@@ -405,7 +487,8 @@ answers. Removing the window removed the question.
 
 - **Auth**: required, caller must be a member of `:id`
 - **Request**: none
-- **Response**: `{ entries: RankedRow[] (profileId, name, initials, color, driven, pooled, kudos, points, rank, medal: string | null), formula: string, viewerProfileId: string }`
+- **Response**: `{ entries: RankedRow[] (profileId, name, initials, color, registered: boolean, driven, pooled, kudos, points, rank, medal: string | null), formula: string, viewerProfileId: string }`
+- **Notes (D-55)**: a seat counts for its rider **or** for whoever a group admin has linked its guest to, so linking a guest moves their whole history onto that member at once. Unclaimed guests with at least one ride appear as their own entries with `registered: false`, `points: 0` and their ride count as `pooled` — greyed and marked "not registered yet" on Ranks. For those rows `profileId` holds the `group_guest` id, a different table, so it can never collide with a real profile id. A **claimed** guest never appears as its own row: its rides are on the member's line, and listing both would show one ride twice.
 - **Errors**: `401 unauthenticated`, `404 not_found`
 - **Side effects**: none
 

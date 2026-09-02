@@ -39,7 +39,31 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: roster.error }, { status: 500 });
   }
 
-  return NextResponse.json({ guests: roster.guests, canManage: membership.group_role === "group_admin" });
+  // The admin's link picker, assembled here rather than by the client — the same reasoning as
+  // `addableMembers` on GET /api/trips/:id. "Who is in my group" is a question RLS should answer on
+  // the server, and only an admin can link, so only an admin is sent the list.
+  const canManage = membership.group_role === "group_admin";
+  let members: { profileId: string; name: string; initials: string; color: string }[] = [];
+  if (canManage) {
+    const { data: memberships } = await supabase.from("membership").select("profile_id").eq("group_id", id);
+    const memberIds = (memberships ?? []).map((m) => m.profile_id);
+    const { data: profiles } =
+      memberIds.length > 0
+        ? await supabase
+            .from("profile")
+            .select("id, display_name, initials, avatar_color")
+            .in("id", memberIds)
+            .order("display_name", { ascending: true })
+        : { data: [] };
+    members = (profiles ?? []).map((p) => ({
+      profileId: p.id,
+      name: p.display_name,
+      initials: p.initials,
+      color: p.avatar_color,
+    }));
+  }
+
+  return NextResponse.json({ guests: roster.guests, canManage, members });
 }
 
 const createSchema = z.object({

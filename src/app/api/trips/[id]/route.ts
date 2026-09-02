@@ -13,6 +13,7 @@ import { decorateTrip } from "@/domain/decorateTrip";
 import { notifyProfiles } from "@/lib/notify/tripNotify";
 import { diffTripEdit } from "@/domain/tripEdit";
 import { parkingUrlForLeg } from "@/domain/parking";
+import { loadGuestRoster } from "@/lib/groups/guestRoster";
 
 // GET /api/trips/:id — trip detail overlay: decorated summary + the driver's pickup list in route
 // order. RLS (is_member) makes this 404 rather than 403 for a non-member (plan's "404 never leaks
@@ -42,7 +43,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     supabase.from("profile").select("id, display_name, initials, avatar_color").eq("id", trip.driver_id).maybeSingle(),
     supabase
       .from("trip_rider")
-      .select("id, profile_id, guest_name, pickup_place_id, stop_order, state, added_by_profile_id, penalty_waived_at")
+      .select(
+        "id, profile_id, group_guest_id, guest_name, pickup_place_id, stop_order, state, added_by_profile_id, penalty_waived_at",
+      )
       .eq("trip_id", id)
       .in("state", ["joined", "confirmed"])
       .order("stop_order", { ascending: true, nullsFirst: false }),
@@ -131,6 +134,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       // D-24: a seat the driver booked on this member's behalf. The driver may take it back; a
       // seat someone booked themselves is theirs to give up.
       addedByDriver: r.added_by_profile_id !== null,
+      // D-55: a seat held by someone on the group's guest roster. Freed through its own route,
+      // because the member one notifies the person whose seat was taken and a guest has no device.
+      groupGuestId: r.group_guest_id,
     };
   });
 
@@ -230,6 +236,22 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       })
     : null;
 
+  // D-55: the guests the driver can still seat — this group's roster minus anyone already aboard.
+  // Assembled here for the same reason as addableMembers just above, and gated the same way:
+  // only the driver of a live trip is offered the list.
+  let addableGuests: { id: string; name: string; initials: string; color: string }[] = [];
+  if (isDriver && (trip.status === "scheduled" || trip.status === "started")) {
+    const roster = await loadGuestRoster(supabase, trip.group_id);
+    if (roster.ok) {
+      const seatedGuestIds = new Set(
+        (riderRows ?? []).map((r) => r.group_guest_id).filter((v): v is string => !!v),
+      );
+      addableGuests = roster.guests
+        .filter((g) => !seatedGuestIds.has(g.id))
+        .map((g) => ({ id: g.id, name: g.displayName, initials: g.initials, color: g.color }));
+    }
+  }
+
   return NextResponse.json({
     trip: decorateTrip(view),
     driverId: trip.driver_id,
@@ -238,6 +260,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     cancelledReason: trip.cancelled_reason,
     pickups,
     addableMembers,
+    addableGuests,
     seatsLeft: trip.capacity - (riderRows ?? []).length,
     viewerGaveKudos,
     viewerDeclinedKudos,

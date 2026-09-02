@@ -17,15 +17,20 @@ interface Props {
   // D-54: the parking link for the leg just driven. Null when the group has not set one for this
   // direction, and always null for anyone but the driver — the server never sends it to a rider.
   parkingUrl: string | null;
+  // D-55: the group's guest roster, minus anyone already aboard. Picking one here records the
+  // ride under an identity that accumulates, where the free-text field below records a name and
+  // nothing else.
+  addableGuests: { id: string; name: string; initials: string; color: string }[];
   onClose: () => void;
   onClosed: (message: string) => void;
 }
 
-export function CloseTripOverlay({ tripId, riders, parkingUrl, onClose, onClosed }: Props) {
+export function CloseTripOverlay({ tripId, riders, parkingUrl, addableGuests, onClose, onClosed }: Props) {
   const [checks, setChecks] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(riders.map((r) => [r.id, true])),
   );
   const [guestNames, setGuestNames] = useState<string[]>([]);
+  const [pickedGuestIds, setPickedGuestIds] = useState<string[]>([]);
   const [newGuest, setNewGuest] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +50,7 @@ export function CloseTripOverlay({ tripId, riders, parkingUrl, onClose, onClosed
       const res = await fetch(`/api/trips/${tripId}/close`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmedTripRiderIds, guestNames }),
+        body: JSON.stringify({ confirmedTripRiderIds, guestNames, groupGuestIds: pickedGuestIds }),
       });
 
       // Parsed defensively — see src/lib/http/readJsonBody.ts. This is the handler that taught us
@@ -142,8 +147,54 @@ export function CloseTripOverlay({ tripId, riders, parkingUrl, onClose, onClosed
           </>
         )}
 
+        {/* D-55: the roster comes first and the free-text field is demoted below it. A driver
+            reaching for the quickest option should land on the one that counts — free text is
+            what left the developer with untracked riders in the first place. */}
+        {addableGuests.length > 0 && (
+          <>
+            <label className="lbl" style={{ marginTop: 14 }}>
+              Anyone else from the guest list?
+            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+              {addableGuests.map((g) => {
+                const picked = pickedGuestIds.includes(g.id);
+                return (
+                  <button
+                    key={g.id}
+                    aria-pressed={picked}
+                    onClick={() =>
+                      setPickedGuestIds((ids) => (picked ? ids.filter((x) => x !== g.id) : [...ids, g.id]))
+                    }
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 7,
+                      background: picked ? "var(--green-soft)" : "var(--surface)",
+                      border: `1.5px solid ${picked ? "var(--green)" : "rgba(0,0,0,.1)"}`,
+                      borderRadius: 13,
+                      padding: "7px 11px 7px 7px",
+                      cursor: "pointer",
+                      font: "700 12px var(--font-body)",
+                      color: "var(--ink)",
+                    }}
+                  >
+                    <span className="av" style={{ background: g.color, width: 24, height: 24, borderRadius: 8, fontSize: 10 }}>
+                      {g.initials}
+                    </span>
+                    {g.name}
+                    {picked && <span style={{ color: "var(--green-ink)" }}>✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <p style={{ font: "500 11px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "2px 2px 8px" }}>
+              Their rides add up, and can be handed to their account if they sign up.
+            </p>
+          </>
+        )}
+
         <label className="lbl" style={{ marginTop: 14 }}>
-          Drove someone not in the group?
+          Someone else, just this once?
         </label>
         <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
           <input
@@ -187,7 +238,8 @@ export function CloseTripOverlay({ tripId, riders, parkingUrl, onClose, onClosed
           </div>
         )}
         <p style={{ font: "500 11px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "2px 2px 20px" }}>
-          Guest riders fill a seat, so they still count toward your drive bonus.
+          A one-off name fills a seat, so it still counts toward your drive bonus — but it is not
+          tracked for anyone. Ask an admin to add a regular rider to the guest list instead.
         </p>
 
         {/* D-54: the developer asked for this "in the close trip button" — the driver has just

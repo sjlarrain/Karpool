@@ -28,6 +28,10 @@ export interface CloseTripInput {
   // name nobody a no-show, because only the driver was there to judge who actually rode.
   confirmedTripRiderIds?: string[];
   guestNames?: string[];
+  // D-55: guests picked from the group's roster at close time. Distinct from guestNames, which
+  // stays the free-text one-off (D-09) — a roster guest carries an identity, so their ride is
+  // counted and can later be linked to the account they open.
+  groupGuestIds?: string[];
 }
 
 export interface CloseTripSuccess {
@@ -60,7 +64,13 @@ const STATUS_BY_TRANSITION_ERROR: Record<TripTransitionErrorCode, number> = {
   too_early: 409,
 };
 
-export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], guestNames = [] }: CloseTripInput): Promise<CloseTripResult> {
+export async function closeTrip({
+  tripId,
+  actor,
+  confirmedTripRiderIds = [],
+  guestNames = [],
+  groupGuestIds = [],
+}: CloseTripInput): Promise<CloseTripResult> {
   const admin = createSupabaseAdminClient();
 
   const { data: trip } = await admin
@@ -89,7 +99,7 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
 
   const { data: activeRiders, error: ridersError } = await admin
     .from("trip_rider")
-    .select("id, profile_id")
+    .select("id, profile_id, group_guest_id")
     .eq("trip_id", tripId)
     .in("state", ["joined", "confirmed"]);
   if (ridersError) {
@@ -98,6 +108,9 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
 
   const active = activeRiders ?? [];
   const activeById = new Map(active.map((r) => [r.id, r]));
+  // D-55: roster guests already aboard, so a driver who picks one at close that they had already
+  // seated gets one seat rather than two.
+  const seatedGuestIds = active.map((r) => r.group_guest_id).filter((v): v is string => !!v);
 
   // The one behavioural difference between the two close forms. A restricted close confirms
   // everyone and charges nobody: it exists so a forgotten ride still pays the driver and still
@@ -106,6 +119,7 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
   const confirmedIds = mode === "full" ? confirmedTripRiderIds.filter((rid) => activeById.has(rid)) : active.map((r) => r.id);
   const noShowIds = mode === "full" ? active.map((r) => r.id).filter((rid) => !confirmedIds.includes(rid)) : [];
   const namedGuests = mode === "full" ? guestNames : [];
+  const rosterGuestIds = mode === "full" ? [...new Set(groupGuestIds)] : [];
 
   const confirmedProfileIds = confirmedIds
     .map((rid) => activeById.get(rid)?.profile_id)
@@ -179,13 +193,48 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
   }
 
   let insertedGuests: { id: string; guest_name: string | null }[] = [];
+
+  // D-55: roster guests first. Their group_id is checked against the trip's, so a close cannot
+  // pull a name out of another group — the same boundary add_trip_guest enforces for a pre-trip
+  // seat, restated here because this path does not go through that function. A guest already
+  // seated on the trip is skipped rather than seated twice; they are confirmed above like any
+  // other rider.
+  if (rosterGuestIds.length > 0) {
+    const { data: rosterGuests, error: rosterError } = await admin
+      .from("group_guest")
+      .select("id, display_name")
+      .eq("group_id", trip.group_id)
+      .in("id", rosterGuestIds);
+    if (rosterError) {
+      return releaseClaim({ ok: false, error: "guest_add_failed", status: 500, message: rosterError.message });
+    }
+    const alreadySeated = new Set(seatedGuestIds);
+    const toSeat = (rosterGuests ?? []).filter((g) => !alreadySeated.has(g.id));
+    if (toSeat.length > 0) {
+      const { data, error } = await admin
+        .from("trip_rider")
+        .insert(
+          toSeat.map((g) => ({
+            trip_id: tripId,
+            group_guest_id: g.id,
+            guest_name: g.display_name,
+            state: "confirmed" as const,
+          })),
+        )
+        .select("id, guest_name");
+      if (error) return releaseClaim({ ok: false, error: "guest_add_failed", status: 500, message: error.message });
+      insertedGuests = data ?? [];
+    }
+  }
+
+  // D-09's free-text guest, unchanged: a name and nothing else, counted for nobody.
   if (namedGuests.length > 0) {
     const { data, error } = await admin
       .from("trip_rider")
       .insert(namedGuests.map((guestName) => ({ trip_id: tripId, guest_name: guestName, state: "confirmed" as const })))
       .select("id, guest_name");
     if (error) return releaseClaim({ ok: false, error: "guest_add_failed", status: 500, message: error.message });
-    insertedGuests = data ?? [];
+    insertedGuests = [...insertedGuests, ...(data ?? [])];
   }
 
   // D-35: the return leg is materialised HERE, before the ledger is written and before the status

@@ -11,6 +11,10 @@ const bodySchema = z.object({
   // restricted close — see below.
   confirmedTripRiderIds: z.array(z.string().uuid()).default([]),
   guestNames: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
+  // D-55: guests picked from the group's roster. Separate from guestNames because these carry an
+  // identity — their ride is counted and can be linked to an account later, where a free-text
+  // name still counts for nobody (D-09).
+  groupGuestIds: z.array(z.string().uuid()).max(20).default([]),
 });
 
 // POST /api/trips/:id/close — started -> closed. Confirms riders, awards the driver 1 "drive" +
@@ -62,6 +66,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     },
     confirmedTripRiderIds: parsed.data.confirmedTripRiderIds,
     guestNames: parsed.data.guestNames,
+    groupGuestIds: parsed.data.groupGuestIds,
   });
 
   if (!result.ok) {

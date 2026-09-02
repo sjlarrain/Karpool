@@ -23,6 +23,8 @@ interface Pickup {
   isViewer: boolean;
   // D-24: this seat was booked by the driver, so the driver can take it back.
   addedByDriver: boolean;
+  // D-55: set when the seat belongs to someone on the group's guest roster.
+  groupGuestId: string | null;
 }
 
 interface AddableMember {
@@ -44,6 +46,8 @@ interface DetailResponse {
   // Group members not already on this trip — empty unless the viewer is the driver and the trip is
   // still active.
   addableMembers: AddableMember[];
+  // D-55: the same, for the group's guest roster — the people with no account yet.
+  addableGuests: AddableMember[];
   seatsLeft: number;
   viewerGaveKudos: boolean;
   viewerDeclinedKudos: boolean;
@@ -185,7 +189,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
     );
   }
 
-  const { trip, isDriver, pickups, addableMembers, seatsLeft, penaltyWaived, editable } = data;
+  const { trip, isDriver, pickups, addableMembers, addableGuests, seatsLeft, penaltyWaived, editable } = data;
   const otherPickups = pickups.filter((p) => !p.isViewer);
   // Only a ride someone could still act on is worth sharing — a closed or cancelled one would send
   // the recipient to a dead end.
@@ -238,6 +242,51 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
       onChanged(`${name} added to this ride`);
     } catch {
       setError("Couldn't reach the server — check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // D-55: the guest twin of addPassenger. Its own route because a guest has no device to notify,
+  // which is the one thing POST /riders does that must not happen here.
+  async function addGuestPassenger(groupGuestId: string, name: string) {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/guests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ groupGuestId }),
+      });
+      const body = await readJsonBody(res);
+      if (!res.ok) {
+        setError(body?.message ?? "Couldn’t seat that guest.");
+        return;
+      }
+      setAddingPassenger(false);
+      await load();
+      onChanged(`${name} added to this ride`);
+    } catch {
+      setError("Couldn’t reach the server — check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeGuestPassenger(riderId: string, name: string) {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/guests/${riderId}`, { method: "DELETE" });
+      const body = await readJsonBody(res);
+      if (!res.ok) {
+        setError(body?.message ?? "Couldn’t free that seat.");
+        return;
+      }
+      await load();
+      onChanged(`${name} removed from this ride`);
+    } catch {
+      setError("Couldn’t reach the server — check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -432,7 +481,9 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
                 </div>
                 {p.addedByDriver && trip.status !== "closed" && trip.status !== "cancelled" && (
                   <button
-                    onClick={() => removePassenger(p.id, p.name)}
+                    onClick={() =>
+                      p.groupGuestId ? removeGuestPassenger(p.id, p.name) : removePassenger(p.id, p.name)
+                    }
                     disabled={busy}
                     aria-label={`Remove ${p.name}`}
                     style={{
@@ -844,6 +895,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
         <CloseTripOverlay
           tripId={tripId}
           parkingUrl={data.parkingUrl}
+          addableGuests={data.addableGuests}
           riders={otherPickups.map((p) => ({ id: p.id, name: p.name, initials: p.initials, color: p.color }))}
           onClose={() => setClosing(false)}
           onClosed={(message) => {
@@ -860,10 +912,11 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
               Add a passenger
             </h3>
             <p style={{ font: "500 11.5px var(--font-body)", color: "rgba(0,0,0,.5)", margin: "0 0 14px" }}>
-              {seatsLeft} seat{seatsLeft === 1 ? "" : "s"} left. They&apos;ll be notified, and they can leave without
-              losing points.
+              {seatsLeft} seat{seatsLeft === 1 ? "" : "s"} left. Members are notified and can leave without
+              losing points; a guest has no account to notify.
             </p>
             <div style={{ maxHeight: 280, overflowY: "auto" }}>
+              {addableMembers.length > 0 && <label className="lbl">Members</label>}
               {addableMembers.map((m) => (
                 <button
                   key={m.id}
@@ -890,6 +943,49 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
                   <span style={{ color: "var(--purple)", font: "800 13px var(--font-body)" }}>+</span>
                 </button>
               ))}
+
+              {/* D-55. D-24 kept free-text guests out of this sheet in favour of "group members
+                  only, picked from a list" — this is that list, extended to the people who have no
+                  account yet, so a driver still picks rather than types. */}
+              {addableGuests.length > 0 && (
+                <>
+                  <label className="lbl" style={{ marginTop: 10 }}>
+                    Guests
+                  </label>
+                  {addableGuests.map((g) => (
+                    <button
+                      key={g.id}
+                      disabled={busy}
+                      onClick={() => addGuestPassenger(g.id, g.name)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 11,
+                        width: "100%",
+                        background: "var(--surface)",
+                        border: "1px dashed rgba(0,0,0,.16)",
+                        borderRadius: 15,
+                        padding: "11px 12px",
+                        marginBottom: 8,
+                        cursor: "pointer",
+                        textAlign: "left",
+                      }}
+                    >
+                      <span className="av" style={{ background: g.color }}>
+                        {g.initials}
+                      </span>
+                      <span style={{ flex: 1, font: "700 13px var(--font-body)", color: "var(--ink)" }}>{g.name}</span>
+                      <span style={{ color: "var(--purple)", font: "800 13px var(--font-body)" }}>+</span>
+                    </button>
+                  ))}
+                </>
+              )}
+
+              {addableMembers.length === 0 && addableGuests.length === 0 && (
+                <p style={{ font: "500 12px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "4px 2px" }}>
+                  Everyone in the group is already on this ride.
+                </p>
+              )}
             </div>
             {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "8px 2px 0" }}>{error}</p>}
             <button className="btnG" style={{ marginTop: 10 }} onClick={() => setAddingPassenger(false)}>

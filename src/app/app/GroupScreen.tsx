@@ -9,6 +9,7 @@ import type { StopIcon } from "@/domain/types";
 import { shareOrCopy } from "@/lib/share";
 import { StopGlyph, isStopIcon } from "./StopSign";
 import { readJsonBody, UNREADABLE_REPLY } from "@/lib/http/readJsonBody";
+import { GuestRoster } from "./GuestRoster";
 
 type Group = Database["public"]["Tables"]["group"]["Row"];
 type PickupPlace = Database["public"]["Tables"]["pickup_place"]["Row"];
@@ -229,6 +230,11 @@ export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces,
           ))}
           {role === "group_admin" && <AddPlace groupId={group.id} kind="stop" onAdded={() => router.refresh()} />}
         </div>
+
+        {/* D-55: the people this group carries who have no account. Sits with the other
+            admin-managed list rather than in a screen of its own — it is group configuration in
+            exactly the way the places above are. */}
+        <GuestRoster groupId={group.id} isAdmin={role === "group_admin"} />
 
         <label className="lbl" style={{ textAlign: "left" }}>
           Invite more riders
