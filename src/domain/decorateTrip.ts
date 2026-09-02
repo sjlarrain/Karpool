@@ -35,7 +35,7 @@ export interface DecoratedTrip extends TripView {
   driverLabel: string;
   // D-29: every stop this ride makes, in travel order. Empty for a direct ride.
   stopNotices: StopNotice[];
-  // D-27: belongs in the Carpools tab's Past section rather than the live feed.
+  // D-27/D-53: belongs in the Carpools tab's (collapsed) Past section rather than the live feed.
   isPast: boolean;
 }
 
@@ -128,6 +128,11 @@ export function decorateTrip(trip: TripView): DecoratedTrip {
     joinable: trip.role === "open" && seatsLeft > 0 && trip.status === "scheduled" && !trip.departed,
     driverLabel: trip.role === "driving" ? "You’re driving" : `${trip.driver} is driving`,
     stopNotices: stopNotices(trip),
-    isPast: finished !== null,
+    // D-53: two ways a card stops being news. A terminal status is the obvious one. The other is a
+    // ride that was never started and whose departure has passed — for anyone but the driver that
+    // card is inert: `joinable` above is already false and there is nothing left to do with it.
+    // The driver's own stays live, because D-23 gives them 24h to start it, close it, or add
+    // someone; hiding their card would hide the only button that can act on it.
+    isPast: finished !== null || (trip.status === "scheduled" && trip.departed && trip.role !== "driving"),
   };
 }

@@ -58,9 +58,23 @@ describe("decorateTrip", () => {
 
   it("stops a departed trip being joinable, while the driver may still start it late", () => {
     // D-23: the 24h grace window is the driver's, not a late rider's.
-    const d = decorateTrip({ ...base, departed: true });
+    const d = decorateTrip({ ...base, departed: true, role: "driving" });
     expect(d.joinable).toBe(false);
     expect(d.isPast).toBe(false);
+  });
+
+  it("moves a departed, unstarted trip out of the live feed for everyone but its driver", () => {
+    // D-53. The same row, three viewers. Only the driver can still act on it (D-23), so only the
+    // driver keeps it on screen; for a rider or an onlooker it is an inert card in "Today".
+    const departed = { ...base, departed: true } as const;
+    expect(decorateTrip({ ...departed, role: "open" }).isPast).toBe(true);
+    expect(decorateTrip({ ...departed, role: "joined" }).isPast).toBe(true);
+    expect(decorateTrip({ ...departed, role: "driving" }).isPast).toBe(false);
+  });
+
+  it("keeps a started trip live however long ago it left", () => {
+    // A ride in progress is the opposite of past, whatever the clock says. Only `scheduled` ages out.
+    expect(decorateTrip({ ...base, status: "started", departed: true, role: "joined" }).isPast).toBe(false);
   });
 
   it("badges a closed trip as COMPLETED, outranking the viewer's role", () => {

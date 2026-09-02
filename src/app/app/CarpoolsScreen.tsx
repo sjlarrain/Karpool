@@ -88,7 +88,10 @@ function TripCard({
 
 export function CarpoolsScreen({ trips, onOpenTrip, onQuickJoin }: Props) {
   const [filter, setFilter] = useState<"all" | "mine">("all");
-  const [pastOpen, setPastOpen] = useState(true);
+  // D-53: hidden, not deleted. The developer's complaint was a month of finished rides sitting
+  // under today's, so the section starts shut — one tap still opens it, and the kudos prompt D-27
+  // put on those cards is still reachable behind it.
+  const [pastOpen, setPastOpen] = useState(false);
 
   const mineCount = useMemo(() => trips.filter((t) => t.role === "driving" || t.role === "joined").length, [trips]);
 
