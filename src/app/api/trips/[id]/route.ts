@@ -12,6 +12,7 @@ import type { TripStopView } from "@/domain/types";
 import { decorateTrip } from "@/domain/decorateTrip";
 import { notifyProfiles } from "@/lib/notify/tripNotify";
 import { diffTripEdit } from "@/domain/tripEdit";
+import { parkingUrlForLeg } from "@/domain/parking";
 
 // GET /api/trips/:id — trip detail overlay: decorated summary + the driver's pickup list in route
 // order. RLS (is_member) makes this 404 rather than 403 for a non-member (plan's "404 never leaks
@@ -33,7 +34,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
 
   const [{ data: group }, { data: driver }, { data: riderRows, error: ridersError }] = await Promise.all([
-    supabase.from("group").select("origin_label, dest_label").eq("id", trip.group_id).maybeSingle(),
+    supabase
+      .from("group")
+      .select("origin_label, dest_label, parking_url_out, parking_url_back")
+      .eq("id", trip.group_id)
+      .maybeSingle(),
     supabase.from("profile").select("id, display_name, initials, avatar_color").eq("id", trip.driver_id).maybeSingle(),
     supabase
       .from("trip_rider")
@@ -215,10 +220,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     };
   }
 
+  // D-54: driver-only, and gated on the server rather than hidden in the client. A rider never
+  // receives the URL at all, so "who sees the parking link" is answered by what leaves the machine
+  // instead of by which branch of JSX runs.
+  const parkingUrl = isDriver
+    ? parkingUrlForLeg(trip.direction, {
+        parkingUrlOut: group.parking_url_out,
+        parkingUrlBack: group.parking_url_back,
+      })
+    : null;
+
   return NextResponse.json({
     trip: decorateTrip(view),
     driverId: trip.driver_id,
     isDriver,
+    parkingUrl,
     cancelledReason: trip.cancelled_reason,
     pickups,
     addableMembers,

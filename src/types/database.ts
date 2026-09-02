@@ -148,6 +148,8 @@ export type Database = {
         Row: {
           code: string
           cost_split_note: string | null
+          parking_url_out: string | null
+          parking_url_back: string | null
           created_at: string
           created_by: string
           dest_label: string
@@ -166,6 +168,8 @@ export type Database = {
         Insert: {
           code: string
           cost_split_note?: string | null
+          parking_url_out?: string | null
+          parking_url_back?: string | null
           created_at?: string
           created_by: string
           dest_label: string
@@ -184,6 +188,8 @@ export type Database = {
         Update: {
           code?: string
           cost_split_note?: string | null
+          parking_url_out?: string | null
+          parking_url_back?: string | null
           created_at?: string
           created_by?: string
           dest_label?: string

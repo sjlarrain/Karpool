@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { readJsonBody } from "@/lib/http/readJsonBody";
+import { ParkingLink } from "./ParkingLink";
 
 interface Rider {
   id: string; // trip_rider row id
@@ -13,11 +14,14 @@ interface Rider {
 interface Props {
   tripId: string;
   riders: Rider[];
+  // D-54: the parking link for the leg just driven. Null when the group has not set one for this
+  // direction, and always null for anyone but the driver — the server never sends it to a rider.
+  parkingUrl: string | null;
   onClose: () => void;
   onClosed: (message: string) => void;
 }
 
-export function CloseTripOverlay({ tripId, riders, onClose, onClosed }: Props) {
+export function CloseTripOverlay({ tripId, riders, parkingUrl, onClose, onClosed }: Props) {
   const [checks, setChecks] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(riders.map((r) => [r.id, true])),
   );
@@ -185,6 +189,10 @@ export function CloseTripOverlay({ tripId, riders, onClose, onClosed }: Props) {
         <p style={{ font: "500 11px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "2px 2px 20px" }}>
           Guest riders fill a seat, so they still count toward your drive bonus.
         </p>
+
+        {/* D-54: the developer asked for this "in the close trip button" — the driver has just
+            parked, and this is the screen they are already on. */}
+        <ParkingLink url={parkingUrl} hint="Pay for parking" />
 
         {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "0 0 12px" }}>{error}</p>}
         <button className="btnP" disabled={busy} onClick={confirmClose}>

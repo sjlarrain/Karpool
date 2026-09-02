@@ -46,6 +46,11 @@ const patchSchema = z
     originLabel: z.string().trim().min(1).max(80),
     destLabel: z.string().trim().min(1).max(80),
     costSplitNote: z.string().trim().max(200).nullable(),
+    // D-54. https only, and enforced here as well as by the CHECK constraint on the column: this is
+    // the first outbound link the app renders, an admin writes it and their colleagues follow it,
+    // so javascript: and data: URLs are refused at both layers rather than one. Nullable clears it.
+    parkingUrlOut: z.string().trim().url().startsWith("https://").max(500).nullable(),
+    parkingUrlBack: z.string().trim().url().startsWith("https://").max(500).nullable(),
   })
   .partial()
   .refine((body) => Object.keys(body).length > 0, "At least one field is required");
@@ -86,6 +91,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(parsed.data.originLabel !== undefined && { origin_label: parsed.data.originLabel }),
       ...(parsed.data.destLabel !== undefined && { dest_label: parsed.data.destLabel }),
       ...(parsed.data.costSplitNote !== undefined && { cost_split_note: parsed.data.costSplitNote }),
+      ...(parsed.data.parkingUrlOut !== undefined && { parking_url_out: parsed.data.parkingUrlOut }),
+      ...(parsed.data.parkingUrlBack !== undefined && { parking_url_back: parsed.data.parkingUrlBack }),
     })
     .eq("id", id)
     .select()

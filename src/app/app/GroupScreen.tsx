@@ -116,6 +116,25 @@ export function GroupScreen({ group, role, memberCount, adminName, pickupPlaces,
           <DetailRow icon="🔢" label="Group code" value={group.code} last mono />
         </div>
 
+        {/* D-54: parking is group configuration, like the cost split above, so it is set where the
+            rest of the group's settings live. Admin-only: they are the ones who set it, and the
+            link itself reaches a driver on the trip they are actually parking. */}
+        {role === "group_admin" && (
+          <>
+            <label className="lbl" style={{ textAlign: "left" }}>
+              Parking
+            </label>
+            <ParkingSettings
+              groupId={group.id}
+              originLabel={group.origin_label}
+              destLabel={group.dest_label}
+              parkingUrlOut={group.parking_url_out}
+              parkingUrlBack={group.parking_url_back}
+              onSaved={() => router.refresh()}
+            />
+          </>
+        )}
+
         <label className="lbl" style={{ textAlign: "left" }}>
           Pickup places
         </label>
@@ -290,6 +309,106 @@ function DetailRow({ icon, label, value, last, mono }: { icon: string; label: st
   );
 }
 
+// D-54: the group admin sets where each end of the commute is paid for. Two optional fields — a
+// commute usually pays at one end only, and a leg with no link simply shows nothing on the trip.
+// Labelled by the endpoint each leg arrives at rather than by "out"/"back", because "parking at
+// HQ" is the thing being described and nobody thinks of their commute in leg names.
+function ParkingSettings({
+  groupId,
+  originLabel,
+  destLabel,
+  parkingUrlOut,
+  parkingUrlBack,
+  onSaved,
+}: {
+  groupId: string;
+  originLabel: string;
+  destLabel: string;
+  parkingUrlOut: string | null;
+  parkingUrlBack: string | null;
+  onSaved: () => void;
+}) {
+  const [out, setOut] = useState(parkingUrlOut ?? "");
+  const [back, setBack] = useState(parkingUrlBack ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const dirty = out.trim() !== (parkingUrlOut ?? "") || back.trim() !== (parkingUrlBack ?? "");
+
+  async function save() {
+    setError(null);
+    setSaved(false);
+    setBusy(true);
+    try {
+      // An emptied field clears the column rather than storing "" — the API takes null for that,
+      // and the https CHECK on the column would reject an empty string anyway.
+      const res = await fetch(`/api/groups/${groupId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parkingUrlOut: out.trim() || null, parkingUrlBack: back.trim() || null }),
+      });
+      const body = await readJsonBody(res);
+      if (!res.ok) {
+        setError(body?.message ?? "That link didn't save — it needs to start with https://");
+        return;
+      }
+      setSaved(true);
+      onSaved();
+    } catch {
+      setError("Couldn't reach the server — check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        background: "var(--surface)",
+        border: "1px solid rgba(0,0,0,.08)",
+        borderRadius: 14,
+        padding: 12,
+        marginBottom: 16,
+        textAlign: "left",
+      }}
+    >
+      <label className="lbl" style={{ textAlign: "left" }}>
+        Paying at {destLabel}
+      </label>
+      <input
+        className="field"
+        style={{ marginBottom: 10 }}
+        placeholder="https://…"
+        inputMode="url"
+        value={out}
+        onChange={(e) => setOut(e.target.value)}
+      />
+      <label className="lbl" style={{ textAlign: "left" }}>
+        Paying at {originLabel}
+      </label>
+      <input
+        className="field"
+        style={{ marginBottom: 10 }}
+        placeholder="https://…"
+        inputMode="url"
+        value={back}
+        onChange={(e) => setBack(e.target.value)}
+      />
+      <p style={{ font: "500 11px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "0 0 10px" }}>
+        Shown to the driver on the leg that arrives there — while the trip is running and again when
+        they close it. Leave a field empty if that end is free.
+      </p>
+      {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "0 0 8px" }}>{error}</p>}
+      {saved && !dirty && (
+        <p style={{ color: "var(--green-ink)", font: "600 12px var(--font-body)", margin: "0 0 8px" }}>Saved.</p>
+      )}
+      <button className="btnP" disabled={busy || !dirty} onClick={save}>
+        Save parking links
+      </button>
+    </div>
+);
+}
 // D-29: one editor for both kinds of place. A stop additionally carries a sign, picked from a fixed
 // set — the admin chooses it once here, and every trip through that stop shows the same mark.
 function AddPlace({ groupId, kind, onAdded }: { groupId: string; kind: "pickup" | "stop"; onAdded: () => void }) {

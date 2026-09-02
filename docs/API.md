@@ -120,10 +120,11 @@ Group profile screen: route, admin name, cost split, code, pickup places, invite
 Update group fields. `group_admin` only. Does not touch the code (regeneration is Phase 8's admin console).
 
 - **Auth**: required, caller's membership on this group must have `group_role: "group_admin"`
-- **Request**: any non-empty subset of `{ name: string (1-80), originLabel: string (1-80), destLabel: string (1-80), costSplitNote: string (max 200) | null }`
+- **Request**: any non-empty subset of `{ name: string (1-80), originLabel: string (1-80), destLabel: string (1-80), costSplitNote: string (max 200) | null, parkingUrlOut: string (https, max 500) | null, parkingUrlBack: string (https, max 500) | null }`
 - **Response**: `{ group }`
 - **Errors**: `401 unauthenticated`, `404 not_found` (not a member), `403 forbidden` (member but not admin), `400 invalid_request`, `500 update_failed`
 - **Side effects**: updates the `group` row. No ledger/audit writes.
+- **Notes (D-54)**: `parkingUrlOut`/`parkingUrlBack` are where the driver pays for parking at each end of the commute, both optional — a group that pays at one end only fills in one. **`https://` is required and enforced twice**: by zod here and by a CHECK constraint on the column, because this is the only outbound link the app renders and an admin writes it for their colleagues to follow. Passing `null` clears a link. The group's own screen is the only caller.
 
 ## Pickup places
 
@@ -229,10 +230,10 @@ Trip detail overlay: decorated summary plus the driver's pickup list in route or
 
 - **Auth**: required, caller must be a member of the trip's group
 - **Request**: none
-- **Response**: `{ trip: DecoratedTrip, driverId, isDriver: boolean, cancelledReason: string | null, seatsLeft: number, pickups: { id, name, initials?, color?, pickupLabel: string | null, stopOrder: number | null, isViewer: boolean, addedByDriver: boolean }[], addableMembers: { id, name, initials, color }[], penaltyWaived: boolean, editable: { departAt, returnAt: string | null, capacity: number, direction, outStopId: string | null, backStopId: string | null, stops: TripStopView[] } | null }`
+- **Response**: `{ trip: DecoratedTrip, driverId, isDriver: boolean, parkingUrl: string | null, cancelledReason: string | null, seatsLeft: number, pickups: { id, name, initials?, color?, pickupLabel: string | null, stopOrder: number | null, isViewer: boolean, addedByDriver: boolean }[], addableMembers: { id, name, initials, color }[], penaltyWaived: boolean, editable: { departAt, returnAt: string | null, capacity: number, direction, outStopId: string | null, backStopId: string | null, stops: TripStopView[] } | null }`
 - **Errors**: `401 unauthenticated`, `404 not_found`, `500 trip_lookup_failed`, `500 rider_lookup_failed`
 - **Side effects**: none
-- **Notes**: `trip.stopNotices` (D-29) is the ride's stops in travel order, each with its `leg` (`out`/`back`) and the `when` wording the UI shows (`"in way"` for an outbound stop, `"back"` for a return one). Empty for a direct ride. `addableMembers` (D-24) is the passenger picker's list — group members not already on the trip. Empty unless the caller is the driver and the trip is `scheduled`/`started`. `pickups[].addedByDriver` marks a seat the driver booked for someone. `penaltyWaived` (D-38) is true when the caller's own seat carries `trip_rider.penalty_waived_at` — the driver changed the trip after they joined, so leaving costs them nothing and the UI says so instead of showing the usual late-cancellation warning. `editable` (D-38) is the edit form's starting values plus the group's stop list, non-null only when the caller is the driver **and** the trip is still `scheduled`; `direction` is included for the form's leg rules but is **not** editable.
+- **Notes**: `trip.stopNotices` (D-29) is the ride's stops in travel order, each with its `leg` (`out`/`back`) and the `when` wording the UI shows (`"in way"` for an outbound stop, `"back"` for a return one). Empty for a direct ride. `addableMembers` (D-24) is the passenger picker's list — group members not already on the trip. Empty unless the caller is the driver and the trip is `scheduled`/`started`. `pickups[].addedByDriver` marks a seat the driver booked for someone. `penaltyWaived` (D-38) is true when the caller's own seat carries `trip_rider.penalty_waived_at` — the driver changed the trip after they joined, so leaving costs them nothing and the UI says so instead of showing the usual late-cancellation warning. `editable` (D-38) is the edit form's starting values plus the group's stop list, non-null only when the caller is the driver **and** the trip is still `scheduled`; `direction` is included for the form's leg rules but is **not** editable. `parkingUrl` (D-54) is the group's parking link for the leg this trip travels (`back` gets `parking_url_back`, everything else `parking_url_out`), and is **null for anyone but the driver** — the gate is here rather than in the client, so a rider never receives the URL at all.
 
 ### `PATCH /api/trips/:id`
 Edit a trip. Driver only, and only while `status: "scheduled"` — a started or closed trip's plan is

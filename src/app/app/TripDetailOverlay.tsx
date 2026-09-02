@@ -8,6 +8,7 @@ import { StopSign } from "./StopSign";
 import { rideShareMessage, rideShareUrl } from "@/domain/tripShare";
 import { shareOrCopy } from "@/lib/share";
 import { CloseTripOverlay } from "./CloseTripOverlay";
+import { ParkingLink } from "./ParkingLink";
 import { ReturnQuestionSheet } from "./ReturnQuestionSheet";
 import { EditTripOverlay } from "./EditTripOverlay";
 import { readJsonBody } from "@/lib/http/readJsonBody";
@@ -35,6 +36,9 @@ interface DetailResponse {
   trip: DecoratedTrip;
   driverId: string;
   isDriver: boolean;
+  // D-54: the group's parking link for the leg this trip travels. Null for a rider — the server
+  // resolves it and withholds it, so a rider never receives the URL at all.
+  parkingUrl: string | null;
   cancelledReason: string | null;
   pickups: Pickup[];
   // Group members not already on this trip — empty unless the viewer is the driver and the trip is
@@ -517,6 +521,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
                 >
                   ● Trip in progress — riders notified
                 </div>
+                <ParkingLink url={data.parkingUrl} />
                 <button className="btnG" onClick={() => setClosing(true)}>
                   End &amp; close trip
                 </button>
@@ -838,6 +843,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
       {closing && (
         <CloseTripOverlay
           tripId={tripId}
+          parkingUrl={data.parkingUrl}
           riders={otherPickups.map((p) => ({ id: p.id, name: p.name, initials: p.initials, color: p.color }))}
           onClose={() => setClosing(false)}
           onClosed={(message) => {
