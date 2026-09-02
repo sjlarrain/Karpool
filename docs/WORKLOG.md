@@ -29,15 +29,15 @@
     old logic) to **0** (correct — the whole round trip belongs to August, not partially to two
     months).
 - **`pnpm verify` green — 229/229 (4 new in `leaderboard.test.ts`)** — run and confirmed clean
-  before this was committed, per the developer's "verify everything before pushing." **Not pushed
-  yet**, per CLAUDE.md §2.3 (needs explicit authorization each session).
+  before this was committed, per the developer's "verify everything before pushing." **Pushed**
+  (developer authorized): `27acd8d..9e30238` on `origin/main`, alongside the D-50 admin-start commit
+  from earlier this session — both are now what Vercel builds from.
 
 ## In Progress
 - Nothing mid-flight.
 
 ## Next
-- Push, once authorized. Then the backlog already on record ([D-31]/[D-32]/[D-33], the open [D-36]
-  key).
+- The backlog already on record ([D-31]/[D-32]/[D-33], the open [D-36] key).
 
 ## Blocked On
 - `pnpm db:unpool-ledger -- --yes` — unchanged, still the developer's to run.
