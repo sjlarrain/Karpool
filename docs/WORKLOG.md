@@ -1,5 +1,56 @@
 # Worklog
 
+## Shipped (2026-09-01, later — Alejandro's score fixed: the leaderboard is now trip-anchored, not timestamp-anchored)
+- **Shipped:** the follow-up flagged in the previous entry. Developer: "so now it will work
+  Alejandro's score? Please fix that so those cases don't fail." Yes — fixed.
+- **Root cause confirmed, not just theorised.** A round trip's return leg is its own `trip` row
+  with its own `closed_at` (D-35). `GET /api/groups/:id/leaderboard` windowed `points_ledger` by
+  `created_at` and `trip_rider`'s pooled count by `trip.closed_at` — both raw timestamps — so a
+  round trip whose legs close on either side of a calendar-month boundary had its two `drive` rows
+  split across two different months' leaderboards, even though it is one continuous ride.
+- **`src/domain/leaderboard.ts` gained `tripsInMonth()`** (pure, tested): decides month membership
+  from each trip's *anchor* `depart_at` rather than its own — a back leg's anchor is its parent's
+  `depart_at`, so both legs land in the same month no matter which one gets closed when, or how
+  late. A one-way trip or an outbound leg is its own anchor.
+- **The route now queries by trip id, not by timestamp range.** Every closed trip in the group is
+  fetched (three columns: id, parent, depart), `tripsInMonth()` picks the set belonging to the
+  current month, and that set drives both the `points_ledger` query (for `drive`/`kudos`/`no_show`
+  rows, which all carry a `trip_id`) and the `pooled` seat count — so the two halves of a member's
+  line can no longer disagree the way they could before. `admin_adjust` rows have no trip to anchor
+  to and keep the original `created_at`-window rule, unchanged.
+- **Verified against the live project before committing**, with a throwaway read-only script (not
+  committed — deleted after use) that replicated the route's old and new query logic directly.
+  Built the month boundary in UTC explicitly, since this dev machine's local zone is not UTC and a
+  local-time boundary would not have reproduced the split that Vercel's UTC server actually hits:
+  - **August** (the month the ride was actually taken): Alejandro went from **1 driven · 34 pts**
+    (old — only the outbound counted; the back leg's `created_at` fell in September) to the correct
+    **2 driven · 68 pts** (new — both legs, correctly attributed).
+  - **September**: from a phantom **1 driven · 34 pts** (the back leg alone, stranded there by the
+    old logic) to **0** (correct — the whole round trip belongs to August, not partially to two
+    months).
+- **`pnpm verify` green — 229/229 (4 new in `leaderboard.test.ts`)** — run and confirmed clean
+  before this was committed, per the developer's "verify everything before pushing." **Not pushed
+  yet**, per CLAUDE.md §2.3 (needs explicit authorization each session).
+
+## In Progress
+- Nothing mid-flight.
+
+## Next
+- Push, once authorized. Then the backlog already on record ([D-31]/[D-32]/[D-33], the open [D-36]
+  key).
+
+## Blocked On
+- `pnpm db:unpool-ledger -- --yes` — unchanged, still the developer's to run.
+- Live-DB test suites (`test:admin`, `test:integration`, `test:rls`, `e2e`) still need
+  `SUPABASE_SERVICE_ROLE_KEY` in the shell to run directly — unchanged limitation, worked around
+  this session with a throwaway script that loads `.env.local` itself (the same pattern
+  `scripts/audit-ledger.ts` already uses) rather than the agent reading the file.
+
+## Gates Green
+- `pnpm verify` — typecheck, lint, **229/229 unit tests** (4 new in `leaderboard.test.ts`). Same
+  pre-existing `next lint` deprecation warning, still non-blocking.
+- Live-project read-only verification above, script deleted after use — nothing committed from it.
+
 ## Shipped (2026-09-01 — an admin can start a trip too, not just close it; Alejandro's trips audited)
 - **Shipped:** [D-50]. The developer asked for "easier access to start and close trips as an
   administrator." Close already had a real, points-paying admin path ([D-35](i)'s restricted close,

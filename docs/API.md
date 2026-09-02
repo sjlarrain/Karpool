@@ -395,6 +395,18 @@ taken as a passenger, not passengers carried (D-42's correction, kept). Every gr
 even with zero points this month — and a member who has only ever ridden appears with their `pooled`
 count and a score of `0`.
 
+**The window is trip-anchored, not timestamp-anchored (D-50 follow-up, 2026-09-01).** A round
+trip's return leg is its own `trip` row with its own `closed_at` (D-35), so windowing straight off
+`points_ledger.created_at`/`trip.closed_at` used to split a single ride's two legs across a
+calendar-month boundary whenever they happened to close on either side of it — a driver who dropped
+someone home just after midnight on the 1st would show one fewer trip driven that month than they
+actually took. `src/domain/leaderboard.ts`'s `tripsInMonth()` now decides month membership from each
+trip's *anchor* `depart_at` — a back leg uses its parent's, so both legs land in the same month
+regardless of when either one gets closed — and that trip-id set drives both the `points_ledger`
+query (for every row that carries a `trip_id`: `drive`, `kudos`, `no_show`) and the `pooled` seat
+count. An `admin_adjust` ledger row has no trip to anchor to and keeps the original
+`created_at`-window rule, unchanged.
+
 - **Auth**: required, caller must be a member of `:id`
 - **Request**: none
 - **Response**: `{ entries: RankedRow[] (profileId, name, initials, color, driven, pooled, kudos, points, rank, medal: string | null), formula: string, viewerProfileId: string }`

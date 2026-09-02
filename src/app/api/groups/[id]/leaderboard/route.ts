@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/api/auth";
-import { aggregateLedger, rankLeaderboard, formatWeightsCaption } from "@/domain/leaderboard";
+import { aggregateLedger, rankLeaderboard, formatWeightsCaption, tripsInMonth } from "@/domain/leaderboard";
 import type { LedgerRow, LeaderboardEntry } from "@/domain/leaderboard";
 
 // GET /api/groups/:id/leaderboard — calendar-month ranking (D-12: the ledger itself stays
@@ -49,31 +49,48 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
 
-  const { data: ledgerRows } = await supabase
-    .from("points_ledger")
-    .select("profile_id, kind, points")
+  // D-50 follow-up: a round trip's return leg is its own `trip` row with its own `closed_at`
+  // (D-35), so windowing straight off timestamps split a single ride across the calendar-month
+  // boundary whenever its legs happened to close on either side of it. Every closed trip in the
+  // group is fetched (cheap — three columns, id/parent/depart) and `tripsInMonth()` attributes
+  // both legs of a round trip to the SAME month via the outbound's `depart_at`, so a back leg
+  // closed after midnight on the 1st still counts toward the month the ride was actually taken.
+  const { data: closedTrips } = await supabase
+    .from("trip")
+    .select("id, parent_trip_id, depart_at")
     .eq("group_id", id)
-    .gte("created_at", monthStart)
-    .lt("created_at", monthEnd);
+    .eq("status", "closed");
+  const tripIdsThisMonth = tripsInMonth(
+    (closedTrips ?? []).map((t) => ({ id: t.id, parentTripId: t.parent_trip_id, departAt: t.depart_at })),
+    new Date(monthStart),
+    new Date(monthEnd),
+  );
+
+  // points_ledger rows carry a trip_id for everything a trip close writes (drive, kudos, no_show),
+  // windowed by the trip set above; an admin_adjust row has no trip to anchor to, so it keeps the
+  // original ledger-timestamp window (D-12's original rule, unchanged for the one kind it still
+  // applies to).
+  const [{ data: tripLedgerRows }, { data: adjustLedgerRows }] = await Promise.all([
+    tripIdsThisMonth.length > 0
+      ? supabase.from("points_ledger").select("profile_id, kind, points").eq("group_id", id).in("trip_id", tripIdsThisMonth)
+      : Promise.resolve({ data: [] }),
+    supabase
+      .from("points_ledger")
+      .select("profile_id, kind, points")
+      .eq("group_id", id)
+      .is("trip_id", null)
+      .gte("created_at", monthStart)
+      .lt("created_at", monthEnd),
+  ]);
 
   // D-49: `pooled` is a count of rides taken, not of ledger rows — riding earns nothing, so
-  // there is no ledger row to count. Sourced from the seats themselves and windowed on
-  // `trip.closed_at`, which is when the matching `drive` row was written, so both halves of a
-  // member's line cover exactly the same calendar month.
-  const { data: closedThisMonth } = await supabase
-    .from("trip")
-    .select("id")
-    .eq("group_id", id)
-    .eq("status", "closed")
-    .gte("closed_at", monthStart)
-    .lt("closed_at", monthEnd);
-  const closedTripIds = (closedThisMonth ?? []).map((t) => t.id);
-
-  const { data: pooledSeats } = closedTripIds.length > 0
+  // there is no ledger row to count. Sourced from the seats themselves, using the same trip set as
+  // the ledger rows above so both halves of a member's line cover exactly the same rides.
+  const { data: pooledSeats } = tripIdsThisMonth.length > 0
     ? await supabase
         .from("trip_rider")
         .select("profile_id")
-        .in("trip_id", closedTripIds)
+        .in("trip_id", tripIdsThisMonth)
         .eq("state", "confirmed")
         .not("profile_id", "is", null)
     : { data: [] };
@@ -84,7 +101,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     pooledRides.set(seat.profile_id, (pooledRides.get(seat.profile_id) ?? 0) + 1);
   }
 
-  const rows: LedgerRow[] = (ledgerRows ?? []).map((r) => ({
+  const rows: LedgerRow[] = [...(tripLedgerRows ?? []), ...(adjustLedgerRows ?? [])].map((r) => ({
     profileId: r.profile_id,
     kind: r.kind,
     points: r.points,

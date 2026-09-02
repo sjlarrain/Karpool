@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { aggregateLedger, rankLeaderboard, formatWeightsCaption } from "./leaderboard";
-import type { LedgerRow, LeaderboardEntry } from "./leaderboard";
+import { aggregateLedger, rankLeaderboard, formatWeightsCaption, tripsInMonth } from "./leaderboard";
+import type { LedgerRow, LeaderboardEntry, TripMonthInput } from "./leaderboard";
 
 describe("aggregateLedger", () => {
   const NO_RIDES = new Map<string, number>();
@@ -76,6 +76,37 @@ describe("rankLeaderboard", () => {
 
   it("handles an empty leaderboard", () => {
     expect(rankLeaderboard([])).toEqual([]);
+  });
+});
+
+describe("tripsInMonth", () => {
+  const AUG_START = new Date("2026-08-01T00:00:00.000Z");
+  const SEP_START = new Date("2026-09-01T00:00:00.000Z");
+
+  // The bug this exists to fix: a round trip's outbound closes 2026-08-31, its return leg
+  // materialises and closes just after midnight UTC on 2026-09-01. Both drove the same ride.
+  it("attributes a back leg to its parent's month, not its own closed-at month", () => {
+    const trips: TripMonthInput[] = [
+      { id: "out", parentTripId: null, departAt: "2026-08-31T15:20:00.000Z" },
+      { id: "back", parentTripId: "out", departAt: "2026-09-01T00:30:00.000Z" },
+    ];
+    expect(tripsInMonth(trips, AUG_START, SEP_START).sort()).toEqual(["back", "out"]);
+    expect(tripsInMonth(trips, SEP_START, new Date("2026-10-01T00:00:00.000Z"))).toEqual([]);
+  });
+
+  it("a one-way trip is its own anchor", () => {
+    const trips: TripMonthInput[] = [{ id: "solo", parentTripId: null, departAt: "2026-08-15T09:00:00.000Z" }];
+    expect(tripsInMonth(trips, AUG_START, SEP_START)).toEqual(["solo"]);
+  });
+
+  it("excludes a trip whose anchor month falls outside the window", () => {
+    const trips: TripMonthInput[] = [{ id: "solo", parentTripId: null, departAt: "2026-07-31T23:59:59.000Z" }];
+    expect(tripsInMonth(trips, AUG_START, SEP_START)).toEqual([]);
+  });
+
+  it("falls back to its own depart_at if the parent is somehow missing from the set", () => {
+    const trips: TripMonthInput[] = [{ id: "orphan", parentTripId: "ghost", departAt: "2026-08-10T00:00:00.000Z" }];
+    expect(tripsInMonth(trips, AUG_START, SEP_START)).toEqual(["orphan"]);
   });
 });
 

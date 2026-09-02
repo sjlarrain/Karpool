@@ -53,6 +53,37 @@ export function aggregateLedger(
   return stats;
 }
 
+export interface TripMonthInput {
+  id: string;
+  parentTripId: string | null;
+  departAt: string; // ISO 8601
+}
+
+// D-50 follow-up (2026-09-01): a round trip's return leg is materialised as its OWN `trip` row
+// (D-35), with its own `closed_at`. A driver who drove someone home just after midnight on the
+// last day of the month used to have that leg's `drive` row fall outside the calendar-month window
+// entirely (D-12 filters `points_ledger.created_at`), so the Ranks tab showed one fewer trip driven
+// than the driver actually took that ride — even though outbound and return are one continuous
+// trip in every other sense.
+//
+// Both legs are now attributed to the SAME month: a back leg's own `depart_at` is ignored in favour
+// of its parent's, so the anchor never moves once the outbound has departed, no matter which leg
+// gets closed when. A one-way trip or an outbound leg is its own anchor.
+export function tripsInMonth(trips: TripMonthInput[], monthStart: Date, monthEnd: Date): string[] {
+  const departAtById = new Map(trips.map((t) => [t.id, t.departAt]));
+  const start = monthStart.getTime();
+  const end = monthEnd.getTime();
+  const inMonth: string[] = [];
+  for (const trip of trips) {
+    const anchorDepartAt = (trip.parentTripId && departAtById.get(trip.parentTripId)) || trip.departAt;
+    const anchorTime = new Date(anchorDepartAt).getTime();
+    if (anchorTime >= start && anchorTime < end) {
+      inMonth.push(trip.id);
+    }
+  }
+  return inMonth;
+}
+
 export interface LeaderboardEntry extends ProfileStats {
   profileId: string;
   name: string;
