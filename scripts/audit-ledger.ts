@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { aggregateLedger, type LedgerRow } from "../src/domain/leaderboard";
+import { claimantByGuestId, tallyPooledRides } from "../src/domain/guestRoster";
 
 // Read-only diagnostic. Prints every points_ledger row grouped by trip, so a duplicated close
 // (the same trip paying the same driver more than once) is visible at a glance. Writes nothing.
@@ -77,17 +78,23 @@ async function main() {
   const { data: seats } = closedIds.length > 0
     ? await admin
         .from("trip_rider")
-        .select("profile_id")
+        .select("profile_id, group_guest_id")
         .in("trip_id", closedIds)
         .eq("state", "confirmed")
-        .not("profile_id", "is", null)
     : { data: [] };
 
-  const pooledRides = new Map<string, number>();
-  for (const seat of seats ?? []) {
-    if (!seat.profile_id) continue;
-    pooledRides.set(seat.profile_id, (pooledRides.get(seat.profile_id) ?? 0) + 1);
-  }
+  // D-55: a seat counts for its rider, or for whoever a group admin has linked its guest to. The
+  // same trap as the header describes, one feature later: the app resolves seats this way now, so
+  // an audit that still filtered guests out would under-report every member who has had a guest
+  // history merged into them. Shared with the routes rather than restated.
+  const { data: guestRows } = await admin.from("group_guest").select("id, claimed_by_profile_id");
+  const claims = claimantByGuestId(
+    (guestRows ?? []).map((g) => ({ id: g.id, claimedByProfileId: g.claimed_by_profile_id })),
+  );
+  const pooledRides = tallyPooledRides(
+    (seats ?? []).map((s) => ({ profileId: s.profile_id, groupGuestId: s.group_guest_id })),
+    claims,
+  );
 
   console.log("\n=== totals by profile ===");
   const ledgerRows: LedgerRow[] = (rows ?? []).map((r) => ({
