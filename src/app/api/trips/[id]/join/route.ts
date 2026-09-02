@@ -4,6 +4,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { notifyProfiles } from "@/lib/notify/tripNotify";
+import { seatChangeNotice } from "@/domain/seatNotice";
 
 // D-35 answer (C): the return question is asked outright at join time, with no default either
 // way — "if they register, when they register they will be asked". So the field is required and
@@ -54,7 +56,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "invalid_request", issues: parsed.error.issues }, { status: 400 });
   }
 
-  const { data: trip } = await supabase.from("trip").select("id").eq("id", id).maybeSingle();
+  // driver_id comes along for D-52's notification. Still read through the session client, so RLS
+  // decides what a non-member sees — a driver's id is only ever handed to their own group.
+  const { data: trip } = await supabase.from("trip").select("id, driver_id").eq("id", id).maybeSingle();
   if (!trip) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -77,6 +81,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const status = STATUS_BY_ERROR[code] ?? 500;
     return NextResponse.json({ error: code, message: MESSAGE_BY_ERROR[code] }, { status });
   }
+
+  // D-52: the seat is taken and committed before anyone is told about it. D-39 is the reason that
+  // order is written down rather than left to chance — a notify sitting between two writes took a
+  // production close down with it, and the seat must survive a notification channel that doesn't.
+  // notifyProfiles never throws, so a dead push service costs the driver a message, not the rider
+  // their seat.
+  const { data: rider } = await supabase.from("profile").select("display_name").eq("id", user.id).maybeSingle();
+  const notice = seatChangeNotice("join", rider?.display_name ?? "");
+  await notifyProfiles([trip.driver_id], { ...notice, tripId: id });
 
   return NextResponse.json({ tripRider: joined }, { status: 201 });
 }

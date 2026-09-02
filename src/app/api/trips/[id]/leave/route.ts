@@ -3,6 +3,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { computeLateLeavePenalty } from "@/domain/points";
+import { notifyProfiles } from "@/lib/notify/tripNotify";
+import { seatChangeNotice } from "@/domain/seatNotice";
 
 // POST /api/trips/:id/leave — drop a seat you're holding. Marks the seat left and, if inside the
 // group's cancellation window (D-10/LATE_LEAVE, per-group configurable), writes a late_leave
@@ -25,7 +27,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   const { data: trip } = await supabase
     .from("trip")
-    .select("status, depart_at, group_id")
+    .select("status, depart_at, group_id, driver_id")
     .eq("id", id)
     .maybeSingle();
   if (!trip) {
@@ -86,6 +88,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       reason: penalty.reason,
     });
   }
+
+  // D-52, the mirror of the join notification and the half the developer cared about least until it
+  // was pointed out: a seat given back is a seat the driver can offer to someone else. Fired last,
+  // after the seat and any penalty are written, for the reason set out in the join route.
+  const { data: rider } = await supabase.from("profile").select("display_name").eq("id", user.id).maybeSingle();
+  const notice = seatChangeNotice("leave", rider?.display_name ?? "");
+  await notifyProfiles([trip.driver_id], { ...notice, tripId: id });
 
   return NextResponse.json({
     tripRider: updated,

@@ -316,7 +316,7 @@ export type Database = {
           profile_id: string
           read_at: string | null
           title: string
-          type: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder"
+          type: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave"
         }
         Insert: {
           body?: string | null
@@ -326,7 +326,7 @@ export type Database = {
           profile_id: string
           read_at?: string | null
           title: string
-          type: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder"
+          type: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave"
         }
         Update: {
           body?: string | null
@@ -336,7 +336,7 @@ export type Database = {
           profile_id?: string
           read_at?: string | null
           title?: string
-          type?: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder"
+          type?: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave"
         }
         Relationships: [
           {

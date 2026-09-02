@@ -31,6 +31,8 @@ const ICON: Record<NotificationItem["type"], string> = {
   tip: "💡",
   reminder: "⏱️",
   close_reminder: "✅",
+  join: "🙋",
+  leave: "👋",
 };
 
 const CARD_BG: Record<NotificationItem["type"], string> = {
@@ -41,6 +43,8 @@ const CARD_BG: Record<NotificationItem["type"], string> = {
   tip: "var(--notif-tip-bg)",
   reminder: "var(--amber-soft)",
   close_reminder: "var(--amber-soft)",
+  join: "var(--green-soft)",
+  leave: "var(--amber-soft)",
 };
 
 const ICON_BG: Record<NotificationItem["type"], string> = {
@@ -51,6 +55,8 @@ const ICON_BG: Record<NotificationItem["type"], string> = {
   tip: "var(--notif-tip-icon)",
   reminder: "var(--notif-change-icon)",
   close_reminder: "var(--notif-change-icon)",
+  join: "var(--green-soft)",
+  leave: "var(--notif-change-icon)",
 };
 
 const CTA: Partial<Record<NotificationItem["type"], string>> = {
@@ -59,6 +65,8 @@ const CTA: Partial<Record<NotificationItem["type"], string>> = {
   change: "View trip",
   reminder: "View trip",
   close_reminder: "Close trip",
+  join: "View trip",
+  leave: "View trip",
 };
 
 type Props = {
