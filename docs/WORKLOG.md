@@ -1,5 +1,64 @@
 # Worklog
 
+## Shipped (2026-09-02, on `dev` — four features: seat alerts, a quieter feed, parking links, guest identity)
+- **Shipped:** [D-52] seat notifications, [D-53] the feed, [D-54] parking links, [D-55] the guest
+  roster and merge. `dev` was fast-forwarded onto `main` first (it was 20 commits behind), on the
+  developer's explicit authorisation. Five commits, `pnpm verify` green before each — **248 tests**,
+  up from 225.
+- **In progress:** nothing. **Next:** apply the three migrations, then verify end to end.
+- **BLOCKED ON THE DEVELOPER — migrations `0020`, `0021`, `0022` are written but NOT applied, and
+  the app must not be deployed until they are.** `GET /api/trips/:id` and the leaderboard now select
+  `parking_url_out`, `parking_url_back` and `trip_rider.group_guest_id`, none of which exist yet, so
+  the trip detail, Ranks and Group tabs will error against the current schema. **I could not apply
+  them myself**: `npx supabase` is blocked on this machine by Device Guard ("was blocked by your
+  organization's Device Guard policy"), so `migration list` and `db push` both refuse to run — this
+  is new since the last session, which pushed `0013` this way. The fallback is pasting the three
+  files into the Supabase dashboard's SQL editor, in order. Note also that **`0014` is absent from
+  `supabase/migrations/`** and I could not check it against the remote for the same reason.
+- **Gates:** typecheck, lint, 248/248 unit tests. **End-to-end verification is NOT done** — it
+  cannot be until the migrations land. The dev server boots clean and the sign-in page renders with
+  no console or server errors, which is as far as this could honestly be taken.
+
+### [D-53] the feed — hidden, not deleted
+The developer's wording decided the design: *"Hide not make it desapear."* [D-27]'s 30-day window is
+untouched (it exists so the kudos prompt on a finished card stays reachable); the `Past · N` section
+now starts **collapsed**. The second half was a bug in the same clothes: `isPast` meant terminal
+status only, so a `scheduled` trip whose departure passed hours ago sat in "Today", unjoinable and
+inert. It ages into Past now — **but only for viewers who cannot act on it**, because [D-23] gives
+the driver 24h to start or close it and their card holds the only button that does.
+
+### [D-52] seat alerts — both directions
+Join and leave notified **nobody**. Both now tell the driver; the developer chose both when offered.
+Two new notification types (`0020`) rather than reusing `change`, for the reason `0017` recorded —
+the bell tints by type, and a filling car is not the same news as a cancellation. Copy lives in a
+pure `seatChangeNotice()`. Both fire **after** their write commits and neither can fail the action:
+[D-39] cost a production double-payment by ordering this wrong, and that is applied here, not
+relearned.
+
+### [D-54] parking — per-direction, driver-only, gated on the server
+Two nullable columns on the group (`0021`), https enforced in zod *and* by a CHECK. `GET
+/api/trips/:id` returns `parkingUrl` **only when the caller is the driver**, so a rider never
+receives the URL — the gate is what leaves the machine, not a branch of JSX. Shown on the started
+trip and again in the Close overlay, the two places the developer named. It is the app's **first
+outbound link**: `rel="noopener noreferrer"`, and the host printed under the label. `PATCH
+/api/groups/:id` had no UI caller at all before this; the admin editor is its first.
+
+### [D-55] the guest roster — the big one
+A guest is a `group_guest` row with a unique name per group; seats point at it; a seat counts for
+`profile_id ?? claimed_by_profile_id`. Linking moves a whole history at once and **unlinks cleanly**,
+which is the argument for one column over re-pointing rows. Not a ghost `profile` — `profile.id` is
+a foreign key to `auth.users`, and fake accounts would leak into the members list, the admin console
+and the notification paths. Nothing moves in `points_ledger` (riders earn nothing, [D-49]), so the
+`check (points <> 0)` that broke two earlier designs is never in play.
+**The bug this nearly introduced, caught while building:** `closeTrip` computed the driver's fill
+bonus from confirmed *profiles*, and a pre-seated guest has none — a full car would have quietly
+underpaid its driver. It counts confirmed *seats* now, arithmetic identical for every pre-existing
+trip.
+**What I assumed and flagged rather than guessed:** the roster is admin-managed ([D-29]'s precedent),
+so a driver picks but cannot add. The close screen's free-text field is therefore kept for a real
+one-off, demoted below the roster chips and labelled as untracked — if drivers should be able to add
+to the roster themselves, it is a one-line auth change.
+
 ## Shipped (2026-09-01, fifth — the YOU tab is scoped to the group it is showing)
 - **Shipped:** [D-51]. Developer: "My tab must be explicit for the group that I am in."
   `GET /api/me/points` took no group at all — it summed **every** group the viewer belonged to,
