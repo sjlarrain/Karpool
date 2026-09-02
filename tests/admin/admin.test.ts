@@ -98,6 +98,7 @@ describe.skipIf(!canRun)("G9/G10 — admin route auth + audit trail", () => {
     { method: "GET", path: () => "/api/admin/groups" },
     { method: "GET", path: () => "/api/admin/trips" },
     { method: "POST", path: () => `/api/admin/trips/${FAKE_ID}/force-close`, body: { reason: "test" } },
+    { method: "POST", path: () => `/api/admin/trips/${FAKE_ID}/force-start` },
     { method: "GET", path: () => "/api/admin/ledger" },
     { method: "POST", path: () => "/api/admin/ledger/adjust", body: { profileId: FAKE_ID, groupId: FAKE_ID, points: 1, reason: "test" } },
     { method: "GET", path: () => "/api/admin/audit-log" },
@@ -136,6 +137,17 @@ describe.skipIf(!canRun)("G9/G10 — admin route auth + audit trail", () => {
     const entry = await res.json();
 
     const { data: rows } = await admin.from("audit_log").select("id").eq("action", "admin_adjust_ledger").eq("entity_id", entry.entry.id);
+    expect(rows?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  it("logs an audit_log row when an admin force-starts a trip (D-50)", async () => {
+    const res = await fetch(`${APP_URL}/api/admin/trips/${tripId}/force-start`, {
+      method: "POST",
+      headers: { Cookie: adminCookie },
+    });
+    expect(res.status).toBe(200);
+
+    const { data: rows } = await admin.from("audit_log").select("id").eq("action", "force_start_trip").eq("entity_id", tripId);
     expect(rows?.length ?? 0).toBeGreaterThan(0);
   });
 

@@ -1,8 +1,9 @@
 import type { TripStatus } from "./types";
 
 // Pure state machine, no I/O. Legal transitions per 02_IMPLEMENTATION_PLAN.md §4 Phase 3:
-// scheduled→started (driver only, not before T-2h, D-16), started→closed (driver only),
-// scheduled→cancelled (driver only). Everything else is rejected with a typed error.
+// scheduled→started (driver or group admin, not before T-2h, D-16, D-50), started→closed (driver
+// or group admin, D-35(i)), scheduled→cancelled (driver only). Everything else is rejected with a
+// typed error.
 
 export const START_WINDOW_MINUTES = 120; // D-16: fixed T-2h window
 
@@ -18,6 +19,8 @@ export interface TripTransitionActor {
   // rider. A close decides who rode and moves points, and handing that to one passenger over the
   // others is an authority a colleague should not have over a colleague.
   // Start and cancel stay driver-only: they are the driver's own commitments to make.
+  // D-50 (2026-09-01): extended to `start` too, so a driver who forgot to tap it is not the only
+  // way a trip gets underway — the admin console can start it on their behalf.
   isGroupAdmin?: boolean;
   // D-35 mechanic (ii): the scheduler closing an outbound nobody closed, so the return leg exists
   // before anyone needs it. Not a person — audit_log records it with a null actor.
@@ -70,6 +73,12 @@ export function transition(
   if (event === "close") {
     if (!isDriver && !actor.isGroupAdmin && !actor.isSystem) {
       return { ok: false, error: "not_permitted" };
+    }
+  } else if (event === "start") {
+    // D-50: a group admin can start a trip the driver forgot to, same authority D-35(i) already
+    // gave them over close. Cancel stays driver-only — nobody asked to change that one.
+    if (!isDriver && !actor.isGroupAdmin) {
+      return { ok: false, error: "not_driver" };
     }
   } else if (!isDriver) {
     return { ok: false, error: "not_driver" };

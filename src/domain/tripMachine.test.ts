@@ -113,15 +113,37 @@ describe("tripMachine.transition — admin close (D-35)", () => {
     expect(result).toEqual({ ok: false, error: "not_permitted" });
   });
 
-  it("opening close to the admin does not open start or cancel to them", () => {
-    for (const event of ["start", "cancel"] as const) {
-      const result = transition(snapshot("scheduled"), event, { profileId: OTHER, isGroupAdmin: true }, ON_TIME);
-      expect(result).toEqual({ ok: false, error: "not_driver" });
-    }
+  it("opening close to the admin does not open cancel to them — D-50 opened start too, but not cancel", () => {
+    const result = transition(snapshot("scheduled"), "cancel", { profileId: OTHER, isGroupAdmin: true }, ON_TIME);
+    expect(result).toEqual({ ok: false, error: "not_driver" });
   });
 
   it("the admin cannot close a trip that never started", () => {
     const result = transition(snapshot("scheduled"), "close", { profileId: OTHER, isGroupAdmin: true }, ON_TIME);
+    expect(result).toEqual({ ok: false, error: "wrong_status" });
+  });
+});
+
+// D-50 (2026-09-01) — the admin console's other easy-access action: a group admin can start a
+// trip the driver forgot to, the same authority D-35(i) already gave them over close.
+describe("tripMachine.transition — admin start (D-50)", () => {
+  it("a group admin may start it", () => {
+    const result = transition(snapshot("scheduled"), "start", { profileId: OTHER, isGroupAdmin: true }, ON_TIME);
+    expect(result).toEqual({ ok: true, nextStatus: "started" });
+  });
+
+  it("still honours the T-2h window for an admin start", () => {
+    const result = transition(snapshot("scheduled"), "start", { profileId: OTHER, isGroupAdmin: true }, TOO_EARLY);
+    expect(result).toEqual({ ok: false, error: "too_early" });
+  });
+
+  it("a RIDER (no admin flag) still cannot start it", () => {
+    const result = transition(snapshot("scheduled"), "start", { profileId: OTHER }, ON_TIME);
+    expect(result).toEqual({ ok: false, error: "not_driver" });
+  });
+
+  it("the admin cannot start a trip that is not scheduled", () => {
+    const result = transition(snapshot("started"), "start", { profileId: OTHER, isGroupAdmin: true }, ON_TIME);
     expect(result).toEqual({ ok: false, error: "wrong_status" });
   });
 });

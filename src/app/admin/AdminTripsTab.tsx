@@ -20,11 +20,35 @@ const STATUS_FILTERS = ["all", "scheduled", "started", "closed", "cancelled"] as
 export function AdminTripsTab() {
   const [status, setStatus] = useState<(typeof STATUS_FILTERS)[number]>("all");
   const [forceCloseTrip, setForceCloseTrip] = useState<TripRow | null>(null);
+  const [startingTripId, setStartingTripId] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const { data, failed, loading, reload } = useAdminFetch<{ trips: TripRow[] }>(
     `/api/admin/trips${status !== "all" ? `?status=${status}` : ""}`,
     [status],
   );
+
+  // D-50: the admin console's other easy-access action — starting a trip the driver forgot to.
+  // No confirmation sheet, unlike force-close: starting moves nothing in points_ledger, so there is
+  // nothing here that needs a typed reason the way a paid close does.
+  async function startTrip(t: TripRow) {
+    setStartError(null);
+    setStartingTripId(t.id);
+    try {
+      const res = await fetch(`/api/admin/trips/${t.id}/force-start`, { method: "POST" });
+      const body = await readJsonBody<{ message?: string }>(res);
+      if (!res.ok) {
+        setStartError(body?.message ?? "Couldn't start that trip.");
+        return;
+      }
+      reload();
+    } catch {
+      setStartError("Couldn't reach the server — check your connection and try again.");
+    } finally {
+      setStartingTripId(null);
+    }
+  }
+
   return (
     <div>
       <div className="seg" style={{ marginBottom: 14, maxWidth: 460 }}>
@@ -63,11 +87,23 @@ export function AdminTripsTab() {
                   <td style={td}>{fmtDate(t.started_at)}</td>
                   <td style={td}>{fmtDate(t.closed_at)}</td>
                   <td style={td}>
-                    {(t.status === "scheduled" || t.status === "started") && (
-                      <button className="btnG" style={{ width: "auto", padding: "6px 14px", fontSize: 12, background: "var(--danger)" }} onClick={() => setForceCloseTrip(t)}>
-                        Force close
-                      </button>
-                    )}
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {t.status === "scheduled" && (
+                        <button
+                          className="btnG"
+                          style={{ width: "auto", padding: "6px 14px", fontSize: 12 }}
+                          disabled={startingTripId === t.id}
+                          onClick={() => startTrip(t)}
+                        >
+                          {startingTripId === t.id ? "Starting…" : "Start"}
+                        </button>
+                      )}
+                      {(t.status === "scheduled" || t.status === "started") && (
+                        <button className="btnG" style={{ width: "auto", padding: "6px 14px", fontSize: 12, background: "var(--danger)" }} onClick={() => setForceCloseTrip(t)}>
+                          Force close
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -82,6 +118,7 @@ export function AdminTripsTab() {
           </table>
         </div>
       )}
+      {startError && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "10px 0 0" }}>{startError}</p>}
 
       {forceCloseTrip && (
         <ForceCloseModal trip={forceCloseTrip} onClose={() => setForceCloseTrip(null)} onDone={() => { setForceCloseTrip(null); reload(); }} />
@@ -126,7 +163,9 @@ function ForceCloseModal({ trip, onClose, onDone }: { trip: TripRow; onClose: ()
       <div style={{ width: "min(420px, 92vw)", background: "var(--bg)", borderRadius: "var(--r-xl)", padding: 20 }} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ font: "800 16px var(--font-display)", color: "var(--ink)", margin: "0 0 6px" }}>Force-close this trip?</h3>
         <p style={{ font: "600 12.5px var(--font-body)", color: "rgba(0,0,0,.5)", margin: "0 0 14px" }}>
-          This is a safety-net action — it never touches the points ledger, since nobody confirmed who actually rode.
+          {trip.status === "started"
+            ? "The driver already started this trip, so closing it pays them the normal drive award and confirms every active rider — nobody can be marked a no-show, since only the driver was there to judge that."
+            : "This trip never started, so this is a safety-net status change only — it never touches the points ledger, since no ride happened."}
         </p>
         <label className="lbl">Reason (required, logged to the audit trail)</label>
         <textarea

@@ -261,12 +261,16 @@ fixed.
   there is no rule for which rider would lose their seat, and this route does not invent one.
 
 ### `POST /api/trips/:id/start`
-Driver only, `scheduled→started`, not before T-2h (D-16).
+`scheduled→started`, not before T-2h (D-16).
 
-- **Auth**: required, caller must be the trip's driver
+**Not driver-only (D-50, 2026-09-01).** A **group admin** may start a trip the driver forgot to,
+mirroring D-35(i)'s close — the write itself is shared with the admin console's force-start via
+`src/lib/api/startTrip.ts`, so the two paths cannot drift on who gets notified.
+
+- **Auth**: required, caller must be the trip's driver or a group admin of its group
 - **Request**: none
 - **Response**: `{ trip, notifiedRiders: number, pushDelivery: { sent: number, configError: string | null } }`. The delivery counts are reported rather than thrown: the trip has started and stays started whether or not any phone lit up, so a broken push channel must not fail the request — but it must not be invisible either. `pushDelivery.configError` is what a bad `VAPID_SUBJECT` looks like from here.
-- **Errors**: `401 unauthenticated`, `404 not_found`, `403 not_driver`, `409 wrong_status`, `409 too_early`
+- **Errors**: `401 unauthenticated`, `404 not_found`, `403 not_driver` (caller is neither the driver nor a group admin), `409 wrong_status`, `409 too_early`
 - **Side effects**: updates `trip.status` and `started_at`; inserts one `notification` row per active rider (`type: "start"`) and pushes to their devices. No ledger/audit writes.
 
 ### `POST /api/trips/:id/cancel`
@@ -591,6 +595,19 @@ Two behaviours, by the trip's status:
 - **Response**: `{ trip, mode }`; for a started trip also `{ confirmedCount, pointsAwarded, backTripId }`
 - **Errors**: `401 unauthenticated`, `403 forbidden`, `400 invalid_request`, `404 not_found`, `409 wrong_status` (already closed/cancelled), `500 update_failed`, plus the close route's `500` codes for a started trip
 - **Side effects**: sets `trip.status = "closed"`/`closed_at`; inserts an `audit_log` row (`action: "force_close_trip"`, `after` includes the required reason, the `mode`, and — for a started trip — `confirmedCount`, `pointsAwarded` and `backTripId`). For a started trip, every side effect of a restricted `POST /api/trips/:id/close` as well.
+
+### `POST /api/admin/trips/:id/force-start`
+D-50 (2026-09-01): the admin console's easier-access counterpart to force-close, for a `scheduled`
+trip whose driver forgot to start it. `scheduled→started`, subject to the same T-2h window (D-16)
+as the driver's own Start button — nothing here bypasses that. Shares its write with
+`POST /api/trips/:id/start` via `src/lib/api/startTrip.ts`. Unlike force-close, no reason is
+required: starting moves nothing in `points_ledger`, so there is no scoring decision to explain.
+
+- **Auth**: `platform_admin`
+- **Request**: none
+- **Response**: `{ trip, notifiedRiders: number, pushDelivery: { sent: number, configError: string | null } }`
+- **Errors**: `401 unauthenticated`, `403 forbidden`, `404 not_found`, `409 wrong_status` (not `scheduled`), `409 too_early` (before T-2h), `500 lookup_failed` / `update_failed`
+- **Side effects**: updates `trip.status` and `started_at`; inserts one `notification` row per active rider (`type: "start"`) and pushes to their devices; inserts an `audit_log` row (`action: "force_start_trip"`, `after` includes `notifiedRiders`). No ledger writes.
 
 ### `GET /api/admin/ledger`
 Full `points_ledger` browse. `?profileId=`/`?groupId=` filter; `?limit=`/`?offset=` paginate.

@@ -1,5 +1,68 @@
 # Worklog
 
+## Shipped (2026-09-01 — an admin can start a trip too, not just close it; Alejandro's trips audited)
+- **Shipped:** [D-50]. The developer asked for "easier access to start and close trips as an
+  administrator." Close already had a real, points-paying admin path ([D-35](i)'s restricted close,
+  reachable via the admin console's force-close for a `started` trip) — but `start` was explicitly
+  driver-only (`src/domain/tripMachine.ts`, narrowed 2026-08-30: "Start and cancel stay
+  driver-only"). Asked directly whether to reverse that; developer said yes. `transition()`'s
+  `start` branch now accepts `isGroupAdmin`, still gated by the same T-2h window (D-16) for
+  everyone — cancel is untouched, nobody asked about it.
+- **New `src/lib/api/startTrip.ts`**, mirroring `closeTrip.ts`'s shape: one write shared by the
+  driver's own `POST /api/trips/:id/start` (now also checking the caller's `membership.group_role`,
+  the same way `close` already does) and a new `POST /api/admin/trips/:id/force-start` in the
+  platform admin console (`authenticateAdmin()`, `isGroupAdmin: true` regardless of the admin's own
+  membership row — the same shortcut `force-close` already takes — audit-logged as
+  `force_start_trip`). No reason required on force-start, unlike force-close: starting writes
+  nothing to `points_ledger`, so there's no scoring judgment call to explain.
+- **`AdminTripsTab`** gained a "Start" button next to "Force close" for `scheduled` trips.
+- **Fixed in passing, found while touching this code:** the force-close confirmation copy read "it
+  never touches the points ledger" unconditionally — true when D-35 was answer, wrong since D-35
+  answer (A) made a `started` trip's force-close a real, paying restricted close. Now
+  status-conditional: explains the payout for a `started` trip, the old points-free wording for a
+  `scheduled` one that never ran.
+- **`tripMachine.test.ts`**: new "admin start (D-50)" block (admin succeeds, still honours T-2h,
+  a plain rider still can't, wrong status still rejected), and the old "opening close does not open
+  start or cancel" test narrowed to just cancel, since start is now open.
+- **`tests/admin/admin.test.ts`**: `force-start` added to the 403-for-non-admin route sweep, plus
+  its own audit-log assertion, sequenced right before the existing force-close test so the shared
+  test trip is genuinely `started` by the time that one runs (previously untested: force-close was
+  only ever exercised against a `scheduled` trip in this suite, so its points-paying path had no
+  live coverage here at all — it does now). **Not run this session** — needs
+  `SUPABASE_SERVICE_ROLE_KEY`, which is only in `.env.local` (unreadable by design, CLAUDE.md §2.6).
+- **Alejandro's trips, analysed (the developer's first ask).** `pnpm db:audit-ledger` (read-only)
+  against the live project: he now correctly shows **2 driven · 68 pts**, all-time — the round trip
+  closed 2026-08-31 (outbound, `0e938b27`) and its return leg (`45168fe3`, closed just after
+  midnight UTC on 2026-09-01, "the trip through the back" the developer fixed yesterday). That
+  matches the ledger exactly; `GET /api/me/points` (all-time) would show it correctly on his own You
+  tab. **Flagged, not fixed:** `GET /api/groups/:id/leaderboard` (the Ranks tab) is deliberately
+  **calendar-month-scoped** (D-12) — filtered on `points_ledger.created_at`. Because this round
+  trip's two `drive` rows straddle the Aug 31 / Sep 1 boundary, viewing Ranks *today* would show
+  Alejandro only **1** driven this month, not the 2 he actually has all-time — an artifact of a
+  round trip spanning midnight that D-12 never considered. Left alone pending the developer's word:
+  it's arguably working exactly as D-12 specified (a fresh monthly count), just surprising for a
+  trip that crosses the boundary.
+
+## In Progress
+- Nothing mid-flight.
+
+## Next
+- Nothing new proposed beyond the backlog already on record ([D-31]/[D-32]/[D-33], the open [D-36]
+  key). If the developer wants the month-boundary leaderboard quirk above addressed, that needs
+  their answer first (window by `trip.closed_at` like the `pooled` count already does? accept it as
+  D-12 working as designed?).
+
+## Blocked On
+- `pnpm db:unpool-ledger -- --yes` — unchanged, still the developer's to run (see 2026-08-31 entry
+  below).
+- `tests/admin/admin.test.ts`'s new force-start coverage needs a run against a live project with
+  `SUPABASE_SERVICE_ROLE_KEY` set — not done this session.
+
+## Gates Green
+- `pnpm verify` — typecheck, lint, **225/225 unit tests** (5 new in `tripMachine.test.ts`). Same
+  pre-existing `next lint` deprecation warning, still non-blocking.
+- `pnpm test:admin` — not run (see Blocked On).
+
 ## Shipped (2026-08-31 — riders stop earning points, and keep their count)
 - **Shipped:** [D-49], the last decision left open by the audit. The developer said "Remove rider
   points — we don't need points for riders." [D-49] had already logged that sentence as blocked
