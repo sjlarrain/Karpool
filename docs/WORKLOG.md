@@ -1,5 +1,28 @@
 # Worklog
 
+## Shipped (2026-09-01, third — the month anchor corrected: follow the money, not the itinerary)
+- **The previous entry's fix was wrong, and the developer caught it within the hour**: "Now he has
+  zero and has driven twice." Correct — and worse than the bug it replaced.
+- **What I got wrong.** I anchored a ride's month on the **outbound's `depart_at`**. Alejandro's
+  round trip set off 31 August and its return leg closed 04:38 UTC on 1 September. Anchoring on
+  departure put the *entire* ride in August, so on 1 September — the day after he drove — his Ranks
+  line read **zero**. Before my change he at least read `1 driven · 34`. I had actually *seen* this
+  in my own verification output ("September: from 1 driven to 0") and recorded it as "correct"
+  because it matched the rule I had just invented, instead of asking what a driver would see on
+  screen the next morning. The verification was real; the judgement about what it meant was not.
+- **The correction:** anchor on **when the ride finished** — the latest `closed_at` across its legs.
+  Close is when `points_ledger` rows are written, so this is the one anchor that cannot disagree
+  with the ledger it windows. Both legs still land in the same month (the thing the original fix got
+  right), but that month is now the one the points were actually earned in. **The rule worth
+  keeping: the window follows the money, not the itinerary.**
+- **Verified live before committing**, same throwaway read-only script pattern, UTC boundaries as
+  production uses: **September now reads Alejandro `2 driven · 68 pts`**, with nothing stranded in
+  August. That is the number the developer expected to see.
+- `tripsInMonth()` now also handles a ride with nothing closed yet (skipped — nothing to score) and
+  anchors on whichever legs *have* closed, so an unclosed leg cannot blank a ride's anchor.
+- **Gates:** `pnpm verify` green — **232/232** (7 tests on `tripsInMonth`, including the live case
+  asserted in both directions: the ride appears in September *and* is absent from August).
+
 ## Shipped (2026-09-01, later — Alejandro's score fixed: the leaderboard is now trip-anchored, not timestamp-anchored)
 - **Shipped:** the follow-up flagged in the previous entry. Developer: "so now it will work
   Alejandro's score? Please fix that so those cases don't fail." Yes — fixed.

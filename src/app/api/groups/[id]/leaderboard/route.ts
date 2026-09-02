@@ -52,16 +52,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   // D-50 follow-up: a round trip's return leg is its own `trip` row with its own `closed_at`
   // (D-35), so windowing straight off timestamps split a single ride across the calendar-month
   // boundary whenever its legs happened to close on either side of it. Every closed trip in the
-  // group is fetched (cheap — three columns, id/parent/depart) and `tripsInMonth()` attributes
-  // both legs of a round trip to the SAME month via the outbound's `depart_at`, so a back leg
-  // closed after midnight on the 1st still counts toward the month the ride was actually taken.
+  // group is fetched (cheap — three columns, id/parent/closed) and `tripsInMonth()` attributes
+  // both legs of a round trip to the SAME month, anchored on when the ride finished — which is
+  // when its points were written, so the window and the ledger cannot disagree.
   const { data: closedTrips } = await supabase
     .from("trip")
-    .select("id, parent_trip_id, depart_at")
+    .select("id, parent_trip_id, closed_at")
     .eq("group_id", id)
     .eq("status", "closed");
   const tripIdsThisMonth = tripsInMonth(
-    (closedTrips ?? []).map((t) => ({ id: t.id, parentTripId: t.parent_trip_id, departAt: t.depart_at })),
+    (closedTrips ?? []).map((t) => ({ id: t.id, parentTripId: t.parent_trip_id, closedAt: t.closed_at })),
     new Date(monthStart),
     new Date(monthEnd),
   );

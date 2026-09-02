@@ -82,30 +82,59 @@ describe("rankLeaderboard", () => {
 describe("tripsInMonth", () => {
   const AUG_START = new Date("2026-08-01T00:00:00.000Z");
   const SEP_START = new Date("2026-09-01T00:00:00.000Z");
+  const OCT_START = new Date("2026-10-01T00:00:00.000Z");
 
-  // The bug this exists to fix: a round trip's outbound closes 2026-08-31, its return leg
-  // materialises and closes just after midnight UTC on 2026-09-01. Both drove the same ride.
-  it("attributes a back leg to its parent's month, not its own closed-at month", () => {
+  // The live case, and the reason the first version of this was wrong. A round trip sets off on
+  // 31 August and its return leg closes just after midnight UTC on 1 September. Both legs are one
+  // ride, and the ride's points are written when it CLOSES — so on 1 September the driver must see
+  // the whole ride on their line, not zero. Anchoring on the outbound's departure put it in August
+  // and blanked the driver's current-month score the morning after they drove.
+  it("puts BOTH legs in the month the ride finished, not the month it set off", () => {
     const trips: TripMonthInput[] = [
-      { id: "out", parentTripId: null, departAt: "2026-08-31T15:20:00.000Z" },
-      { id: "back", parentTripId: "out", departAt: "2026-09-01T00:30:00.000Z" },
+      { id: "out", parentTripId: null, closedAt: "2026-08-31T21:20:00.000Z" },
+      { id: "back", parentTripId: "out", closedAt: "2026-09-01T04:38:00.000Z" },
     ];
-    expect(tripsInMonth(trips, AUG_START, SEP_START).sort()).toEqual(["back", "out"]);
-    expect(tripsInMonth(trips, SEP_START, new Date("2026-10-01T00:00:00.000Z"))).toEqual([]);
-  });
-
-  it("a one-way trip is its own anchor", () => {
-    const trips: TripMonthInput[] = [{ id: "solo", parentTripId: null, departAt: "2026-08-15T09:00:00.000Z" }];
-    expect(tripsInMonth(trips, AUG_START, SEP_START)).toEqual(["solo"]);
-  });
-
-  it("excludes a trip whose anchor month falls outside the window", () => {
-    const trips: TripMonthInput[] = [{ id: "solo", parentTripId: null, departAt: "2026-07-31T23:59:59.000Z" }];
+    expect(tripsInMonth(trips, SEP_START, OCT_START).sort()).toEqual(["back", "out"]);
+    // And nothing is left behind in August — a ride is counted once, in exactly one month.
     expect(tripsInMonth(trips, AUG_START, SEP_START)).toEqual([]);
   });
 
-  it("falls back to its own depart_at if the parent is somehow missing from the set", () => {
-    const trips: TripMonthInput[] = [{ id: "orphan", parentTripId: "ghost", departAt: "2026-08-10T00:00:00.000Z" }];
+  it("keeps an ordinary same-day round trip whole, in its own month", () => {
+    const trips: TripMonthInput[] = [
+      { id: "out", parentTripId: null, closedAt: "2026-09-10T08:30:00.000Z" },
+      { id: "back", parentTripId: "out", closedAt: "2026-09-10T18:10:00.000Z" },
+    ];
+    expect(tripsInMonth(trips, SEP_START, OCT_START).sort()).toEqual(["back", "out"]);
+  });
+
+  it("a one-way trip is its own anchor", () => {
+    const trips: TripMonthInput[] = [{ id: "solo", parentTripId: null, closedAt: "2026-08-15T09:00:00.000Z" }];
+    expect(tripsInMonth(trips, AUG_START, SEP_START)).toEqual(["solo"]);
+  });
+
+  it("excludes a ride that finished outside the window", () => {
+    const trips: TripMonthInput[] = [{ id: "solo", parentTripId: null, closedAt: "2026-07-31T23:59:59.000Z" }];
+    expect(tripsInMonth(trips, AUG_START, SEP_START)).toEqual([]);
+  });
+
+  // An outbound still open while its back leg has closed cannot happen through the app (the back
+  // leg only exists because the outbound closed), but the window must not invent an anchor if it
+  // ever does — the ride is anchored on whatever HAS closed.
+  it("anchors on the legs that have actually closed, ignoring an unclosed one", () => {
+    const trips: TripMonthInput[] = [
+      { id: "out", parentTripId: null, closedAt: null },
+      { id: "back", parentTripId: "out", closedAt: "2026-09-02T04:00:00.000Z" },
+    ];
+    expect(tripsInMonth(trips, SEP_START, OCT_START).sort()).toEqual(["back", "out"]);
+  });
+
+  it("skips a ride with nothing closed at all — there is nothing to score", () => {
+    const trips: TripMonthInput[] = [{ id: "open", parentTripId: null, closedAt: null }];
+    expect(tripsInMonth(trips, SEP_START, OCT_START)).toEqual([]);
+  });
+
+  it("falls back to its own close time if the parent is somehow missing from the set", () => {
+    const trips: TripMonthInput[] = [{ id: "orphan", parentTripId: "ghost", closedAt: "2026-08-10T00:00:00.000Z" }];
     expect(tripsInMonth(trips, AUG_START, SEP_START)).toEqual(["orphan"]);
   });
 });
