@@ -50,9 +50,12 @@ export function YouScreen({
   const [sheet, setSheet] = useState<"create" | "feedback" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  // Scoped to the group this tab is showing — the totals sit directly under its name and member
+  // count, so summing every group the viewer belongs to put one group's heading over another
+  // group's numbers. Re-fetches on a group switch for the same reason.
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/me/points")
+    fetch(`/api/me/points?groupId=${encodeURIComponent(groupId)}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("points request failed"))))
       .then((body: Stats) => {
         if (!cancelled) setStats(body);
@@ -64,7 +67,7 @@ export function YouScreen({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [groupId]);
 
   function flash(message: string) {
     setToast(message);
@@ -197,6 +200,12 @@ export function YouScreen({
         )}
       </div>
 
+      {/* Named, not implied: these totals are this group's alone, and a member of two groups needs
+          to be able to tell at a glance which one they are looking at. */}
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "4px 2px 7px" }}>
+        <span style={{ font: "800 12px var(--font-display)", color: "var(--ink)" }}>Your totals in {groupName}</span>
+        <span style={{ font: "600 10px var(--font-body)", color: "rgba(0,0,0,.4)" }}>all time</span>
+      </div>
       <div style={{ display: "flex", gap: 9, marginBottom: 10 }}>
         {tile(stats?.driven ?? 0, "Trips driven", "var(--purple)")}
         {tile(stats?.pooled ?? 0, "Times pooled", "var(--teal)")}

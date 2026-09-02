@@ -1,5 +1,35 @@
 # Worklog
 
+## Shipped (2026-09-01, fifth — the YOU tab is scoped to the group it is showing)
+- **Shipped:** [D-51]. Developer: "My tab must be explicit for the group that I am in."
+  `GET /api/me/points` took no group at all — it summed **every** group the viewer belonged to,
+  while the YOU tab rendered those totals directly beneath *one* group's name and member count. A
+  member of several groups therefore read one group's heading over all of their groups' numbers,
+  and their own tab disagreed with the Ranks tab sitting next to it.
+- **`groupId` is now required, with no default.** An optional one would leave the wrong answer
+  reachable by omission; a caller that forgets gets a `400`. Same rule [D-49] applied to
+  `aggregateLedger`'s rider count and [D-35](C) to `wantsReturn`. A non-member gets `404`, matching
+  the leaderboard route so neither reveals that a group exists. The response echoes `groupId` back
+  so a caller can tell which group a cached reply describes.
+- **Named on screen, not just in the data:** the tiles now sit under "Your totals in <group> ·
+  all time". "Explicit" was read as both — scope the numbers *and* say whose they are.
+- **`stopsThisMonth` is group-scoped now too, but stays month-scoped** — [D-29] built it as a
+  resettable streak, explicitly not a score, so [D-12]'s reversal doesn't reach it.
+- **Verified in a real browser, which is what made it convincing.** The seeded `E2E Driver` turns
+  out to belong to **six** groups, so it is the exact case the developer described: it had
+  `1 driven · 1 kudos · 15 pts` in one group, and before this change all six tabs showed those same
+  numbers under six different headings. After — same session, same user:
+  E2E Group → `1 / 0 / 1` under "Your totals in E2E Group"; Invite Group → `0 / 0 / 0` under its
+  own name. Error paths exercised over HTTP against a signed-in session: no `groupId` → `400`
+  (with the zod issue), bad uuid → `400`, a group the caller is not in → `404`. No console or
+  server errors.
+- **The risky line was the PostgREST embedded filter** (`trip!inner(group_id)`) that scopes seats by
+  group — easy to write in a way that silently doesn't filter. Proved it *partitions* rather than
+  merely runs: the same member counts **4** confirmed seats in their own group and **0** in
+  another. My first check was non-discriminating (nobody in that group had seats elsewhere, so
+  scoped and unscoped matched trivially) — noted and redone rather than counted as a pass.
+- **Gates:** `pnpm verify` green — 225/225, typecheck, lint.
+
 ## Shipped (2026-09-01, fourth — points are all-time: D-12 reversed, and the whole bug class with it)
 - **Shipped:** the developer's call — "Points are all time, please adjust that." **[D-12] is
   reversed.** `GET /api/groups/:id/leaderboard` now applies **no date filter at all**: every

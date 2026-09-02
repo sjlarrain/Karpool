@@ -408,24 +408,35 @@ answers. Removing the window removed the question.
 - **Errors**: `401 unauthenticated`, `404 not_found`
 - **Side effects**: none
 
-### `GET /api/me/points`
-The caller's own lifetime totals — all-time, across every group they belong to. Since D-12 was
-reversed (2026-09-01) the group leaderboard is all-time too, so these two now agree by construction
-rather than by coincidence; the only difference left is scope (this route spans every group the
-caller belongs to, the leaderboard is one group). `pooled` is the one figure here that is not a
-ledger total: since D-49 riding earns nothing, so it counts the caller's `confirmed` seats on closed
-trips instead (all-time, like the rest). `stopsThisMonth` **is** still month-scoped and deliberately
-so — D-29 designed it as a resettable streak, not a score.
+### `GET /api/me/points?groupId=<uuid>`
+The caller's own all-time totals **for one group** (developer, 2026-09-01: "My tab must be explicit
+for the group that I am in"). Since D-12 was reversed the same day, this and
+`GET /api/groups/:id/leaderboard` cover the identical period *and* the identical group, so a
+member's YOU tab and their own row on the Ranks tab now agree by construction — verified live across
+all six members of the test group.
 
-- **Auth**: required
-- **Request**: none
-- **Response**: `{ driven: number, pooled: number, kudos: number, points: number, stopsThisMonth: number }`
-- **Errors**: `401 unauthenticated`
+**`groupId` is required, with no default.** It previously summed every group the caller belonged to
+while the YOU tab rendered those totals directly beneath one group's name and member count, so a
+member of two groups read one group's heading over both groups' numbers. Defaulting to "all groups"
+would leave that wrong answer reachable by omission, so a caller that forgets gets a `400` — the
+same rule D-49 applied to `aggregateLedger`'s rider count and D-35(C) to `wantsReturn`.
+
+`pooled` is the one figure here that is not a ledger total: since D-49 riding earns nothing, so it
+counts the caller's `confirmed` seats on closed trips in this group instead (all-time, like the
+rest). `stopsThisMonth` **is** still month-scoped and deliberately so — D-29 designed it as a
+resettable streak, not a score — and is now also group-scoped like everything beside it.
+
+- **Auth**: required; caller must be a member of `groupId` (a non-member gets `404`, the same shape
+  as the leaderboard route, so neither reveals that a group exists)
+- **Request**: `?groupId=<uuid>` (required)
+- **Response**: `{ driven, pooled, kudos, points, stopsThisMonth, groupId }` — `groupId` is echoed
+  back so a caller can tell which group a cached response describes
+- **Errors**: `401 unauthenticated`, `400 invalid_request` (missing or non-uuid `groupId`), `404 not_found`
 - **Side effects**: none
-- **Notes**: `stopsThisMonth` (D-29) counts `closed` trips this calendar month that passed through a
-  stop and that the caller drove or rode (`state: "confirmed"`). Unlike the four totals above it is
-  month-scoped, and it is **not** a ledger figure — stops score no points, so this number can never
-  move the leaderboard.
+- **Notes**: `stopsThisMonth` (D-29) counts `closed` trips this calendar month, in this group, that
+  passed through a stop and that the caller drove or rode (`state: "confirmed"`). Unlike the four
+  totals above it is month-scoped, and it is **not** a ledger figure — stops score no points, so
+  this number can never move the leaderboard.
 
 ## Notifications
 
