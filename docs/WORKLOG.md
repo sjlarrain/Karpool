@@ -5,19 +5,38 @@
   roster and merge. `dev` was fast-forwarded onto `main` first (it was 20 commits behind), on the
   developer's explicit authorisation. Five commits, `pnpm verify` green before each — **248 tests**,
   up from 225.
-- **In progress:** nothing. **Next:** apply the three migrations, then verify end to end.
-- **BLOCKED ON THE DEVELOPER — migrations `0020`, `0021`, `0022` are written but NOT applied, and
-  the app must not be deployed until they are.** `GET /api/trips/:id` and the leaderboard now select
-  `parking_url_out`, `parking_url_back` and `trip_rider.group_guest_id`, none of which exist yet, so
-  the trip detail, Ranks and Group tabs will error against the current schema. **I could not apply
-  them myself**: `npx supabase` is blocked on this machine by Device Guard ("was blocked by your
-  organization's Device Guard policy"), so `migration list` and `db push` both refuse to run — this
-  is new since the last session, which pushed `0013` this way. The fallback is pasting the three
-  files into the Supabase dashboard's SQL editor, in order. Note also that **`0014` is absent from
-  `supabase/migrations/`** and I could not check it against the remote for the same reason.
-- **Gates:** typecheck, lint, 248/248 unit tests. **End-to-end verification is NOT done** — it
-  cannot be until the migrations land. The dev server boots clean and the sign-in page renders with
-  no console or server errors, which is as far as this could honestly be taken.
+- **In progress:** nothing. **Next:** nothing outstanding on these four; `dev` merged to `main`.
+- **Blocked on:** nothing. Migrations `0020`–`0022` are **applied** (developer ran
+  `pnpm db:push-remote --yes`) and `pnpm db:migrations` reports every local file applied with no
+  remote-only versions — which also settles the old `0014` question: the remote has no `0014`
+  either, so the gap in the folder is a skipped number, not a lost file. The Supabase CLI is still
+  blocked by Device Guard (unsigned `supabase.exe`, WDAC enforcing); `scripts/remote-migrations.mjs`
+  is the replacement and is now the project's normal path.
+- **Gates:** typecheck, lint, 248/248 unit tests, **and a full end-to-end sweep against the live
+  schema in a real browser** — see below. No server errors throughout.
+
+### End-to-end verification (2026-09-02, after the migrations landed)
+Driven through the real app as the two seeded e2e accounts, against the live project. Every number
+below was read back from the running system, not asserted from the code.
+
+- **[D-52]** Rider joined, then left. The **driver's** feed carried both rows with the intended copy
+  — "Someone joined your ride / E2E Rider grabbed a seat on your trip." and "A rider dropped out /
+  E2E Rider left your trip — their seat is free again." — correct `tripId`, correct name
+  interpolation, correct order. The bell renders them with their own icon and tint, green for the
+  join and amber for the leave, which is the whole reason they are separate types.
+- **[D-53]** `Past · N` starts collapsed. And the driver exception proved itself live: a trip whose
+  departure had passed returned `departed: true` with `isPast: false` for its driver while sitting
+  in the rider's Past — exactly [D-23]'s 24h window surviving the change.
+- **[D-54]** Admin set both links; the driver's `GET /api/trips/:id` resolved the outbound leg to the
+  HQ link. The **rider on the same trip received `parkingUrl: null`**, alongside empty
+  `addableMembers` and `addableGuests`. The gate is on what leaves the server, and it holds.
+- **[D-55]** Added "Maria Test" from the Group tab; she appeared in the driver's `addableGuests` and
+  was seated. **Closing that trip awarded 13 = 10 drive + 3 for one filled seat** — the number that
+  proves the fill-bonus fix, because the pre-fix arithmetic counted confirmed *profiles* and would
+  have paid 10. Ranks showed her as her own greyed row (`registered: false`, 1 ride, no points).
+  **Linking her to the rider moved the ride**: her row vanished and the rider went from 1 pooled to
+  2, counted once, not twice. **Unlinking put it back**, which is the argument for one column over
+  re-pointing rows, demonstrated rather than claimed.
 
 ### [D-53] the feed — hidden, not deleted
 The developer's wording decided the design: *"Hide not make it desapear."* [D-27]'s 30-day window is
