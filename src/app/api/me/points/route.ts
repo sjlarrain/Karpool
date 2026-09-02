@@ -60,12 +60,26 @@ export async function GET(request: Request) {
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
+  // D-55: rides the caller took before they had an account, if a group admin has linked them to a
+  // guest on this group's roster. Loaded first because the seat query below has to look for both
+  // shapes of seat at once — their own, and their former guest identity's.
+  const { data: claimedGuests } = await supabase
+    .from("group_guest")
+    .select("id")
+    .eq("group_id", groupId)
+    .eq("claimed_by_profile_id", user.id);
+  const claimedGuestIds = (claimedGuests ?? []).map((g) => g.id);
+
   // Every trip in THIS group the caller was confirmed on. Scoping the seats by group as well as by
   // profile is what keeps `pooled` honest for a member of more than one group.
+  const seatOwnerFilter = [
+    `profile_id.eq.${user.id}`,
+    ...(claimedGuestIds.length > 0 ? [`group_guest_id.in.(${claimedGuestIds.join(",")})`] : []),
+  ].join(",");
   const { data: riddenRows } = await supabase
     .from("trip_rider")
     .select("trip_id, trip!inner(group_id)")
-    .eq("profile_id", user.id)
+    .or(seatOwnerFilter)
     .eq("state", "confirmed")
     .eq("trip.group_id", groupId);
   const riddenIds = [...new Set((riddenRows ?? []).map((r) => r.trip_id))];

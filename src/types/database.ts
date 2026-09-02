@@ -215,6 +215,54 @@ export type Database = {
           },
         ]
       }
+      group_guest: {
+        Row: {
+          claimed_at: string | null
+          claimed_by_admin_id: string | null
+          claimed_by_profile_id: string | null
+          created_at: string
+          created_by: string
+          display_name: string
+          group_id: string
+          id: string
+        }
+        Insert: {
+          claimed_at?: string | null
+          claimed_by_admin_id?: string | null
+          claimed_by_profile_id?: string | null
+          created_at?: string
+          created_by: string
+          display_name: string
+          group_id: string
+          id?: string
+        }
+        Update: {
+          claimed_at?: string | null
+          claimed_by_admin_id?: string | null
+          claimed_by_profile_id?: string | null
+          created_at?: string
+          created_by?: string
+          display_name?: string
+          group_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_guest_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "group"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_guest_claimed_by_profile_id_fkey"
+            columns: ["claimed_by_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kudos: {
         Row: {
           comment: string | null
@@ -649,6 +697,7 @@ export type Database = {
       trip_rider: {
         Row: {
           added_by_profile_id: string | null
+          group_guest_id: string | null
           guest_name: string | null
           id: string
           joined_at: string
@@ -664,6 +713,7 @@ export type Database = {
         }
         Insert: {
           added_by_profile_id?: string | null
+          group_guest_id?: string | null
           guest_name?: string | null
           id?: string
           joined_at?: string
@@ -679,6 +729,7 @@ export type Database = {
         }
         Update: {
           added_by_profile_id?: string | null
+          group_guest_id?: string | null
           guest_name?: string | null
           id?: string
           joined_at?: string
@@ -728,10 +779,36 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_trip_guest: {
+        Args: { p_added_by: string; p_group_guest_id: string; p_trip_id: string }
+        Returns: {
+          added_by_profile_id: string | null
+          group_guest_id: string | null
+          guest_name: string | null
+          id: string
+          joined_at: string
+          kudos_declined_at: string | null
+          left_at: string | null
+          penalty_waived_at: string | null
+          pickup_place_id: string | null
+          profile_id: string | null
+          state: string
+          stop_order: number | null
+          trip_id: string
+          wants_return: boolean
+        }
+        SetofOptions: {
+          from: "*"
+          to: "trip_rider"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       add_trip_rider: {
         Args: { p_added_by: string; p_profile_id: string; p_trip_id: string }
         Returns: {
           added_by_profile_id: string | null
+          group_guest_id: string | null
           guest_name: string | null
           id: string
           joined_at: string
@@ -799,6 +876,7 @@ export type Database = {
         }
         Returns: {
           added_by_profile_id: string | null
+          group_guest_id: string | null
           guest_name: string | null
           id: string
           joined_at: string

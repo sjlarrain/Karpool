@@ -3,6 +3,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/api/auth";
 import { aggregateLedger, rankLeaderboard, formatWeightsCaption } from "@/domain/leaderboard";
 import type { LedgerRow, LeaderboardEntry } from "@/domain/leaderboard";
+import { claimantByGuestId, tallyPooledRides } from "@/domain/guestRoster";
+import { loadGuestRoster } from "@/lib/groups/guestRoster";
 
 // GET /api/groups/:id/leaderboard — ALL-TIME ranking, weighted per the group's own
 // drive/pool/kudos weights (D-11). Every group member appears, even with no points yet.
@@ -67,20 +69,29 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .eq("status", "closed");
   const closedTripIds = (closedTrips ?? []).map((t) => t.id);
 
+  // D-55: guest seats are no longer filtered out here. A seat now counts for its rider OR for
+  // whoever a group admin has linked its guest to, and seatOwner() decides which — so the moment
+  // a guest is linked, every ride they ever took appears on that member's line rather than only
+  // counting forward. An unlinked guest still counts for nobody, exactly as before.
   const { data: pooledSeats } = closedTripIds.length > 0
     ? await supabase
         .from("trip_rider")
-        .select("profile_id")
+        .select("profile_id, group_guest_id")
         .in("trip_id", closedTripIds)
         .eq("state", "confirmed")
-        .not("profile_id", "is", null)
     : { data: [] };
 
-  const pooledRides = new Map<string, number>();
-  for (const seat of pooledSeats ?? []) {
-    if (!seat.profile_id) continue;
-    pooledRides.set(seat.profile_id, (pooledRides.get(seat.profile_id) ?? 0) + 1);
+  const roster = await loadGuestRoster(supabase, id);
+  if (!roster.ok) {
+    return NextResponse.json({ error: roster.error }, { status: 500 });
   }
+  const claims = claimantByGuestId(
+    roster.guests.map((g) => ({ id: g.id, claimedByProfileId: g.claimedBy?.profileId ?? null })),
+  );
+  const pooledRides = tallyPooledRides(
+    (pooledSeats ?? []).map((s) => ({ profileId: s.profile_id, groupGuestId: s.group_guest_id })),
+    claims,
+  );
 
   const rows: LedgerRow[] = (ledgerRows ?? []).map((r) => ({
     profileId: r.profile_id,
@@ -96,9 +107,31 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       name: p.display_name,
       initials: p.initials,
       color: p.avatar_color,
+      registered: true,
       ...s,
     };
   });
+
+  // D-55, the developer's call: a guest nobody has linked yet appears on the board with the rides
+  // they have actually taken, greyed and marked "not registered". It is the nudge to sign up, and
+  // it is also how an admin notices there is someone here to link. Claimed guests are absent by
+  // construction — their rides are already on a member's line, and listing both would show one
+  // ride twice on one screen. Zero-ride guests are left off: a name with no history is roster
+  // housekeeping, not a leaderboard row.
+  for (const guest of roster.guests) {
+    if (guest.claimedBy || guest.rides === 0) continue;
+    entries.push({
+      profileId: guest.id,
+      name: guest.displayName,
+      initials: guest.initials,
+      color: guest.color,
+      registered: false,
+      driven: 0,
+      pooled: guest.rides,
+      kudos: 0,
+      points: 0,
+    });
+  }
 
   return NextResponse.json({
     entries: rankLeaderboard(entries),

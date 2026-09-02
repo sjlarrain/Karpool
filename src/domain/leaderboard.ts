@@ -59,10 +59,17 @@ export function aggregateLedger(
 // (D-12 reversed). Deleted rather than left unused — there is no window left for it to compute.
 
 export interface LeaderboardEntry extends ProfileStats {
+  // For a member this is their profile id. For an unclaimed guest row (D-55) it is the
+  // `group_guest` id — a different table, so it can never collide with a real profile id and the
+  // "this row is you" highlight cannot misfire. It is only ever a key and an identity check.
   profileId: string;
   name: string;
   initials: string;
   color: string;
+  // D-55: false for someone who has ridden but has no account yet. Their rides are real and
+  // accruing; the moment a group admin links them to a member, the count moves onto that member's
+  // line and this row disappears.
+  registered: boolean;
 }
 
 export interface RankedRow extends LeaderboardEntry {

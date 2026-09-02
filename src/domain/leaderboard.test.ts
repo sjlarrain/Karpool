@@ -50,11 +50,12 @@ describe("aggregateLedger", () => {
   });
 });
 
-const entry = (profileId: string, points: number): LeaderboardEntry => ({
+const entry = (profileId: string, points: number, registered = true): LeaderboardEntry => ({
   profileId,
   name: profileId,
   initials: "XX",
   color: "#000",
+  registered,
   driven: 0,
   pooled: 0,
   kudos: 0,
@@ -96,5 +97,15 @@ describe("formatWeightsCaption", () => {
     expect(formatWeightsCaption({ driveWeight: 10, poolWeight: 3, poolStep: 0, kudosWeight: 2 })).toBe(
       "10·drive · 3/seat · 2·kudos×riders",
     );
+  });
+});
+
+describe("rankLeaderboard with unregistered guests (D-55)", () => {
+  it("ranks a guest below every scoring member, since riding pays nothing", () => {
+    // D-49: riders earn no points, so an unclaimed guest is always on zero and always last —
+    // adding them to the board cannot disturb anyone's rank.
+    const ranked = rankLeaderboard([entry("guest", 0, false), entry("driver", 10)]);
+    expect(ranked.map((r) => r.profileId)).toEqual(["driver", "guest"]);
+    expect(ranked.find((r) => r.profileId === "guest")?.registered).toBe(false);
   });
 });

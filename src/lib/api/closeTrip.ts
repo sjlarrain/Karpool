@@ -214,7 +214,12 @@ export async function closeTrip({ tripId, actor, confirmedTripRiderIds = [], gue
 
   // Guests count here alongside registered riders: a guest fills a seat, so they still pay the
   // driver's fill bonus even though they hold no profile and earn nothing themselves (D-09).
-  const seatsFilled = confirmedProfileIds.length + insertedGuests.length;
+  //
+  // Counted from confirmed *seats*, not confirmed *profiles*. Identical arithmetic until D-55,
+  // because until then every pre-existing seat held a profile and a guest could only arrive at
+  // close. Now a driver can seat a roster guest before the trip, and that seat has no profile_id —
+  // so `confirmedProfileIds` would drop it and quietly underpay the driver for a full car.
+  const seatsFilled = confirmedIds.length + insertedGuests.length;
 
   // D-35 answer (A): every close pays, whoever tapped it. A leg that was driven is a leg that was
   // driven, and the driver should not lose the award because they forgot the last tap.

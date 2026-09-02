@@ -93,6 +93,10 @@ export function RanksScreen({ groupId }: { groupId: string }) {
 
       {data.entries.map((r) => {
         const isMe = r.profileId === data.viewerProfileId;
+        // D-55: someone who has ridden but has no account yet. Greyed rather than hidden — the
+        // rides are real and already counted, and the row is both the nudge to sign up and how a
+        // group admin notices there is a history here waiting to be linked to someone.
+        const ghost = !r.registered;
         return (
           <div
             key={r.profileId}
@@ -105,21 +109,37 @@ export function RanksScreen({ groupId }: { groupId: string }) {
               borderRadius: 15,
               padding: "11px 13px",
               marginBottom: 8,
+              opacity: ghost ? 0.62 : 1,
             }}
           >
             <div style={{ width: 26, textAlign: "center", font: "800 15px var(--font-display)", color: r.medal ? "var(--ink)" : "rgba(0,0,0,.4)" }}>
               {r.medal ?? r.rank}
             </div>
-            <span className="av" style={{ background: r.color, width: 34, height: 34, borderRadius: 11, fontSize: 12 }}>
+            <span
+              className="av"
+              style={{
+                background: ghost ? "var(--chip)" : r.color,
+                color: ghost ? "rgba(0,0,0,.45)" : undefined,
+                border: ghost ? "1.5px dashed rgba(0,0,0,.18)" : undefined,
+                width: 34,
+                height: 34,
+                borderRadius: 11,
+                fontSize: 12,
+              }}
+            >
               {r.initials}
             </span>
             <div style={{ flex: 1 }}>
               <div style={{ font: "700 14px var(--font-display)", color: "var(--ink)" }}>{isMe ? "You" : r.name}</div>
               <div style={{ font: "600 10.5px var(--font-body)", color: "rgba(0,0,0,.45)" }}>
-                {r.driven} driven · {r.pooled} pooled · {r.kudos} kudos
+                {ghost
+                  ? `${r.pooled} ride${r.pooled === 1 ? "" : "s"} · not registered yet`
+                  : `${r.driven} driven · ${r.pooled} pooled · ${r.kudos} kudos`}
               </div>
             </div>
-            <div style={{ font: "800 16px var(--font-display)", color: "var(--ink)" }}>{r.points}</div>
+            <div style={{ font: "800 16px var(--font-display)", color: ghost ? "rgba(0,0,0,.3)" : "var(--ink)" }}>
+              {ghost ? "—" : r.points}
+            </div>
           </div>
         );
       })}
