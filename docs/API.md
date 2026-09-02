@@ -387,24 +387,20 @@ giving kudos, so it stays cleared on every device instead of reappearing on the 
   Idempotent: declining twice is still `200`.
 
 ### `GET /api/groups/:id/leaderboard`
-Calendar-month ranking (D-12 — the ledger itself stays all-time; only this view's window resets
-monthly), weighted per the group's own `drive_weight`/`pool_weight`/`kudos_weight` (D-11). `driven` is a **row count** of
-the caller's own `drive` entries. `pooled` is **not** a ledger figure since D-49: riding earns nothing, so it is
-counted from the caller's `confirmed` `trip_rider` seats on trips closed in the window. It means rides
-taken as a passenger, not passengers carried (D-42's correction, kept). Every group member appears,
-even with zero points this month — and a member who has only ever ridden appears with their `pooled`
-count and a score of `0`.
+**All-time** ranking, weighted per the group's own `drive_weight`/`pool_weight`/`kudos_weight`
+(D-11). `driven` is a **row count** of the member's `drive` entries. `pooled` is **not** a ledger
+figure since D-49: riding earns nothing, so it is counted from the member's `confirmed` `trip_rider`
+seats on closed trips. It means rides taken as a passenger, not passengers carried (D-42's
+correction, kept). Every group member appears, even with no points yet — and a member who has only
+ever ridden appears with their `pooled` count and a score of `0`.
 
-**The window is ride-anchored, not per-row (D-50 follow-up, 2026-09-01).** A round trip's return leg
-is its own `trip` row with its own `closed_at` (D-35), so windowing each leg on its own timestamp
-split one continuous ride across two months' leaderboards whenever its legs closed on either side of
-midnight on the 1st — the driver's line showed one fewer trip than the ride they actually drove.
-`src/domain/leaderboard.ts`'s `tripsInMonth()` attributes every leg of a ride to the **month the
-ride finished** — the latest `closed_at` among its legs — and that trip-id set drives both the
-`points_ledger` query (for every row carrying a `trip_id`: `drive`, `kudos`, `no_show`) and the
-`pooled` seat count. Close is when the ledger rows are written, so the window and the ledger it
-windows cannot disagree. An `admin_adjust` row has no trip to anchor to and keeps the original
-`created_at`-window rule, unchanged.
+**D-12 was reversed on 2026-09-01** (developer: "Points are all time"). This view used to reset every
+calendar month. There is now **no date filter anywhere** in it: every `points_ledger` row the group
+has ever written is counted, and `pooled` counts seats on every closed trip, so both halves of a
+member's line always cover the same rides. That window was the sole source of two production bugs
+the same day — a round trip whose legs closed either side of midnight on the 1st was split across
+two leaderboards, and each attempt to pick the "right" month for it was a choice between two wrong
+answers. Removing the window removed the question.
 
 - **Auth**: required, caller must be a member of `:id`
 - **Request**: none
@@ -413,10 +409,13 @@ windows cannot disagree. An `admin_adjust` row has no trip to anchor to and keep
 - **Side effects**: none
 
 ### `GET /api/me/points`
-The caller's own lifetime totals — all-time, across every group they belong to (D-12: only the
-group leaderboard view is month-scoped, the ledger itself never resets). `pooled` is the one figure
-here that is not a ledger total: since D-49 riding earns nothing, so it counts the caller's
-`confirmed` seats on closed trips instead (all-time, like the rest).
+The caller's own lifetime totals — all-time, across every group they belong to. Since D-12 was
+reversed (2026-09-01) the group leaderboard is all-time too, so these two now agree by construction
+rather than by coincidence; the only difference left is scope (this route spans every group the
+caller belongs to, the leaderboard is one group). `pooled` is the one figure here that is not a
+ledger total: since D-49 riding earns nothing, so it counts the caller's `confirmed` seats on closed
+trips instead (all-time, like the rest). `stopsThisMonth` **is** still month-scoped and deliberately
+so — D-29 designed it as a resettable streak, not a score.
 
 - **Auth**: required
 - **Request**: none

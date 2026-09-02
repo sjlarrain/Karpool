@@ -1,5 +1,32 @@
 # Worklog
 
+## Shipped (2026-09-01, fourth — points are all-time: D-12 reversed, and the whole bug class with it)
+- **Shipped:** the developer's call — "Points are all time, please adjust that." **[D-12] is
+  reversed.** `GET /api/groups/:id/leaderboard` now applies **no date filter at all**: every
+  `points_ledger` row the group has written counts, and `pooled` counts seats on every closed trip,
+  so both halves of a member's line always cover the same rides by construction.
+- **This retires the two bugs I shipped earlier today rather than patching them a third time.** The
+  month window was the *sole* cause of both, and neither was really a coding error: a round trip's
+  return leg is its own `trip` row (D-35), so a ride straddling midnight on the 1st had to belong to
+  *some* month, and both available answers were wrong on screen — anchor on departure and the driver
+  reads zero the morning after they drove; anchor per-row and one ride is split across two
+  leaderboards. There was no third answer, because the question itself was the defect. Worth
+  recording that D-12 was an **agent judgment call from 2026-08-16, never chosen by a person** —
+  which is exactly the kind of quiet default CLAUDE.md §2.7 exists to prevent.
+- **`tripsInMonth()` is deleted**, along with its 7 tests — it was written this morning solely to
+  answer the month question, and there is no window left for it to compute. A short note stands
+  where it was so the next reader knows why the gap exists.
+- **UI copy follows the data:** the Ranks header reads `YOUR SCORE · ALL TIME`, and the empty state
+  no longer says "this month".
+- **`stopsThisMonth` deliberately left month-scoped** — D-29 built it as a resettable streak,
+  explicitly not a score, and this instruction was about points.
+- **Verified live before committing** (read-only script, deleted after use — it ran the route's
+  exact new query shape against the real project):
+  `#1 🥇 Alejandro Rivera · 2 driven · 2 pooled · 68 pts`, then Caro 36, Agustin 26, and the
+  riders on 0/0/−5. That is the number Alejandro had actually earned all along.
+- **Gates:** `pnpm verify` green — **225/225** (down from 232 only because the 7 `tripsInMonth`
+  tests went with the function they covered).
+
 ## Shipped (2026-09-01, third — the month anchor corrected: follow the money, not the itinerary)
 - **The previous entry's fix was wrong, and the developer caught it within the hour**: "Now he has
   zero and has driven twice." Correct — and worse than the bug it replaced.

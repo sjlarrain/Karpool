@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/api/auth";
-import { aggregateLedger, rankLeaderboard, formatWeightsCaption, tripsInMonth } from "@/domain/leaderboard";
+import { aggregateLedger, rankLeaderboard, formatWeightsCaption } from "@/domain/leaderboard";
 import type { LedgerRow, LeaderboardEntry } from "@/domain/leaderboard";
 
-// GET /api/groups/:id/leaderboard — calendar-month ranking (D-12: the ledger itself stays
-// all-time, only this view's window resets monthly), weighted per the group's own drive/pool/kudos
-// weights (D-11). Every group member appears, even with zero points this month.
+// GET /api/groups/:id/leaderboard — ALL-TIME ranking, weighted per the group's own
+// drive/pool/kudos weights (D-11). Every group member appears, even with no points yet.
+//
+// D-12 REVERSED (developer, 2026-09-01: "Points are all time"). This view used to reset every
+// calendar month while the ledger stayed all-time. That window was the sole source of the two bugs
+// fixed earlier the same day — a round trip whose legs closed either side of midnight on the 1st
+// was split across two leaderboards, and every attempt to pick the "right" month for it was a
+// choice between two wrong answers. With no window there is no boundary to straddle, so the whole
+// class is gone: the leaderboard is now simply the ledger, which was always all-time anyway.
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
@@ -45,52 +51,27 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .select("id, display_name, initials, avatar_color")
     .in("id", memberIds.length > 0 ? memberIds : [""]);
 
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+  // Every ledger row this group has ever written — no date filter at all (D-12 reversed).
+  const { data: ledgerRows } = await supabase
+    .from("points_ledger")
+    .select("profile_id, kind, points")
+    .eq("group_id", id);
 
-  // D-50 follow-up: a round trip's return leg is its own `trip` row with its own `closed_at`
-  // (D-35), so windowing straight off timestamps split a single ride across the calendar-month
-  // boundary whenever its legs happened to close on either side of it. Every closed trip in the
-  // group is fetched (cheap — three columns, id/parent/closed) and `tripsInMonth()` attributes
-  // both legs of a round trip to the SAME month, anchored on when the ride finished — which is
-  // when its points were written, so the window and the ledger cannot disagree.
+  // D-49: `pooled` is a count of rides taken, not of ledger rows — riding earns nothing, so there
+  // is no ledger row to count. Counted from the seats themselves, all-time like the points beside
+  // it, so both halves of a member's line always cover the same rides.
   const { data: closedTrips } = await supabase
     .from("trip")
-    .select("id, parent_trip_id, closed_at")
+    .select("id")
     .eq("group_id", id)
     .eq("status", "closed");
-  const tripIdsThisMonth = tripsInMonth(
-    (closedTrips ?? []).map((t) => ({ id: t.id, parentTripId: t.parent_trip_id, closedAt: t.closed_at })),
-    new Date(monthStart),
-    new Date(monthEnd),
-  );
+  const closedTripIds = (closedTrips ?? []).map((t) => t.id);
 
-  // points_ledger rows carry a trip_id for everything a trip close writes (drive, kudos, no_show),
-  // windowed by the trip set above; an admin_adjust row has no trip to anchor to, so it keeps the
-  // original ledger-timestamp window (D-12's original rule, unchanged for the one kind it still
-  // applies to).
-  const [{ data: tripLedgerRows }, { data: adjustLedgerRows }] = await Promise.all([
-    tripIdsThisMonth.length > 0
-      ? supabase.from("points_ledger").select("profile_id, kind, points").eq("group_id", id).in("trip_id", tripIdsThisMonth)
-      : Promise.resolve({ data: [] }),
-    supabase
-      .from("points_ledger")
-      .select("profile_id, kind, points")
-      .eq("group_id", id)
-      .is("trip_id", null)
-      .gte("created_at", monthStart)
-      .lt("created_at", monthEnd),
-  ]);
-
-  // D-49: `pooled` is a count of rides taken, not of ledger rows — riding earns nothing, so
-  // there is no ledger row to count. Sourced from the seats themselves, using the same trip set as
-  // the ledger rows above so both halves of a member's line cover exactly the same rides.
-  const { data: pooledSeats } = tripIdsThisMonth.length > 0
+  const { data: pooledSeats } = closedTripIds.length > 0
     ? await supabase
         .from("trip_rider")
         .select("profile_id")
-        .in("trip_id", tripIdsThisMonth)
+        .in("trip_id", closedTripIds)
         .eq("state", "confirmed")
         .not("profile_id", "is", null)
     : { data: [] };
@@ -101,7 +82,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     pooledRides.set(seat.profile_id, (pooledRides.get(seat.profile_id) ?? 0) + 1);
   }
 
-  const rows: LedgerRow[] = [...(tripLedgerRows ?? []), ...(adjustLedgerRows ?? [])].map((r) => ({
+  const rows: LedgerRow[] = (ledgerRows ?? []).map((r) => ({
     profileId: r.profile_id,
     kind: r.kind,
     points: r.points,

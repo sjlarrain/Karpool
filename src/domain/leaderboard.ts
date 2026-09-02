@@ -53,56 +53,10 @@ export function aggregateLedger(
   return stats;
 }
 
-export interface TripMonthInput {
-  id: string;
-  parentTripId: string | null;
-  closedAt: string | null; // ISO 8601; null for a trip that never closed
-}
-
-// D-50 follow-up (2026-09-01): a round trip's return leg is materialised as its OWN `trip` row
-// (D-35), with its own `closed_at`. Windowing each leg on its own timestamp split one continuous
-// ride across two months' leaderboards whenever its legs closed on either side of midnight on the
-// 1st — the driver's Ranks line showed one fewer trip than the ride they actually drove.
-//
-// Both legs are attributed to the SAME month, anchored on when the RIDE FINISHED: the latest
-// `closed_at` among the ride's legs. Close is when `points_ledger` rows are written, so this is the
-// one anchor that cannot disagree with the ledger it is windowing — a ride whose points were all
-// earned in September belongs to September, whichever day it set off. A one-way trip is its own
-// anchor.
-//
-// The first version of this anchored on the OUTBOUND'S `depart_at` instead, and that was wrong in
-// the way that matters: a round trip that set off on 31 August and got home after midnight had its
-// whole award pushed back into August, so on 1 September the driver's Ranks line read zero for a
-// ride they had just finished. Reported live within the hour. The lesson is that the window must
-// follow the money, not the itinerary.
-export function tripsInMonth(trips: TripMonthInput[], monthStart: Date, monthEnd: Date): string[] {
-  const byId = new Map(trips.map((t) => [t.id, t]));
-  // Every leg of a ride resolves to the same id, so they cannot land in different months.
-  const rideRootOf = (trip: TripMonthInput): TripMonthInput =>
-    (trip.parentTripId && byId.get(trip.parentTripId)) || trip;
-
-  // The ride's own finish time: the latest close across its legs. Collected per root so a back leg
-  // and its parent agree without either needing to know the other's shape.
-  const rideFinishedAt = new Map<string, number>();
-  for (const trip of trips) {
-    if (!trip.closedAt) continue;
-    const rootId = rideRootOf(trip).id;
-    const closed = new Date(trip.closedAt).getTime();
-    rideFinishedAt.set(rootId, Math.max(rideFinishedAt.get(rootId) ?? closed, closed));
-  }
-
-  const start = monthStart.getTime();
-  const end = monthEnd.getTime();
-  const inMonth: string[] = [];
-  for (const trip of trips) {
-    const anchor = rideFinishedAt.get(rideRootOf(trip).id);
-    if (anchor === undefined) continue; // nothing closed on this ride yet — nothing to score
-    if (anchor >= start && anchor < end) {
-      inMonth.push(trip.id);
-    }
-  }
-  return inMonth;
-}
+// A `tripsInMonth()` lived here between the two commits on 2026-09-01 that tried to decide which
+// calendar month a round trip straddling midnight belonged to. Both answers were wrong in
+// production, and the developer resolved it by removing the question: points are all-time
+// (D-12 reversed). Deleted rather than left unused — there is no window left for it to compute.
 
 export interface LeaderboardEntry extends ProfileStats {
   profileId: string;

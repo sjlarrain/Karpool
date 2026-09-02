@@ -59,7 +59,7 @@ export function RanksScreen({ groupId }: { groupId: string }) {
           marginBottom: 16,
         }}
       >
-        <div style={{ font: "700 11px var(--font-body)", opacity: 0.85, letterSpacing: ".04em" }}>YOUR SCORE · THIS MONTH</div>
+        <div style={{ font: "700 11px var(--font-body)", opacity: 0.85, letterSpacing: ".04em" }}>YOUR SCORE · ALL TIME</div>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginTop: 4 }}>
           <span style={{ font: "800 40px var(--font-display)", lineHeight: 1 }}>{me?.points ?? 0}</span>
           <span style={{ font: "700 13px var(--font-body)", opacity: 0.85, marginBottom: 7 }}>pts · rank #{myRank}</span>
@@ -87,7 +87,7 @@ export function RanksScreen({ groupId }: { groupId: string }) {
 
       {data.entries.length === 0 && (
         <p style={{ font: "500 12.5px var(--font-body)", color: "rgba(0,0,0,.45)", margin: "4px 2px" }}>
-          No scores this month yet — points land here once a trip is closed.
+          No scores yet — points land here once a trip is closed.
         </p>
       )}
 
