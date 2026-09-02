@@ -115,6 +115,8 @@ verification with `CRON_SECRET`.
 | `pnpm db:types` | Regenerate `src/types/database.ts` from a **local** Supabase instance (needs Docker + `supabase start`) |
 | `pnpm db:types:linked` | Regenerate `src/types/database.ts` from the **linked remote** project — what this repo actually uses, since Docker isn't assumed. Hand-patches literal-union types for CHECK-constrained columns afterward (see the note at the top of `database.ts`) |
 | `pnpm db:diff` | Diff local schema against migrations |
+| `pnpm db:migrations` | **Read-only.** List every local migration against what the linked remote has applied. Works without the Supabase CLI |
+| `pnpm db:push-remote` | Apply unapplied migrations to the linked remote over the Management API — no CLI, no Docker. **Dry run by default**; `--yes` applies |
 | `pnpm db:audit-ledger` | Read-only. Prints every `points_ledger` row grouped by trip, with that trip's riders and a per-profile total, so a duplicated close is visible at a glance. Writes nothing |
 | `pnpm db:dedupe-ledger -- --yes` | Repairs award rows duplicated by a replayed close (see [D-41]). A close writes all its awards in one insert, so a shared `created_at` is the batch key: the earliest batch per trip is kept and later ones deleted. Dry-run without `--yes`; writes a JSON backup to `scripts/backups/` before deleting |
 | `pnpm db:repool-ledger -- --yes` | One-shot D-42 backfill, **superseded by `db:unpool-ledger`**. Rewrote already-closed trips from driver-side pooling to rider-side. Kept as the record of what was done; there is no reason to run it again |
@@ -171,11 +173,45 @@ public/            manifest.webmanifest, sw.js, icons — the PWA/push surface
 ## Migrations
 
 Migrations live in `supabase/migrations/`, applied in order. This repo's dev project has **no
-Docker available**, so every migration so far has been applied directly to the linked remote
-project rather than via a local `supabase start`:
+Docker available**, so every migration is applied directly to the linked remote project rather than
+via a local `supabase start`.
+
+> **The Supabase CLI does not run on the current dev machine.** Windows Device Guard (WDAC) is in
+> enforcing mode and the CLI ships an **unsigned** `supabase.exe`, so it is refused wherever it is
+> installed — `npx supabase db push` fails from a normal terminal, not just from a sandbox, and
+> reinstalling it via scoop/winget does not help. Use the CLI-free path below. If you are on a
+> machine without that policy, the CLI still works and the two stay in agreement, because the
+> script records the same `schema_migrations` versions the CLI does.
+
+**CLI-free (works on the dev machine).** Talks to the Supabase Management API over HTTPS — no new
+dependency and no binary beyond node. Reads `SUPABASE_ACCESS_TOKEN` and the project ref out of
+`.env.local`, so no secret is typed on a command line:
+
+```bash
+pnpm db:migrations
+```
+
+```bash
+pnpm db:push-remote
+```
+
+```bash
+pnpm db:push-remote --yes
+```
+
+`db:migrations` is read-only — it lists every local migration against what the remote has applied,
+and flags any remote version with no file in this repo. `db:push-remote` is a **dry run by default**
+(the `repool-ledger` convention) and names what would apply; `--yes` applies them. Each migration
+runs in its own transaction together with its `schema_migrations` row, so a failure rolls back
+whole and later migrations are not attempted.
+
+**With the CLI**, on a machine that allows it:
 
 ```bash
 npx supabase link --project-ref <your-project-ref> --password "$SUPABASE_DB_PASSWORD"
+```
+
+```bash
 npx supabase db push
 ```
 
@@ -189,6 +225,9 @@ After any schema change, regenerate types:
 ```bash
 pnpm db:types:linked
 ```
+
+That also needs the CLI. While it is blocked, `src/types/database.ts` is hand-patched instead — its
+header already documents that the `check` unions are maintained by hand for the same reason.
 
 ⚠️ **Read `src/types/database.ts`'s header before you commit the result.** The generator emits plain
 `string` for every CHECK-constrained text column, which flattens the literal-union types the rest of

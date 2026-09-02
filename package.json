@@ -18,6 +18,8 @@
     "db:types": "supabase gen types typescript --local > src/types/database.ts",
     "db:types:linked": "supabase gen types typescript --linked > src/types/database.ts",
     "db:diff": "supabase db diff",
+    "db:migrations": "node scripts/remote-migrations.mjs --list",
+    "db:push-remote": "node scripts/remote-migrations.mjs",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "db:reset-data": "tsx scripts/reset-data.ts",
     "db:audit-ledger": "tsx scripts/audit-ledger.ts",
