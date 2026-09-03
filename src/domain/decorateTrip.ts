@@ -128,11 +128,10 @@ export function decorateTrip(trip: TripView): DecoratedTrip {
     joinable: trip.role === "open" && seatsLeft > 0 && trip.status === "scheduled" && !trip.departed,
     driverLabel: trip.role === "driving" ? "You’re driving" : `${trip.driver} is driving`,
     stopNotices: stopNotices(trip),
-    // D-53: two ways a card stops being news. A terminal status is the obvious one. The other is a
-    // ride that was never started and whose departure has passed — for anyone but the driver that
-    // card is inert: `joinable` above is already false and there is nothing left to do with it.
-    // The driver's own stays live, because D-23 gives them 24h to start it, close it, or add
-    // someone; hiding their card would hide the only button that can act on it.
-    isPast: finished !== null || (trip.status === "scheduled" && trip.departed && trip.role !== "driving"),
+    // D-53: a card only stops being news once its status is terminal — closed or cancelled. A
+    // scheduled trip whose departure has passed is still active (its driver has 24h per D-23 to
+    // start it, close it, or add someone, and everyone else still needs to see it's happening), and
+    // a started trip is obviously still live — neither belongs behind the collapsed Past toggle.
+    isPast: finished !== null,
   };
 }

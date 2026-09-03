@@ -63,12 +63,12 @@ describe("decorateTrip", () => {
     expect(d.isPast).toBe(false);
   });
 
-  it("moves a departed, unstarted trip out of the live feed for everyone but its driver", () => {
-    // D-53. The same row, three viewers. Only the driver can still act on it (D-23), so only the
-    // driver keeps it on screen; for a rider or an onlooker it is an inert card in "Today".
+  it("keeps a departed, unstarted trip on the live feed for every viewer", () => {
+    // D-53: only a terminal status (closed/cancelled) moves a card to Past. A scheduled trip whose
+    // departure has passed is still active for everyone, not just the driver who can still act on it.
     const departed = { ...base, departed: true } as const;
-    expect(decorateTrip({ ...departed, role: "open" }).isPast).toBe(true);
-    expect(decorateTrip({ ...departed, role: "joined" }).isPast).toBe(true);
+    expect(decorateTrip({ ...departed, role: "open" }).isPast).toBe(false);
+    expect(decorateTrip({ ...departed, role: "joined" }).isPast).toBe(false);
     expect(decorateTrip({ ...departed, role: "driving" }).isPast).toBe(false);
   });
 
