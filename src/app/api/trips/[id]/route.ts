@@ -12,6 +12,7 @@ import type { TripStopView } from "@/domain/types";
 import { decorateTrip } from "@/domain/decorateTrip";
 import { notifyProfiles } from "@/lib/notify/tripNotify";
 import { diffTripEdit } from "@/domain/tripEdit";
+import { isDepartureInPast, isReturnBeforeDeparture } from "@/domain/tripSchedule";
 import { parkingUrlForLeg } from "@/domain/parking";
 import { loadGuestRoster } from "@/lib/groups/guestRoster";
 
@@ -316,6 +317,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       { error: "invalid_request", message: "returnAt only applies to round trips" },
       { status: 400 },
     );
+  }
+
+  // D-47: only a field actually being set can newly violate the schedule — an already-departed
+  // trip is allowed to have its capacity or stops edited (D-23), just not its departure re-set into
+  // the past.
+  if (parsed.data.departAt !== undefined && isDepartureInPast(parsed.data.departAt, new Date())) {
+    return NextResponse.json(
+      { error: "invalid_request", message: "Departure time can't be in the past." },
+      { status: 400 },
+    );
+  }
+  if (parsed.data.departAt !== undefined || parsed.data.returnAt !== undefined) {
+    const effectiveDepartAt = parsed.data.departAt ?? trip.depart_at;
+    const effectiveReturnAt = parsed.data.returnAt !== undefined ? parsed.data.returnAt : trip.return_at;
+    if (effectiveReturnAt && isReturnBeforeDeparture(effectiveDepartAt, effectiveReturnAt)) {
+      return NextResponse.json(
+        { error: "invalid_request", message: "Return time must be after departure." },
+        { status: 400 },
+      );
+    }
   }
 
   if (parsed.data.outStopId !== undefined && trip.direction === "back") {

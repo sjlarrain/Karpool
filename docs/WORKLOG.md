@@ -1,5 +1,18 @@
 # Worklog
 
+## Shipped (2026-09-03, on `main` — D-47 built: no more scheduling a trip in the past)
+- **Shipped:** `src/domain/tripSchedule.ts` (`isDepartureInPast`, `isReturnBeforeDeparture`), wired
+  into `POST /api/trips` and `PATCH /api/trips/:id` as `400 invalid_request`. The edit route only
+  rejects on a field actually being set, so an already-departed trip can still have capacity/stops
+  edited (D-23). New migration `0023_trip_schedule_checks.sql` adds the DB-level backstop CHECKs
+  (`depart_at >= created_at`, `return_at > depart_at`), phrased so they never re-check against a
+  live clock. `docs/API.md` and D-47 in `docs/DECISIONS.md` updated.
+- **In progress:** nothing. **Next:** nothing outstanding on this fix.
+- **Blocked on:** migration `0023` is written but **not applied** to the remote database — needs
+  the developer's go-ahead (same `scripts/remote-migrations.mjs` path as `0020`–`0022`), and adding
+  a CHECK validates every existing row, so worth confirming no existing trip already violates it.
+- **Gates:** `pnpm verify` green — typecheck, lint, 255/255 unit tests.
+
 ## Shipped (2026-09-03, on `main` — D-53's role clause reversed)
 - **Shipped:** `isPast` in `src/domain/decorateTrip.ts` no longer hides a `scheduled` trip whose
   departure has passed for anyone but its driver — the developer said active (not closed/cancelled)

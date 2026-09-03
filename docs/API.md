@@ -305,6 +305,9 @@ pick a direction along it.
   `backStopId` for `direction: "out"` — a leg the trip doesn't travel can't carry a stop, enforced
   by zod here and by CHECK constraints in migration `0012`. Both ids must name a `pickup_place` in
   **this** group with `kind: "stop"`, or the route answers `400 unknown_stop`.
+- **Notes** (D-47): `departAt` in the past, or a `returnAt` at or before `departAt`, is rejected
+  as `400 invalid_request` — checked in `src/domain/tripSchedule.ts`, backed by CHECK constraints
+  in migration `0023`.
 
 ### `GET /api/trips/:id`
 Trip detail overlay: decorated summary plus the driver's pickup list in route order. RLS
@@ -337,6 +340,10 @@ fixed.
 - **Notes** (D-29): pass `null` to clear a stop. The same leg rules as `POST` apply, checked against
   the trip's stored `direction`; stop ids are resolved through the caller's own session (RLS), so a
   place from another group reads as `400 unknown_stop`.
+- **Notes** (D-47): only rejects on a field actually being set — a capacity-only or stop-only edit
+  is still allowed on a trip whose `depart_at` has already passed (D-23's post-departure window),
+  but setting `departAt` itself into the past, or a `returnAt` at or before the (possibly just-set)
+  `departAt`, is `400 invalid_request`.
 - **Notes** (D-38): `direction` is deliberately **not** editable — turning an outbound into a return
   is a different ride from the one people joined, not an edit of it. Times are compared as instants,
   not strings, so the client's `…Z` and Postgres's `…+00:00` spelling of the same moment do not read

@@ -8,6 +8,7 @@ import { loadGroupTrips } from "@/lib/trips/loadGroupTrips";
 import { viewerTimeZone } from "@/lib/time/viewerTimeZone";
 import { resolveTripStops } from "@/lib/trips/resolveStops";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { isDepartureInPast, isReturnBeforeDeparture } from "@/domain/tripSchedule";
 
 // GET /api/trips?groupId=&scope=all|mine — live trip feed for a group (scheduled/started only;
 // closed and cancelled trips don't appear in the Carpools tab feed).
@@ -83,6 +84,20 @@ export async function POST(request: Request) {
   const parsed = createTripSchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_request", issues: parsed.error.issues }, { status: 400 });
+  }
+
+  // D-47: reject an impossible schedule before it ever reaches the database.
+  if (isDepartureInPast(parsed.data.departAt, new Date())) {
+    return NextResponse.json(
+      { error: "invalid_request", message: "Departure time can't be in the past." },
+      { status: 400 },
+    );
+  }
+  if (parsed.data.returnAt && isReturnBeforeDeparture(parsed.data.departAt, parsed.data.returnAt)) {
+    return NextResponse.json(
+      { error: "invalid_request", message: "Return time must be after departure." },
+      { status: 400 },
+    );
   }
 
   const { data: membership } = await supabase
