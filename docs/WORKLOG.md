@@ -6,12 +6,15 @@
   rejects on a field actually being set, so an already-departed trip can still have capacity/stops
   edited (D-23). New migration `0023_trip_schedule_checks.sql` adds the DB-level backstop CHECKs
   (`depart_at >= created_at`, `return_at > depart_at`), phrased so they never re-check against a
-  live clock. `docs/API.md` and D-47 in `docs/DECISIONS.md` updated.
+  live clock. `docs/API.md` and D-47 in `docs/DECISIONS.md` updated. **Checked existing data before
+  applying, as asked:** 24 `trip` rows, 0 violated `return_at > depart_at`, 3 violated
+  `depart_at >= created_at` (backdated test rows, all already `cancelled`/`closed`, none
+  `scheduled`) — that constraint added as `NOT VALID` to grandfather them rather than fail the
+  migration, still enforced on every new write. Applied via `pnpm db:push-remote --yes`;
+  `db:migrations --list` confirms `0023` applied, nothing pending.
 - **In progress:** nothing. **Next:** nothing outstanding on this fix.
-- **Blocked on:** migration `0023` is written but **not applied** to the remote database — needs
-  the developer's go-ahead (same `scripts/remote-migrations.mjs` path as `0020`–`0022`), and adding
-  a CHECK validates every existing row, so worth confirming no existing trip already violates it.
-- **Gates:** `pnpm verify` green — typecheck, lint, 255/255 unit tests.
+- **Blocked on:** nothing.
+- **Gates:** `pnpm verify` green — typecheck, lint, 255/255 unit tests. Migration applied to remote.
 
 ## Shipped (2026-09-03, on `main` — D-53's role clause reversed)
 - **Shipped:** `isPast` in `src/domain/decorateTrip.ts` no longer hides a `scheduled` trip whose
