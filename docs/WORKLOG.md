@@ -1,5 +1,14 @@
 # Worklog
 
+## Shipped (2026-09-03, on `main` — D-53's role clause reversed)
+- **Shipped:** `isPast` in `src/domain/decorateTrip.ts` no longer hides a `scheduled` trip whose
+  departure has passed for anyone but its driver — the developer said active (not closed/cancelled)
+  trips must always display. `isPast` is now `finished !== null` alone. Test updated in
+  `decorateTrip.test.ts`; follow-up note added to D-53 in `docs/DECISIONS.md`. One commit, `490a65f`.
+- **In progress:** nothing. **Next:** nothing outstanding on this fix.
+- **Blocked on:** nothing.
+- **Gates:** `pnpm verify` green — typecheck, lint, 248/248 unit tests.
+
 ## Shipped (2026-09-02, on `dev` — four features: seat alerts, a quieter feed, parking links, guest identity)
 - **Shipped:** [D-52] seat notifications, [D-53] the feed, [D-54] parking links, [D-55] the guest
   roster and merge. `dev` was fast-forwarded onto `main` first (it was 20 commits behind), on the
