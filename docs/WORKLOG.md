@@ -1,5 +1,24 @@
 # Worklog
 
+## Data fix (2026-09-04, manual — minizombini forced onto Manolo's return leg)
+- **What:** the developer (profile `minizombini`) asked to be added to Manolo's trip today. Manolo's
+  only trip that date had already been driven and closed (both legs — `3c34ab4c…` and its
+  auto-generated back leg `880be441…`), and minizombini wasn't a member of Manolo's group ("MBA
+  2028", code `Q8JB2X`), so neither the guest route nor the rider route would have accepted this —
+  both require an open trip and (for a real rider) group membership. Flagged both problems; the
+  developer chose to force it in anyway, specifically onto the return leg.
+- **Done directly against the remote DB** (no migration — one-off data, not a schema change):
+  inserted a `trip_rider` row (`state: confirmed`) for minizombini on `880be441…`, and a **+5 point
+  `admin_adjust`** row on `points_ledger` for Manolo, since his `drive` row was already written at
+  real close time off 1 confirmed rider (13 pts = 10 drive + 3 fill) and adding a 2nd confirmed
+  rider without correcting it would have left the leaderboard showing a ride nobody paid the driver
+  for (should be 18 pts = 10 + fill bonus for 2). `pool_weight`/`pool_step` for that group are 3/2.
+- **Why this isn't a script in `scripts/`:** one-off, not repeatable — the next case (a different
+  trip, a different rider count) needs different numbers, so it was done as an ad hoc query against
+  `.env.local`'s service role key rather than committed tooling.
+- **Not done:** no notification to minizombini (closed trips don't notify), no group membership
+  created — they're still not a member of MBA 2028, only seated on this one trip's row directly.
+
 ## Shipped (2026-09-03, on `main` — D-47 built: no more scheduling a trip in the past)
 - **Shipped:** `src/domain/tripSchedule.ts` (`isDepartureInPast`, `isReturnBeforeDeparture`), wired
   into `POST /api/trips` and `PATCH /api/trips/:id` as `400 invalid_request`. The edit route only
