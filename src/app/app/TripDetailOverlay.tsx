@@ -703,7 +703,13 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
           </>
         )}
 
-        {!isDriver && trip.role === "open" && !trip.joinable && (
+        {/* D-59. This said "This carpool is full." for every reason a join was blocked, so a rider
+            looking at an empty car that had simply already left was told it was full — with the
+            badge beside it reading "OPEN · 3 SEATS". The reason now comes from `joinBlock` in
+            decorateTrip, and each one says what a rider can actually do about it. The departed case
+            matters most: the driver CAN still seat someone after departure (D-23), so the one
+            sentence that was missing is the one that tells the rider to ask. */}
+        {!isDriver && trip.role === "open" && trip.joinBlock !== null && (
           <div
             style={{
               background: "var(--chip)",
@@ -713,9 +719,14 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
               textAlign: "center",
               font: "600 12.5px var(--font-body)",
               color: "rgba(0,0,0,.5)",
+              lineHeight: 1.5,
             }}
           >
-            This carpool is full.
+            {trip.joinBlock === "full"
+              ? "This carpool is full."
+              : trip.joinBlock === "departed"
+                ? `This ride has already left. ${trip.driver} can still add you if you're going — ask them.`
+                : "This ride is over."}
           </div>
         )}
 

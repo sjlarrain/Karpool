@@ -1,5 +1,26 @@
 # Worklog
 
+## Fixed (2026-09-07, on `feat/chat-and-trip-lifecycle` — D-59, "it said it was full when it wasn't")
+- **Reported by the developer while reviewing the branch**, with a screenshot of a trip whose badge
+  read `OPEN · 3 SEATS` and whose seat line read `0 / 3 seats`, above the sentence "This carpool is
+  full." They worked around it by seating the rider themselves.
+- **Diagnosis, entirely from the screenshot.** `joinable` is
+  `role open && seatsLeft > 0 && status scheduled && !departed`. A non-terminal badge proves the
+  status was `scheduled`; `OPEN · 3 SEATS` proves `seatsLeft > 0` and `role === "open"`. Three terms
+  true, so the blocking term was **`departed`** — D-23, the ride had left at 22:14. The join rule was
+  behaving exactly as designed; the *message* was one sentence covering four different situations.
+- **Shipped:** a typed `joinBlock` (`over` / `departed` / `full`, null when joinable) on
+  `decorateTrip`, ordered most-fundamental-first, with the copy for each. The departed case names the
+  way out — the driver can still seat someone after departure — which is what the developer had
+  already discovered by doing it. Six new unit tests, including the empty-but-departed case.
+- **Verified live** by a temporary `tests/e2e/zz-departed.spec.ts` that reproduces it: publish a trip
+  one minute out, let the departure pass, open it as a rider. Asserts the badge and seat line now
+  agree with the message, that "This carpool is full." is gone, **and that the API still answers the
+  join `409 departed`** — this is a message being made honest, not a gate being loosened.
+- **Not changed:** D-23 itself, and the driver's ability to seat someone after departure. The
+  developer said they *like* that power; nothing touched it.
+- **Gates:** `pnpm verify` green — 292 unit tests. Full e2e green.
+
 ## Shipped (2026-09-07, on `feat/chat-and-trip-lifecycle` — D-56 points-at-start, D-57 trip chat)
 - **Shipped:** [D-56] the driver is paid when they press **Start**, not at close, with every later
   roster change appending a signed `drive_adjust` correction; the close is now optional and merely

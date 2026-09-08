@@ -22,6 +22,27 @@ export interface StopNotice {
   when: string;
 }
 
+/**
+ * Why a viewer who is not on this ride cannot take a seat, or null when they can.
+ *
+ * D-59 (developer, 2026-09-07: "It said that it was full when it wasn't"). `joinable` is one
+ * boolean standing for four different situations, and the UI printed "This carpool is full." for
+ * every one of them — so a rider looking at an EMPTY car that had simply already left was told the
+ * car was full. The screen contradicted itself in two places at once: the badge read
+ * "OPEN · 3 SEATS" beside a sentence saying there were none.
+ *
+ * Splitting the reason out is the fix, and it belongs here rather than in the JSX: the rule that
+ * decides it is the rule that has to explain it, and it is unit-tested in one place.
+ */
+export type JoinBlock =
+  // The ride is over — closed, or cancelled.
+  | "over"
+  // D-23: it has already left. The seats may well be empty; they are just no longer takeable by
+  // anyone but the driver, who can still seat someone at the kerb.
+  | "departed"
+  // Genuinely full.
+  | "full";
+
 export interface DecoratedTrip extends TripView {
   badge: string;
   badgeColor: string;
@@ -32,6 +53,9 @@ export interface DecoratedTrip extends TripView {
   seatStr: string;
   seatColor: string;
   joinable: boolean;
+  // Null when `joinable` is true, and null as well for a viewer who is already the driver or a
+  // rider — they are not being blocked from anything.
+  joinBlock: JoinBlock | null;
   driverLabel: string;
   // D-29: every stop this ride makes, in travel order. Empty for a direct ride.
   stopNotices: StopNotice[];
@@ -93,6 +117,21 @@ export function stopNotices(trip: TripView): StopNotice[] {
   }
   return notices;
 }
+/**
+ * The single reason to give the viewer, most fundamental first.
+ *
+ * The order is what makes the message honest rather than merely different. A ride that is over is
+ * over whether or not it was full; one that has left is gone whether or not it was full. "Full" is
+ * the last thing worth saying, because it is the only one of the three a rider might outlast —
+ * someone could still drop out.
+ */
+function joinBlockFor(trip: TripView, seatsLeft: number): JoinBlock | null {
+  if (trip.status !== "scheduled") return "over";
+  if (trip.departed) return "departed";
+  if (seatsLeft <= 0) return "full";
+  return null;
+}
+
 export function decorateTrip(trip: TripView): DecoratedTrip {
   const finished = terminalBadge(trip);
   const style = finished ? TERMINAL_STYLE : ROLE_STYLE[trip.role];
@@ -126,6 +165,7 @@ export function decorateTrip(trip: TripView): DecoratedTrip {
     // D-23: a ride that has already left can't be taken, even though its driver may still start
     // and close it for another 24h.
     joinable: trip.role === "open" && seatsLeft > 0 && trip.status === "scheduled" && !trip.departed,
+    joinBlock: trip.role === "open" ? joinBlockFor(trip, seatsLeft) : null,
     driverLabel: trip.role === "driving" ? "You’re driving" : `${trip.driver} is driving`,
     stopNotices: stopNotices(trip),
     // D-53: a card only stops being news once its status is terminal — closed or cancelled. A

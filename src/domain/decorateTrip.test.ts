@@ -41,6 +41,61 @@ describe("decorateTrip", () => {
     expect(d.joinable).toBe(false);
   });
 
+  // ─── D-59: WHY a join is blocked, not just THAT it is ─────────────────────
+  //
+  // The developer, 2026-09-07, looking at an empty car: "It said that it was full when it wasn't.
+  // I had to add it my self." `joinable` collapsed four situations into one boolean and the screen
+  // printed "This carpool is full." for all of them, so the badge said OPEN · 3 SEATS beside a
+  // sentence saying there were none.
+
+  it("blocks nothing on an open trip with seats left", () => {
+    expect(decorateTrip(base).joinBlock).toBeNull();
+  });
+
+  // The exact case from the developer's screenshot: three seats free, nobody aboard, and the ride
+  // had simply already left. It must NOT say "full".
+  it("says a departed trip has left, not that it is full", () => {
+    const empty: TripView = { ...base, capacity: 3, riders: [], departed: true };
+    const d = decorateTrip(empty);
+    expect(d.seatsLeft).toBe(3);
+    expect(d.badge).toBe("OPEN · 3 SEATS");
+    expect(d.joinable).toBe(false);
+    expect(d.joinBlock).toBe("departed");
+  });
+
+  it("still says full when the car really is full", () => {
+    const full: TripView = {
+      ...base,
+      capacity: 1,
+      riders: [{ name: "Marco Lee", initials: "ML", color: "#0ea5b0" }],
+    };
+    expect(decorateTrip(full).joinBlock).toBe("full");
+  });
+
+  // "Over" outranks both: a closed ride is closed whether or not it was full, and whether or not
+  // its departure has passed. "Full" is last because it is the only one a rider might outlast.
+  it("reports a finished trip as over, ahead of departed or full", () => {
+    expect(decorateTrip({ ...base, status: "closed" }).joinBlock).toBe("over");
+    expect(decorateTrip({ ...base, status: "cancelled" }).joinBlock).toBe("over");
+    expect(decorateTrip({ ...base, status: "closed", departed: true, capacity: 1 }).joinBlock).toBe("over");
+  });
+
+  it("prefers 'departed' over 'full' on a trip that is both", () => {
+    const full: TripView = {
+      ...base,
+      capacity: 1,
+      riders: [{ name: "Marco Lee", initials: "ML", color: "#0ea5b0" }],
+      departed: true,
+    };
+    expect(decorateTrip(full).joinBlock).toBe("departed");
+  });
+
+  // Nobody is being kept out of a ride they are already on, so there is no reason to show one.
+  it("reports no reason at all for a viewer who is the driver or a rider", () => {
+    expect(decorateTrip({ ...base, role: "driving", departed: true }).joinBlock).toBeNull();
+    expect(decorateTrip({ ...base, role: "joined", status: "closed" }).joinBlock).toBeNull();
+  });
+
   it("badges a driving trip as YOU'RE DRIVING regardless of seats left", () => {
     const driving: TripView = { ...base, role: "driving" };
     const d = decorateTrip(driving);
