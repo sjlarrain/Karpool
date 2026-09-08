@@ -8,6 +8,7 @@ import { StopSign } from "./StopSign";
 import { rideShareMessage, rideShareUrl } from "@/domain/tripShare";
 import { shareOrCopy } from "@/lib/share";
 import { CloseTripOverlay } from "./CloseTripOverlay";
+import { TripChatOverlay } from "./TripChatOverlay";
 import { ParkingLink } from "./ParkingLink";
 import { ReturnQuestionSheet } from "./ReturnQuestionSheet";
 import { EditTripOverlay } from "./EditTripOverlay";
@@ -90,6 +91,8 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
   // D-38: the driver's two ways out of a plan that stopped working.
   const [editing, setEditing] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  // D-57: the per-trip thread, opened over this screen.
+  const [chatting, setChatting] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
 
   const load = useCallback(async () => {
@@ -453,6 +456,52 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
                   : `${isDriver ? "You called it off" : `${trip.driver} called it off`}. Nobody lost points.`}
             </div>
           </div>
+        )}
+
+        {/* D-57. Offered to the driver and to anyone holding a seat, and to nobody else — the
+            server enforces the same rule, so this is which button to draw, not who may read the
+            thread. Placed above the role blocks because it is the one thing everyone on the ride
+            wants in the same place, whichever side of it they are on. */}
+        {(isDriver || trip.role === "joined") && (
+          <button
+            onClick={() => setChatting(true)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 11,
+              width: "100%",
+              background: "var(--surface)",
+              border: "1px solid var(--hairline)",
+              borderRadius: 14,
+              padding: "12px 13px",
+              marginBottom: 16,
+              textAlign: "left",
+              cursor: "pointer",
+            }}
+          >
+            <span
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 9,
+                background: "var(--purple-soft)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 15,
+                flex: "none",
+              }}
+            >
+              💬
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ font: "800 13px var(--font-body)", color: "var(--ink)" }}>Trip chat</div>
+              <div style={{ font: "600 10.5px var(--font-body)", color: "rgba(0,0,0,.45)" }}>
+                {isLive ? "Tell the car where you are" : "Read what was said on this ride"}
+              </div>
+            </div>
+            <span style={{ color: "rgba(0,0,0,.3)", fontSize: 13, flex: "none" }}>›</span>
+          </button>
         )}
 
         {isDriver && (
@@ -930,6 +979,14 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
             </div>
           </div>
         </div>
+      )}
+
+      {chatting && (
+        <TripChatOverlay
+          tripId={tripId}
+          subtitle={`${trip.dayLabel} · ${trip.time}`}
+          onClose={() => setChatting(false)}
+        />
       )}
 
       {closing && (

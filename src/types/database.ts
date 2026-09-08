@@ -10,6 +10,11 @@
 // hand-maintained copy had drifted away from: trip_rider.kudos_declined_at and
 // .penalty_waived_at, the carpool_cron_status/carpool_cron_tick functions, and the removal of
 // a stale seat_member entry for a function that no longer exists in the database.
+//
+// `trip_message` (D-57, migration 0025) was added here by hand rather than regenerated: the
+// Supabase CLI is blocked by Device Guard on this machine (see the 2026-09-02 worklog entry), so
+// `pnpm db:types:linked` cannot run. Re-generate and re-apply the CHECK-column patches above once
+// the CLI works again.
 
 export type Json =
   | string
@@ -688,6 +693,45 @@ export type Database = {
           {
             foreignKeyName: "trip_parent_trip_id_fkey"
             columns: ["parent_trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_message: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          profile_id: string
+          trip_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          profile_id: string
+          trip_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_message_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_message_trip_id_fkey"
+            columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trip"
             referencedColumns: ["id"]

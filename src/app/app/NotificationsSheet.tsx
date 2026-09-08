@@ -51,7 +51,7 @@ const ICON_BG: Record<NotificationItem["type"], string> = {
   start: "var(--teal-soft)",
   rate: "var(--notif-rate-icon)",
   change: "var(--notif-change-icon)",
-  comment: "var(--chip)",
+  comment: "var(--purple-soft)",
   tip: "var(--notif-tip-icon)",
   reminder: "var(--notif-change-icon)",
   close_reminder: "var(--notif-change-icon)",
@@ -64,7 +64,9 @@ const CTA: Partial<Record<NotificationItem["type"], string>> = {
   start: "View trip",
   change: "View trip",
   reminder: "View trip",
-  close_reminder: "Close trip",
+  close_reminder: "End trip",
+  // D-57: a chat message is only useful if you can get to the thread it was said in.
+  comment: "Open chat",
   join: "View trip",
   leave: "View trip",
 };

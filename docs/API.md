@@ -488,6 +488,48 @@ not be able to bump them.
 - **Errors**: `401 unauthenticated`, `404 not_found` (trip missing, or that rider isn't on it), `403 not_driver`, `403 not_added_by_driver`, `409 wrong_status`, `500 remove_failed`
 - **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`); appends a `drive_adjust` `points_ledger` row when the trip is started, taking that seat's bonus back off the driver (D-56); notifies the removed member + push; writes an `audit_log` row (`trip_rider_removed_by_driver`). The rider is never charged — a driver undoing their own action isn't a late cancellation.
 
+## Trip chat (D-57)
+
+A message thread per trip, for the ride itself. The developer, 2026-09-07: *"Can we built a in app
+chat to tell important messages to the people that is being pool. Example: I wait you here. I am
+here, etc."* Scope was asked and answered — **one thread per trip**, not a group-wide room: both
+examples are about one ride at one moment, and on a morning when three cars leave together a shared
+room cannot say *whose*.
+
+**Who is in a thread**: the driver, plus anyone holding a seat (`trip_rider.state` of `joined` or
+`confirmed`). Not the group. A colleague who is not in the car has no business posting to the people
+who are, and the group tab is where group-wide things belong. Guests (D-09/D-55) hold seats but no
+account, so they neither post nor get notified — there is nobody to attribute a message to.
+
+Both rules live as pure predicates in `src/domain/tripChat.ts` (`canReadTrip`, `canPostToTrip`) and
+are applied identically on the read and the write. `trip_message`'s RLS policy is bounded to the
+caller's group, which is defence in depth (D-04); the narrowing to *actually on this ride* happens in
+the route, because a policy does not express it cheaply.
+
+**A non-participant gets `404`, not `403`** — on both verbs. Telling someone they may not read a
+thread discloses that there is a thread worth reading.
+
+### `GET /api/trips/:id/messages`
+The thread, oldest first.
+
+- **Auth**: required, caller must be the trip's driver or hold an active seat on it
+- **Request**: none
+- **Response**: `{ messages: ChatMessage[], canPost: boolean }` where `ChatMessage` is `{ id, authorId, authorName, initials, color, body, createdAt, mine }`. Author identity is resolved server-side with the same `initials`/`avatar_color` fallbacks the trip cards use, so one person is never two different colours across two screens. `canPost` is the client's cue to render a composer or a read-only footer; the route enforces it regardless.
+- **Errors**: `401 unauthenticated`, `404 not_found` (trip missing, in another group, or the caller is not on it), `500 message_lookup_failed`
+- **Notes**: capped at 200 messages. A failed query is `500`, never an empty thread — telling someone their messages are gone when the query merely failed is the failure mode `GET /api/trips/:id`'s rider lookup was fixed for on 2026-08-30.
+- **Side effects**: none.
+
+### `POST /api/trips/:id/messages`
+Say something to the people on this ride.
+
+- **Auth**: required, caller must be the trip's driver or hold an active seat on it
+- **Request**: `{ body: string (1-500 chars) }`
+- **Response**: `201 { message: { id, authorId, body, createdAt }, notified: number, notifyError: string | null }`
+- **Errors**: `401 unauthenticated`, `400 invalid_request` (missing, too long, or whitespace-only — zod bounds the raw string, `normalizeMessageBody` bounds what is actually stored, so 500 spaces is a `400` rather than a blank row), `404 not_found`, `409 wrong_status` (the trip is closed or cancelled — the thread stays **readable**, but nothing said now can help anyone catch a ride that is over), `429 rate_limited` (30 per 10 minutes per caller), `500 send_failed`
+- **Side effects**: inserts a `trip_message` row; inserts a `comment`-type `notification` row for **everyone else on the trip** and pushes to their devices. The push body is the message itself, truncated to 120 characters — a notification that says "you have a new message" makes you unlock the phone to discover it said "here", which defeats the entire feature. Notification failures are reported in `notifyError`, never thrown: the message exists and is on screen for anyone with the thread open (D-39's standing rule — the thing being announced must not depend on the announcement).
+- **Notes**: the client offers six one-tap quick messages (`QUICK_MESSAGES` in `src/domain/tripChat.ts`, seeded from the developer's own examples). They are plain text posted through this same route with the same validation — a chip is a shortcut, not a second kind of message.
+- **Notes (delivery)**: there is no realtime channel in this stack (the infrastructure lineament is Supabase + Web Push and nothing else), so the open thread polls this route's `GET` every 12 seconds and only while the chat overlay is mounted. Push is what reaches a phone that is not looking.
+
 ## Kudos & scores
 
 ### `POST /api/trips/:id/kudos`

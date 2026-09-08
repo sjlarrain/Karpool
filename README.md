@@ -4,8 +4,19 @@ A workplace commute carpool PWA with light gamification. Employees join a group 
 route, publish and join trips, and earn points (Driven / Kudos) on a leaderboard, with a Pooled
 count showing how often you rode along (D-49: riding is counted, not scored).
 
-Core loop: driver publishes a trip → riders join → driver starts, then closes it → the system
-awards points and prompts riders for kudos.
+Core loop: driver publishes a trip → riders join → **driver starts it and is paid on the spot** →
+the ride finishes itself and riders are prompted for kudos.
+
+Points used to be written at the close, which meant a driver who never tapped "End trip" was never
+paid for a ride that actually ran — and in practice, drivers were not tapping it. D-56 (2026-09-07)
+moved the award onto Start, and every later change to a started trip's roster appends a signed
+correction, so what the leaderboard shows is who actually carried whom rather than who remembered a
+last tap. Ending a trip is now optional: the scheduler finishes any ride left running, and the end
+screen is kept for the two things only the driver can do — name who really rode, and seat a guest
+who wasn't on the list.
+
+Everyone on a ride shares a **trip chat** (D-57) for the things that only matter for the next ten
+minutes: where you're waiting, that you've arrived, that you're running late.
 
 On a **round trip** the close does one more thing (D-35): it materialises the return leg as a real
 trip of its own, seating the riders who said at join time that they were coming back, and freeing
@@ -137,7 +148,7 @@ src/
                    (Overview/Users/Groups/Trips/Ledger/Feedback/Audit log/Health)
     styleguide/    Dev-only route comparing tokens/primitives against the sketch
   domain/          Pure domain logic (points, trip state machine, leaderboard, seat math,
-                   install-platform detection) — no I/O, unit-tested
+                   chat rules, install-platform detection) — no I/O, unit-tested
   lib/
     share.ts       shareOrCopy() — the OS share sheet, falling back to the clipboard
     supabase/      Server/admin Supabase client factories (D-04: writes always go through the
@@ -147,6 +158,8 @@ src/
     notify/        Shared "write a notification row + push it" helper
     push/          web-push wrapper; prunes dead subscriptions on 404/410
     api/adminAuth.ts  authenticateAdmin() — the authenticate+authorize step shared by every /api/admin/* route
+    api/driveAward.ts settleDriveAward()/syncDriveAward() — writes the driver's award at start and
+                    appends a correction whenever a started trip's roster changes (D-56)
     audit.ts       writeAuditLog() — appends to the append-only audit_log table
     rateLimit.ts   Postgres-backed rate limiter (serverless has no shared memory to count in)
   styles/

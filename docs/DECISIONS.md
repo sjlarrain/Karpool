@@ -77,6 +77,21 @@ committed code, not a product or data-model judgment call).
 
 ## Notes
 
+- **D-57, the shape of the trip chat.** One `trip_message` row per message; the thread is the trip's
+  rows in `created_at` order. Membership is the driver plus anyone whose `trip_rider.state` is
+  `joined` or `confirmed` — decided by `canReadTrip`/`canPostToTrip` in `src/domain/tripChat.ts` and
+  applied identically on the read and the write, so the two cannot drift. **Readable for the life of
+  the trip, postable only while it is `scheduled` or `started`**: a confirmed rider keeps the thread
+  of the ride they took, but nothing said on a finished trip can help anyone catch it. A
+  non-participant gets `404`, not `403`, on both verbs — "you may not read this" would itself
+  disclose that there is something worth reading. Guests hold seats but no account, so they neither
+  post nor are notified. **No realtime**: the infrastructure lineament is Supabase + Web Push and
+  nothing else, so the open thread polls every 12 seconds while its overlay is mounted, and push is
+  what reaches a phone nobody is looking at. The push carries the message itself (truncated), not
+  "you have a new message" — the entire value of "I'm here" is being readable from a lock screen.
+  Six one-tap quick messages are seeded from the developer's own examples and go through the same
+  route and the same validation as anything typed by hand.
+
 - D-01, D-02, D-06, D-08, D-09, D-10 are marked "Applied" because they're already embodied in
   committed code (the dependency set; `group.cost_split_note`; `trip_rider.guest_name`;
   `group.late_window_minutes`/`late_penalty`), not open judgment calls — this is recording reality,
