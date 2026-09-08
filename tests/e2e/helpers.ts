@@ -96,6 +96,27 @@ export function wallClock(
 // the zone the form's date/time inputs speak; it defaults to this machine's. Returns what was
 // filled in plus `displayTime` — the same wall clock as the app renders it on a card ("7:45", no
 // leading zero) — so a spec can assert the ride reads back at the time it was published for.
+/**
+ * A return time on the SAME day as `departTime` and strictly after it — two hours later, or the
+ * last minute of the day when two hours would roll over midnight.
+ *
+ * Throws rather than publishing something the form will refuse: a round trip departing at 23:59 has
+ * no same-day return to give it, which is a real limit of the create form (it offers one Day field
+ * for both legs) and not something a test helper should paper over silently.
+ */
+export function sameDayReturn(departTime: string): string {
+  const [h, m] = departTime.split(":").map(Number);
+  const departMinutes = h! * 60 + m!;
+  if (departMinutes >= 23 * 60 + 59) {
+    throw new Error(
+      `Cannot publish a round trip departing at ${departTime}: the create form gives both legs one Day, ` +
+        "so there is no same-day return left. Run the suite outside the last minute of the day.",
+    );
+  }
+  const returnMinutes = Math.min(departMinutes + 120, 23 * 60 + 59);
+  return `${String(Math.floor(returnMinutes / 60)).padStart(2, "0")}:${String(returnMinutes % 60).padStart(2, "0")}`;
+}
+
 export async function publishTrip(
   page: Page,
   minutesFromNow = 60,
@@ -103,10 +124,21 @@ export async function publishTrip(
 ): Promise<{ date: string; time: string; displayTime: string }> {
   const { date, time, displayTime } = wallClock(minutesFromNow, timeZone);
 
+  // The return time has to be set, not left on the form's 17:30 default.
+  //
+  // CreateTripOverlay builds a round trip's return from the SAME `departDate` as the departure, and
+  // D-47 rejects a return at or before it. So a suite that publishes "60 minutes from now" and
+  // never touches the return field is only valid before ~16:30 local — every run after that filled
+  // the form with a 21:57 departure and a 17:30 return and was refused with "Return time must be
+  // after departure", failing at the first assertion with no hint that the clock was the cause.
+  // Nothing about the app was wrong; the helper was.
+  const returnTime = sameDayReturn(time);
+
   await page.locator(".tab", { hasText: "Carpools" }).click();
   await page.locator(".fab").click();
   await page.locator("input[type=date]").first().fill(date);
   await page.locator("input[type=time]").first().fill(time);
+  await page.locator("input[type=time]").nth(1).fill(returnTime);
   await page.locator("button.btnP", { hasText: "Publish to" }).click();
 
   return { date, time, displayTime };

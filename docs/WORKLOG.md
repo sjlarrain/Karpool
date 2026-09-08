@@ -1,5 +1,64 @@
 # Worklog
 
+## Shipped (2026-09-07, on `feat/chat-and-trip-lifecycle` — D-56 points-at-start, D-57 trip chat)
+- **Shipped:** [D-56] the driver is paid when they press **Start**, not at close, with every later
+  roster change appending a signed `drive_adjust` correction; the close is now optional and merely
+  reconciles; the scheduler's 6h sweep runs the real `closeTrip()`; `PATCH /api/trips/:id` accepts a
+  started trip. [D-57] a per-trip chat — `trip_message`, `GET/POST /api/trips/:id/messages`, a
+  `TripChatOverlay` with six quick-reply chips, and a `comment` notification carrying the message
+  itself. Migrations `0024` and `0025`, **applied to the remote on the developer's explicit
+  authorisation**. Two commits, `pnpm verify` green before each.
+- **In progress:** nothing. **Next:** the developer's review, then their explicit auth to merge and
+  push (they said so up front; nothing is pushed).
+- **Blocked on:** nothing.
+- **Gates:** `pnpm verify` green — typecheck, lint, **286 unit tests** (up from 255; +25 for
+  `tripChat`, the rest for the reshaped points module). **7/7 Playwright e2e green**, including a new
+  `chat-and-award.spec.ts` that drives both features through the real UI against the live project.
+
+### Three e2e failures found and fixed, none of them caused by this work
+The suite could not run at all when this session started. Worth recording, because two of them were
+**latent since early September** and would have failed any run after ~16:30 local:
+1. **`publishTrip` never set the return time.** The create form defaults Returns to 17:30 and builds
+   it from the *same day* as the departure, so a trip published "60 minutes from now" after 16:30 was
+   refused by D-47's `return_at > depart_at` check — the spec failed at its first assertion with
+   nothing pointing at the clock. Fixed with `sameDayReturn()`, which also **throws** rather than
+   papering over the real limit: a round trip departing at 23:59 has no same-day return, because the
+   form gives both legs one Day field. **That limit is a genuine product gap and is left alone** —
+   flagging it is the deliverable, inventing a rule is not (CLAUDE.md §2.7).
+2. **Two specs looked for finished trips in the live feed.** D-53 put closed and cancelled trips
+   behind a `Past · N` toggle that starts collapsed, after both specs were written. The kudos step of
+   the core loop and the cancel step of `trip-edit-cancel` were searching a feed the card had
+   legitimately left. Both now expand Past, which is also the path a real user takes.
+3. **Copy assertions on buttons D-56 renamed** — mine, and updated with the change.
+
+### Verified live, in a real browser, against the live project
+Driven as the two seeded e2e accounts on a fresh group, so every figure below is that group's whole
+history rather than a delta on existing data:
+- **Start paid 13** (10 drive + 3 for one filled seat) — asserted off the `/start` response, not off
+  the screen — and the Ranks tab showed **13 with nothing closed**. That is the whole point of D-56:
+  before it, this response paid nothing and the ledger stayed empty until someone remembered to close.
+- **The rider left the started trip**: one response carried both halves — `latePenalty: -5` charged to
+  the rider (unchanged) and `driverPointsAdjusted: -3` taking the seat's bonus back off the driver.
+  Ranks then showed **10**, and the driver was still credited with exactly **one** trip driven, which
+  is why the correction has a kind of its own rather than being a second `drive` row.
+- **Chat, both directions**: the driver's quick chip reached the rider, the rider's typed reply
+  reached the driver, and `notified: 1` each time — the audience is the ride, not the group. The
+  bell rendered "E2E Rider · trip chat / Two minutes, coming down now / Open chat →", i.e. the
+  message itself rather than "you have a new message".
+- **A UI bug fixed on the way:** `.toast` was `white-space: nowrap` with no width bound, so the
+  longer "+N pts" confirmation ran off both edges of the phone and covered the buttons underneath.
+  The rule was already wrong; D-56's copy made it visible. Now bounded and wrapping.
+- Screenshots of all eight screens were captured for the developer via a temporary
+  `tests/e2e/zz-screenshots.spec.ts`, left **untracked** pending their word to delete it (CLAUDE.md
+  §2.4 — deletions inside the repo get confirmed).
+
+### Not done
+- **Nothing is pushed and nothing is merged.** The developer said up front that comes after their
+  review, on their explicit authorisation.
+- Push delivery to a real device is still unverified (G6, unchanged) — the chat's `comment`
+  notification writes its row and calls the same push path as every other type, and the row was
+  confirmed live; the device leg is the same standing gap.
+
 ## Data fix (2026-09-04, manual — minizombini forced onto Manolo's return leg)
 - **What:** the developer (profile `minizombini`) asked to be added to Manolo's trip today. Manolo's
   only trip that date had already been driven and closed (both legs — `3c34ab4c…` and its

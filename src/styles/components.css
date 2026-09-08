@@ -322,7 +322,12 @@ a:hover {
   z-index: 70;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
   animation: up 0.3s ease;
-  white-space: nowrap;
+  /* Was `white-space: nowrap` with no bound, so any toast longer than the viewport ran off both
+     edges — D-56's "+N pts" made an existing rule visibly wrong rather than introducing one.
+     Wrapping inside a bounded width keeps a long confirmation legible on a phone. */
+  max-width: min(88vw, 340px);
+  text-align: center;
+  line-height: 1.4;
 }
 
 .dayh {

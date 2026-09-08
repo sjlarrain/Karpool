@@ -594,9 +594,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
                       // D-56: Start is the tap that pays now, so the toast says so. Falls back to
                       // the old wording if the award could not be written — the trip did start.
                       const points = typeof body?.pointsAwarded === "number" ? body.pointsAwarded : 0;
-                      return points > 0
-                        ? `Trip started · +${points} pts, riders notified 🚗`
-                        : "Trip started — riders notified 🚗";
+                      return points > 0 ? `Trip started · +${points} pts 🚗` : "Trip started — riders notified 🚗";
                     })
                   }
                 >

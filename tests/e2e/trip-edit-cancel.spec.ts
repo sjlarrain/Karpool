@@ -13,9 +13,18 @@ import { createGroup, getGroupCode, joinGroupByCode, signIn, publishTrip, joinTr
 // Every trip here departs 30-45 minutes out, deliberately INSIDE the group's 60-minute
 // late-cancellation window (D-10). Outside it, leaving is free anyway and proves nothing.
 
+// D-53 (shipped after this spec was written) moved finished trips — closed AND cancelled — behind a
+// `Past · N` toggle that starts collapsed. The last step of this file looks up a trip the driver has
+// just cancelled, so it was searching a feed the card had legitimately left, and timed out on a
+// locator that could never resolve. Expanding Past when the live feed does not hold the card keeps
+// this helper honest about where a card is allowed to be.
 async function openTripCard(page: Page, displayTime: string) {
   await page.locator(".tab", { hasText: "Carpools" }).click();
   const card = page.locator(".card", { hasText: displayTime }).first();
+  if (!(await card.isVisible())) {
+    const pastToggle = page.getByText(/^Past · \d+$/);
+    if (await pastToggle.isVisible()) await pastToggle.click();
+  }
   await card.click();
   await expect(page.locator(".ov")).toBeVisible({ timeout: 10_000 });
   return card;
