@@ -3,7 +3,7 @@
 // and presents ledger rows that already carry the weight-derived points at the time each was
 // written (D-11: weights are per-group and can change over time without rewriting history).
 
-export type LedgerKind = "drive" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust";
+export type LedgerKind = "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust";
 
 export interface LedgerRow {
   profileId: string;
@@ -36,6 +36,9 @@ export function aggregateLedger(
   for (const row of rows) {
     const current = stats.get(row.profileId) ?? blank();
     current.points += row.points;
+    // Only `drive` counts a trip driven. D-56's `drive_adjust` re-prices a ride whose seat count
+    // changed after it started, and there can be several on one trip — counting them would report a
+    // driver as having driven the same commute three times.
     if (row.kind === "drive") current.driven += 1;
     if (row.kind === "kudos") current.kudos += 1;
     stats.set(row.profileId, current);

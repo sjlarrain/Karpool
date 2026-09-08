@@ -28,16 +28,20 @@ type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 //    gets a "reminder" notification to its driver and active riders, deduped against an existing
 //    reminder row carrying that trip's id.
 // 2. Close reminders — a trip left "started" for CLOSE_REMINDER_AFTER_MINUTES nudges its driver to
-//    close it. Closing is the only thing that writes points_ledger, so until it happens the ride
-//    has paid nobody; the 6h auto-close below is a tidier, not a substitute, because it awards
-//    nothing at all.
+//    close it. Since D-56 the driver has already been paid at Start and job 4 finishes the ride for
+//    them, so this nudge is now only worth sending for what the driver alone can do: name who
+//    actually rode. It is deliberately kept — a no-show costs a rider points, and only the driver
+//    was there to judge it.
 // 3. Generate a round trip's return leg (D-35 mechanic (ii)) — a round trip whose outbound is
 //    still "started" RETURN_LEG_LEAD_MINUTES before the return departure is closed by the
-//    scheduler, in the same restricted form an admin gets, which pays the driver and materialises
-//    the return leg. Without this the leg's existence depends on the driver remembering one tap.
-// 4. Auto-close abandoned trips — a trip left "started" for AUTO_CLOSE_AFTER_HOURS is force-closed.
-//    This is a safety net, not the real close flow: no driver confirmed who rode, so it never
-//    touches points_ledger. Logged to audit_log (actor_profile_id: null marks it as system-acted).
+//    scheduler, in the same restricted form an admin gets, which settles the driver's award and
+//    materialises the return leg. Without this the leg's existence depends on the driver remembering one tap.
+// 4. Finish trips the driver left running — a trip left "started" for AUTO_CLOSE_AFTER_HOURS is
+//    closed by the scheduler. Since D-56 this is the NORMAL way a ride ends, not a safety net: the
+//    developer removed the driver's obligation to end a trip, so most rides reach "closed" here. It
+//    runs the real close (restricted, as the scheduler's close always was), which confirms the
+//    riders, reconciles the award against what Start paid, materialises any return leg and sends
+//    the kudos prompt. Logged to audit_log (actor_profile_id: null marks it as system-acted).
 // 5. Expire trips nobody started (D-23) — a scheduled trip stays live for UNSTARTED_GRACE_HOURS
 //    past its departure so a driver who forgot to tap Start can still put it right. After that it
 //    ends as cancelled with reason NOT_STARTED_REASON, which the UI shows as "Past · never started"
@@ -222,16 +226,41 @@ async function handleTick(request: Request) {
 
   let autoClosed = 0;
   await forEachTrip(staleTrips ?? [], failures, "auto_close", async (trip) => {
-    // A round trip still owed a return leg belongs to mechanic (ii), which will close it properly
-    // and pay for it. Closing it here for zero points would strand the return.
+    // A round trip still owed a return leg belongs to mechanic (ii), which closes it at the right
+    // moment for its riders. Closing it hours early here would publish the return leg before anyone
+    // needs it.
     if (deferredFromAutoClose.has(trip.id)) return;
-    await admin.from("trip").update({ status: "closed", closed_at: now.toISOString() }).eq("id", trip.id);
+
+    // D-56 (2026-09-07): this goes through closeTrip() now instead of stamping the status by hand.
+    // The developer removed the driver's obligation to end a trip, and answered "Yes, finish it
+    // automatically" — so this is no longer a tidier, it is how a ride normally ends. Everything a
+    // close is responsible for has to happen: the riders confirmed, the award reconciled against
+    // what Start paid, the return leg materialised, and the kudos prompt sent. A raw status stamp
+    // did none of that, which is why abandoned trips used to leave their riders with no way to
+    // thank anyone.
+    //
+    // Restricted, as the scheduler's close always has been: it confirms every active rider and can
+    // name nobody a no-show, because it was not there either.
+    const result = await closeTrip({ tripId: trip.id, actor: { isSystem: true } });
+    if (!result.ok) {
+      failures.push(`auto_close/${trip.id}: ${result.error}`);
+      return;
+    }
+
     await admin.from("audit_log").insert({
       actor_profile_id: null,
       action: "cron_auto_close",
       entity_type: "trip",
       entity_id: trip.id,
-      after: { status: "closed", reason: `started_at older than ${AUTO_CLOSE_AFTER_HOURS}h` },
+      after: {
+        status: "closed",
+        mode: result.mode,
+        confirmedCount: result.confirmedCount,
+        pointsAwarded: result.pointsAwarded,
+        pointsAdjusted: result.pointsAdjusted,
+        backTripId: result.backTripId,
+        reason: `started_at older than ${AUTO_CLOSE_AFTER_HOURS}h`,
+      },
     });
     autoClosed += 1;
   });

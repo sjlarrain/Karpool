@@ -451,7 +451,7 @@ export type Database = {
           created_at: string
           group_id: string
           id: string
-          kind: "drive" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust"
+          kind: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust"
           points: number
           profile_id: string
           reason: string | null
@@ -461,7 +461,7 @@ export type Database = {
           created_at?: string
           group_id: string
           id?: string
-          kind: "drive" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust"
+          kind: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust"
           points: number
           profile_id: string
           reason?: string | null
@@ -471,7 +471,7 @@ export type Database = {
           created_at?: string
           group_id?: string
           id?: string
-          kind?: "drive" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust"
+          kind?: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust"
           points?: number
           profile_id?: string
           reason?: string | null

@@ -54,7 +54,8 @@ interface DetailResponse {
   // D-38: the driver changed this trip after the viewer took their seat, so leaving is free.
   penaltyWaived: boolean;
   // Everything the edit form opens with. Null unless the viewer is the driver and the trip is
-  // still scheduled — a started trip's plan is fixed.
+  // still live. D-56: a started trip counts — the plan is exactly what changes once you are in the
+  // car, so the server no longer withholds this the moment a trip gets under way.
   editable: {
     departAt: string;
     returnAt: string | null;
@@ -115,7 +116,13 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
 
   // Returns whether the action actually went through, so a confirmation sheet can stay open —
   // showing its error — instead of closing over a failure the driver never saw.
-  async function act(path: string, message: string, payload?: unknown): Promise<boolean> {
+  async function act(
+    path: string,
+    // D-56: Start now pays the driver, and what it paid is only known from the response — so a
+    // caller may pass a builder instead of a fixed string.
+    message: string | ((body: Record<string, unknown> | null) => string),
+    payload?: unknown,
+  ): Promise<boolean> {
     setError(null);
     setBusy(true);
     try {
@@ -125,14 +132,14 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
           ? {}
           : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
       });
-      const body = await readJsonBody(res);
+      const body = await readJsonBody<Record<string, unknown>>(res);
       if (!res.ok) {
         setError(body?.message ?? "That didn't work.");
         return false;
       }
       setConfirmingLeave(false);
       await load();
-      onChanged(message);
+      onChanged(typeof message === "function" ? message(body) : message);
       return true;
     } catch {
       setError("Couldn't reach the server — check your connection and try again.");
@@ -530,8 +537,21 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
             {trip.status === "scheduled" && (
               <>
                 {shareButton}
-                <button className="btnP" disabled={busy} onClick={() => act("start", "Trip started — riders notified 🚗")}>
-                  Start trip · notify riders
+                <button
+                  className="btnP"
+                  disabled={busy}
+                  onClick={() =>
+                    act("start", (body) => {
+                      // D-56: Start is the tap that pays now, so the toast says so. Falls back to
+                      // the old wording if the award could not be written — the trip did start.
+                      const points = typeof body?.pointsAwarded === "number" ? body.pointsAwarded : 0;
+                      return points > 0
+                        ? `Trip started · +${points} pts, riders notified 🚗`
+                        : "Trip started — riders notified 🚗";
+                    })
+                  }
+                >
+                  Start trip · get your points
                 </button>
                 {/* D-38: plans change. Both ways out sit under the primary action, secondary in
                     weight — the common case is still starting the ride you published. */}
@@ -572,10 +592,31 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
                 >
                   ● Trip in progress — riders notified
                 </div>
+                {/* D-56: the developer removed the driver's obligation to end a trip ("no user is
+                    using that"). They have already been paid, and the ride finishes itself — so the
+                    screen says so rather than leaving a button nobody presses looking mandatory. */}
+                <div
+                  style={{
+                    font: "600 11.5px var(--font-body)",
+                    color: "rgba(0,0,0,.5)",
+                    textAlign: "center",
+                    lineHeight: 1.45,
+                    margin: "0 0 12px",
+                  }}
+                >
+                  Your points are already in — this ride closes itself.
+                </div>
                 <ParkingLink url={data.parkingUrl} />
-                <button className="btnG" onClick={() => setClosing(true)}>
-                  End &amp; close trip
-                </button>
+                {/* Both of the driver's remaining reasons to touch this screen, which are the two
+                    the developer named: change the plan, or say who actually rode. */}
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button className="btnG" disabled={busy || !editable} onClick={() => setEditing(true)} style={{ flex: 1 }}>
+                    Edit trip
+                  </button>
+                  <button className="btnG" disabled={busy} onClick={() => setClosing(true)} style={{ flex: 1 }}>
+                    End trip now
+                  </button>
+                </div>
               </>
             )}
           </>

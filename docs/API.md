@@ -321,13 +321,14 @@ Trip detail overlay: decorated summary plus the driver's pickup list in route or
 - **Notes**: `trip.stopNotices` (D-29) is the ride's stops in travel order, each with its `leg` (`out`/`back`) and the `when` wording the UI shows (`"in way"` for an outbound stop, `"back"` for a return one). Empty for a direct ride. `addableMembers` (D-24) is the passenger picker's list — group members not already on the trip. Empty unless the caller is the driver and the trip is `scheduled`/`started`. `pickups[].addedByDriver` marks a seat the driver booked for someone. `penaltyWaived` (D-38) is true when the caller's own seat carries `trip_rider.penalty_waived_at` — the driver changed the trip after they joined, so leaving costs them nothing and the UI says so instead of showing the usual late-cancellation warning. `editable` (D-38) is the edit form's starting values plus the group's stop list, non-null only when the caller is the driver **and** the trip is still `scheduled`; `direction` is included for the form's leg rules but is **not** editable. `parkingUrl` (D-54) is the group's parking link for the leg this trip travels (`back` gets `parking_url_back`, everything else `parking_url_out`), and is **null for anyone but the driver** — the gate is here rather than in the client, so a rider never receives the URL at all.
 
 ### `PATCH /api/trips/:id`
-Edit a trip. Driver only, and only while `status: "scheduled"` — a started or closed trip's plan is
-fixed.
+Edit a trip. Driver only, and live only — `scheduled` **or** `started`. D-56 (2026-09-07,
+developer: "Always editable by the driver") opened this to a started trip: the plan is exactly what
+changes once the driver is in the car. Closed and cancelled trips are history and stay shut.
 
 - **Auth**: required, caller must be the trip's driver
 - **Request**: any non-empty subset of `{ departAt: string (ISO), returnAt: string (ISO) | null, capacity: number (1-7), outStopId: string (uuid) | null, backStopId: string (uuid) | null }`
 - **Response**: `{ trip, changed: TripEditField[], notifiedRiders: number }` — `changed` lists only the fields whose value actually moved (`departAt` / `returnAt` / `capacity` / `outStopId` / `backStopId`), so a form resaved untouched comes back `changed: []` with the trip unmodified.
-- **Errors**: `401 unauthenticated`, `404 not_found`, `403 forbidden` (not the driver), `409 wrong_status` (not scheduled), `409 capacity_below_riders` (fewer seats than people already aboard), `400 invalid_request`, `400 unknown_stop`, `500 update_failed`, `500 waiver_failed`
+- **Errors**: `401 unauthenticated`, `404 not_found`, `403 forbidden` (not the driver), `409 wrong_status` (closed or cancelled), `409 capacity_below_riders` (fewer seats than people already aboard), `400 invalid_request`, `400 unknown_stop`, `500 update_failed`, `500 waiver_failed`
 - **Side effects**: updates the `trip` row. When a **material** field changed — the departure, the
   return, or either stop, as defined by `diffTripEdit` in `src/domain/tripEdit.ts` — it also
   (a) stamps `trip_rider.penalty_waived_at` on **every seat already aboard**, so those riders can
@@ -351,7 +352,16 @@ fixed.
   there is no rule for which rider would lose their seat, and this route does not invent one.
 
 ### `POST /api/trips/:id/start`
-`scheduled→started`, not before T-2h (D-16).
+`scheduled→started`, not before T-2h (D-16), **and the tap that pays the driver** (D-56).
+
+**Since D-56 (2026-09-07) this route writes the ledger.** The developer removed the driver's
+obligation to end a trip ("Remove the end trip. No user is using that.") — closing used to be the
+only writer of `points_ledger`, so drivers who never closed were never paid for rides that actually
+ran. The award moved to the tap drivers do make. What it computes is unchanged: `group.drive_weight`
+plus a fill bonus of every seat filled at that moment (`pool_weight + (n-1)·pool_step` summed, 3+5+7
+at the defaults, guests included). The seat count at Start is a **forecast**, and every later change
+to a started trip's roster appends a `drive_adjust` correction — see *Keeping the award honest*
+below.
 
 **Not driver-only (D-50, 2026-09-01).** A **group admin** may start a trip the driver forgot to,
 mirroring D-35(i)'s close — the write itself is shared with the admin console's force-start via
@@ -359,9 +369,30 @@ mirroring D-35(i)'s close — the write itself is shared with the admin console'
 
 - **Auth**: required, caller must be the trip's driver or a group admin of its group
 - **Request**: none
-- **Response**: `{ trip, notifiedRiders: number, pushDelivery: { sent: number, configError: string | null } }`. The delivery counts are reported rather than thrown: the trip has started and stays started whether or not any phone lit up, so a broken push channel must not fail the request — but it must not be invisible either. `pushDelivery.configError` is what a bad `VAPID_SUBJECT` looks like from here.
+- **Response**: `{ trip, notifiedRiders: number, pushDelivery: { sent: number, configError: string | null }, pointsAwarded: number, awardError: string | null }`. `pointsAwarded` is what the driver was just paid, echoed in the toast. `awardError` is non-null when the ledger write failed: the trip **has** started, and the award is re-derived from scratch by the next roster change or by the close, so this is reported rather than thrown. The delivery counts are reported rather than thrown: the trip has started and stays started whether or not any phone lit up, so a broken push channel must not fail the request — but it must not be invisible either. `pushDelivery.configError` is what a bad `VAPID_SUBJECT` looks like from here.
 - **Errors**: `401 unauthenticated`, `404 not_found`, `403 not_driver` (caller is neither the driver nor a group admin), `409 wrong_status`, `409 too_early`
-- **Side effects**: updates `trip.status` and `started_at`; inserts one `notification` row per active rider (`type: "start"`) and pushes to their devices. No ledger/audit writes.
+- **Side effects**: updates `trip.status` and `started_at`; **inserts one `drive` `points_ledger` row on the driver** (D-56); inserts one `notification` row per active rider (`type: "start"`) and pushes to their devices. No audit writes. The ledger write happens after the status flip (so no payment can exist for a trip that failed to start) and before the notifications (so nothing merely nice-to-have sits between the drive and its award).
+
+#### Keeping the award honest (D-56)
+
+The seat count read at Start is a forecast. The developer asked that the award follow the truth
+("Yes, correct them"), so **every route that changes a started trip's roster re-prices the ride and
+appends the difference** as a `drive_adjust` row: `POST /riders`, `DELETE /riders/:riderId`,
+`POST /guests`, `DELETE /guests/:tripRiderId`, `POST /leave`, and the close itself. Those routes each
+return `pointsAdjusted` (and `awardError`); the leave route returns it as `driverPointsAdjusted`,
+since its own `latePenalty` belongs to the rider.
+
+- `points_ledger` is append-only (CLAUDE.md §3.5), so a correction is a **new row**, never an edit
+  of the `drive` row Start wrote.
+- The kind is `drive_adjust`, not a second `drive` row, because `aggregateLedger` counts `driven` as
+  the *number* of `drive` rows — a second one would report the same commute as two trips driven.
+  It is not `admin_adjust` either: that kind means a human overrode the system by hand, and burying
+  automatic corrections in it would make real interventions unfindable.
+- Each correction is derived from **what the ledger already holds** (`sum(drive) + sum(drive_adjust)`
+  for that trip and driver) rather than from the change that triggered it. So a correction lost to a
+  failure is re-derived by the next one, and one applied twice owes nothing the second time.
+- A trip that was already `started` when D-56 shipped has no `drive` row; its close finds
+  `paidSoFar = 0` and pays the whole award. No backfill was needed.
 
 ### `POST /api/trips/:id/cancel`
 Driver only, `scheduled→cancelled`.
@@ -379,7 +410,14 @@ Driver only, `scheduled→cancelled`.
 
 ### `POST /api/trips/:id/close`
 `started→closed`. Confirms which currently-active registered riders actually rode, adds any guest
-riders, awards points, and — on a round trip — **materialises the return leg** (D-35).
+riders, **reconciles** the driver's award, and — on a round trip — **materialises the return leg**
+(D-35).
+
+**Optional since D-56 (2026-09-07).** The driver was paid at Start and the scheduler finishes the
+ride for them (`/api/cron/tick` job 4), so a driver who never opens this screen loses nothing. It is
+kept for the two things only the driver can do: name who actually rode, and seat a guest who was not
+on the list. In the app it is now a secondary "End trip now" button beside "Edit trip", not the
+primary action it used to be.
 
 **Not driver-only (D-35 mechanic (i)).** A **group admin** may close a ride the driver forgot to
 close, because on a round trip the close is also what creates the return leg: a forgotten close
@@ -387,22 +425,22 @@ would strand everyone who declared a return. **Riders cannot close** (developer,
 close decides who rode and moves points, and that is not an authority one passenger should hold
 over another. Two forms:
 
-| Form | Who | Confirms | No-shows | Guests | Pays the driver |
+| Form | Who | Confirms | No-shows | Guests | Settles the driver's award |
 |---|---|---|---|---|---|
 | `full` | the driver | only the ids in the body | everyone else | yes | yes |
-| `restricted` | a group admin | **every** active rider | **none** | ignored | yes |
+| `restricted` | a group admin, or the scheduler | **every** active rider | **none** | ignored | yes |
 
 A restricted close ignores `confirmedTripRiderIds`, `guestNames` and `groupGuestIds` entirely — judging that a
-colleague did not show up is a call only the driver was there to make — but still pays the normal
+colleague did not show up is a call only the driver was there to make — but still settles the normal
 award, because a leg that was driven was driven regardless of who tapped the button.
 
 - **Auth**: required, caller must be the trip's driver or a group admin of its group
 - **Request**: `{ confirmedTripRiderIds?: string[] (uuid, trip_rider row ids — not profile ids — of active riders who rode; default []), guestNames?: string[] (1-80 chars each, max 20; default []), groupGuestIds?: uuid[] (max 20; default []) }`. Any id in `confirmedTripRiderIds` that isn't an active rider on this trip is silently ignored, not trusted.
-- **Response**: `{ trip, mode: "full" | "restricted", confirmedCount: number, noShowCount: number, pointsAwarded: number, backTripId: string | null }` — `pointsAwarded` is the **driver's** own award (drive weight + fill bonus), which since D-49 is the only award a close writes.
+- **Response**: `{ trip, mode: "full" | "restricted", confirmedCount: number, noShowCount: number, pointsAwarded: number, pointsAdjusted: number, backTripId: string | null }` — since D-56, `pointsAwarded` is the driver's **whole** award for the trip (the `drive` row Start wrote plus every correction), and `pointsAdjusted` is what *this* close changed it by, which is `0` whenever the roster at close matched the roster at Start. Two figures rather than one because reporting the total as "+N" would read as a second payment, and reporting the delta alone would tell a driver "+0 pts" for a ride that paid them 25.
 - **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `403 not_permitted` (caller is neither the driver nor a group admin — riders included), `409 wrong_status` (the trip is not `started` — **including the case where another close won the race, see Exactly-once below**), `500 confirm_failed` / `no_show_failed` / `guest_add_failed` / `back_leg_failed` / `ledger_write_failed` / `update_failed`
 - **Exactly-once**: closing is guarded by a compare-and-swap — `update trip set status='closed' where id=? and status='started'` — taken **before** the guest rows and the ledger are written. Two closes in flight together therefore produce one `200` and one `409 wrong_status`, never two payments. Without it both callers passed the state-machine check (a read) and both wrote a full award set; that was reproduced against the live database on 2026-08-31 and is the concurrent sibling of the sequential duplication D-41 had to clean out of the leaderboard by hand. The realistic trigger is not a double-tap but D-35 mechanic (ii): the scheduler closes round trips at T−2h before `return_at` every five minutes, so a driver tapping Close in that window races a cron job. Any failure between the claim and the ledger **releases the claim** (status back to `started`, `closed_at` cleared), so the close stays retryable exactly as before; if that release itself fails the error message says so, because the trip is then closed and unpaid.
-- **Scoring (D-19, reshaped by D-42, then D-49)**: the **driver** gets exactly one `drive` entry, worth `group.drive_weight` plus a fill bonus of every seat they filled (`pool_weight + (n-1)·pool_step` summed — 3+5+7 at the defaults, guests included). That is the **only** award a close writes: since D-49 a rider earns nothing for riding, so no `pool` entry is created for anyone. Riders still see a `pooled` count — it is now a count of their confirmed seats on closed trips rather than of ledger rows (see `GET /api/groups/:id/leaderboard`). `group.rider_pool_weight` is deprecated and read by nothing. Each registered rider marked `no_show` is still charged `group.no_show_penalty` (default −10) on **their own** profile, not the driver's; guests are never penalised and earn nothing.
-- **Side effects**: updates confirmed riders' `trip_rider.state` to `"confirmed"`, unconfirmed active riders to `"no_show"`; inserts a `trip_rider` row per guest (`state: "confirmed"`, `profile_id: null`); inserts `points_ledger` rows — one `drive` entry on the **driver** (`group.drive_weight` + the seat fill bonus, guests included), plus a `no_show` entry per no-showing registered rider. No rider award of any kind is written (D-49). Guests fill a seat, so they still pay the driver's bonus, but hold no profile and earn nothing themselves (D-09); inserts a `rate`-type `notification` row for each confirmed *registered* rider **whose ride ends here** (see below); updates `trip.status` and `closed_at`.
+- **Scoring (D-19, reshaped by D-42, then D-49, then D-56)**: the **driver's** award is `group.drive_weight` plus a fill bonus of every seat they filled (`pool_weight + (n-1)·pool_step` summed — 3+5+7 at the defaults, guests included). **Since D-56 the `drive` row for that was written at Start**, and this route writes only the difference between it and the roster as it finally stands — as a `drive_adjust` row, or as nothing at all when they match. The close is the moment the forecast becomes a fact: guests are seated here, riders are confirmed here, and no-shows are named here, all of which move the seat count. Since D-49 a rider earns nothing for riding, so no `pool` entry is created for anyone. Riders still see a `pooled` count — it is now a count of their confirmed seats on closed trips rather than of ledger rows (see `GET /api/groups/:id/leaderboard`). `group.rider_pool_weight` is deprecated and read by nothing. Each registered rider marked `no_show` is still charged `group.no_show_penalty` (default −10) on **their own** profile, not the driver's; guests are never penalised and earn nothing.
+- **Side effects**: updates confirmed riders' `trip_rider.state` to `"confirmed"`, unconfirmed active riders to `"no_show"`; inserts a `trip_rider` row per guest (`state: "confirmed"`, `profile_id: null`); inserts `points_ledger` rows — a `drive_adjust` entry on the **driver** when the final seat count differs from what Start paid for (D-56; nothing when it matches), plus a `no_show` entry per no-showing registered rider. No rider award of any kind is written (D-49). Guests fill a seat, so they still pay the driver's bonus, but hold no profile and earn nothing themselves (D-09); inserts a `rate`-type `notification` row for each confirmed *registered* rider **whose ride ends here** (see below); updates `trip.status` and `closed_at`.
 - **Return leg (D-35)**: if the trip is `direction: "round"` with a `return_at`, calls `generate_back_trip()` (`supabase/migrations/0013_round_trip_back_leg.sql`), which creates a `direction: "back"` trip at `return_at` with `parent_trip_id` set, inheriting the outbound's `capacity` and `back_stop_id`, and seats every **confirmed** rider whose `trip_rider.wants_return` is true (oldest join first, guests skipped). The generator is **idempotent** — a unique index on `trip.parent_trip_id` means the driver's close, a rider's close, an admin's close and (later) the cron tick can all call it while only one leg is ever created. If the driver already hand-published a `back` trip at that hour it is **adopted** rather than duplicated (the D-36 collision). Riders seated on it get a `change`-type notification. Generation happens **before** the ledger write, and a failure in it releases the close's claim, so it leaves the close safely retryable rather than leaving a closed trip whose return leg does not exist.
 - **Kudos targeting (D-35 answer (B))**: kudos is one prompt per rider per **ride**, not per leg. Riders carried on to the return leg are *not* prompted here — they are prompted when that leg closes — so a rider travelling both ways is asked exactly once, at the end.
 
@@ -423,7 +461,7 @@ Drop a seat you're holding.
 
 - **Auth**: required, caller must hold an active seat on the trip
 - **Request**: none
-- **Response**: `{ tripRider, latePenalty: number | null, penaltyWaived: boolean }`
+- **Response**: `{ tripRider, latePenalty: number | null, penaltyWaived: boolean, driverPointsAdjusted: number, awardError: string | null }` — `driverPointsAdjusted` is D-56's other half: on a **started** trip the seat the rider just gave up comes off the driver's fill bonus too, so both sides of one event are in one response. `0` while the trip is still scheduled, when nothing has been paid yet.
 - **Errors**: `401 unauthenticated`, `404 not_found` (trip missing or caller isn't riding it), `409 wrong_status` (trip already closed/cancelled), `500 seat_lookup_failed`, `500 leave_failed`
 - **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`). A failed seat lookup is `500 seat_lookup_failed`, never `404` — telling a rider who holds a seat that they don't would leave them on a trip they believe they left. If the leave falls inside the group's configured cancellation window (`group.late_window_minutes`, default 60 — from `windowMinutes` before departure through any time after), inserts a `late_leave` `points_ledger` entry (`group.late_penalty`, default -5) for the leaving rider. **Exception (D-24):** a seat the driver added (`trip_rider.added_by_profile_id` set) is never penalised — the rider never booked it. **Exception (D-38):** a seat whose trip changed under the rider (`trip_rider.penalty_waived_at` set by `PATCH /api/trips/:id`) is never penalised either, at any distance from departure — the window exists to stop people dropping out at the last minute on a plan that never moved, and the plan moved. The response's `penaltyWaived` says which rule applied. **Notifies the driver** (`type: "leave"`) + push — a freed seat is one the driver can offer to someone else (D-52) — fired last, after the seat and any penalty are written.
 
@@ -435,9 +473,9 @@ departure, for as long as the trip is alive (D-23's 24h grace window).
 
 - **Auth**: required, caller must be the trip's driver
 - **Request**: `{ profileId: string (uuid) }`
-- **Response**: `201 { tripRider }`
+- **Response**: `201 { tripRider, pointsAdjusted: number, awardError: string | null }` — `pointsAdjusted` is D-56's correction: seating someone at the kerb on a **started** trip is worth the next seat's bonus. `0` while the trip is still scheduled.
 - **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `403 not_driver`, `409 is_driver`, `409 wrong_status` (trip closed/cancelled), `409 not_member` (not in the trip's group), `409 already_joined`, `409 full`
-- **Side effects**: inserts a `trip_rider` row (`state: "joined"`, `added_by_profile_id` = caller); notifies the added member (`type: "change"`) + push; writes an `audit_log` row (`trip_rider_added_by_driver`).
+- **Side effects**: inserts a `trip_rider` row (`state: "joined"`, `added_by_profile_id` = caller); appends a `drive_adjust` `points_ledger` row when the trip is started (D-56); notifies the added member (`type: "change"`) + push; writes an `audit_log` row (`trip_rider_added_by_driver`).
 
 ### `DELETE /api/trips/:id/riders/:riderId`
 Driver takes back a seat they booked for someone (D-24). Limited to seats the driver added — a
@@ -446,9 +484,9 @@ not be able to bump them.
 
 - **Auth**: required, caller must be the trip's driver
 - **Request**: none
-- **Response**: `{ tripRider }`
+- **Response**: `{ tripRider, pointsAdjusted: number, awardError: string | null }`
 - **Errors**: `401 unauthenticated`, `404 not_found` (trip missing, or that rider isn't on it), `403 not_driver`, `403 not_added_by_driver`, `409 wrong_status`, `500 remove_failed`
-- **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`); notifies the removed member + push; writes an `audit_log` row (`trip_rider_removed_by_driver`). No ledger writes — a driver undoing their own action isn't a late cancellation.
+- **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`); appends a `drive_adjust` `points_ledger` row when the trip is started, taking that seat's bonus back off the driver (D-56); notifies the removed member + push; writes an `audit_log` row (`trip_rider_removed_by_driver`). The rider is never charged — a driver undoing their own action isn't a late cancellation.
 
 ## Kudos & scores
 
@@ -589,20 +627,26 @@ carrying that trip's id. The window also reaches `DEPARTURE_REMINDER_GRACE_MINUT
 now, so a trip whose departure slipped past between two ticks still gets a slightly late reminder
 instead of none at all; (1b) **close reminders** — a trip left `started` for
 `CLOSE_REMINDER_AFTER_MINUTES` (90) sends a `close_reminder`-type notification + push to its
-**driver only**, since the driver is the only person who can close a trip and therefore the only
-one who can act on it. Closing is what writes `points_ledger`, so until it happens the ride has paid
-nobody; the 6h auto-close in job (3) is a tidier rather than a substitute, because it awards
-nothing. Deduped the same way, on its own notification type — see [D-39]; (2) **return-leg
+**driver only**. Since D-56 the driver has already been paid at Start and job (3) finishes the ride
+for them, so this nudge is no longer about the money — it is kept for the one thing only the driver
+can do, which is name who actually rode. A no-show costs a rider points, and only the driver was
+there to judge it. Deduped the same way, on its own notification type — see [D-39]; (2) **return-leg
 generation (D-35 mechanic (ii))** — a `round` trip still `started`
 within `RETURN_LEG_LEAD_MINUTES` (120) of its `return_at`, with no leg built yet, is closed by the
 scheduler in the same **restricted** form an admin gets: every active rider confirmed, nobody marked
-`no_show`, **the driver paid in full**, and the return leg materialised. The deadline is measured
+`no_show`, **the driver's award settled** (D-56: paid at Start, reconciled here), and the return leg
+materialised. The deadline is measured
 against the *return* departure, so a rider learns two hours out whether they have a seat home. This
 job runs **before** the auto-close, and any round trip still owed a leg is **skipped** by it — on a
 normal commute (out 08:00, back 18:00) the 6h stale mark falls at 14:00, before the 16:00 deadline,
-so without that skip the auto-close would take the trip first, close it for zero points and leave
-the return unbuilt; (3) auto-close — any *other* trip left `started` for 6+ hours is force-closed as
-a safety net (never touches `points_ledger` — no driver confirmed who actually rode); (4) expiry (D-23) — any
+so without that skip the auto-close would publish the return leg hours before anyone needs it;
+(3) **auto-close** — any *other* trip left `started` for 6+ hours is closed by the scheduler. **Since
+D-56 this is how a ride normally ends**, not a safety net: the developer removed the driver's
+obligation to end a trip and asked that rides finish themselves, so this now runs the real close
+(restricted, as the scheduler's close always was) instead of stamping the status by hand. That means
+the riders are confirmed, the award is reconciled against what Start paid, any return leg is
+materialised and the kudos prompt goes out — none of which the old raw status update did, which is
+why abandoned trips used to leave their riders with no way to thank anyone; (4) expiry (D-23) — any
 trip still `scheduled` 24 hours (`UNSTARTED_GRACE_HOURS`) after its departure time is ended as
 `cancelled` with `cancelled_reason: "not_started"`. No points and no penalties: an expiry is the
 absence of a trip, not anyone's fault. That update is re-guarded on `status = 'scheduled'`, so a
@@ -612,7 +656,7 @@ trip started between the read and the write is left alone.
 - **Request**: none
 - **Response**: `{ failures: string[], remindersSent: number, reminderFailures: number, closeRemindersSent: number, closeReminderFailures: number, returnLegsGenerated: number, autoClosed: number, expired: number }`. Each trip is processed in isolation: a throw is recorded in `failures` as `<job>/<tripId>: <message>` and the sweep moves on, because the five jobs run in one request and an unhandled throw used to abort every job after it — permanently, since the next tick meets the same data. The `*Failures` counts are how a broken notification path becomes visible: `notifyProfiles` returns its insert error rather than discarding it, so a tick that could not write its rows reports a number instead of looking idle.
 - **Errors**: `401 unauthorized`
-- **Side effects**: inserts `notification` rows (`type: "reminder"` for departures, `type: "close_reminder"` for unclosed trips, `type: "change"` for expiries, `type: "change"` to the back leg's riders when one is generated) + sends push; updates stale trips' `status`/`closed_at` and expired trips' `status`/`cancelled_reason`; **writes `points_ledger` for a generated return leg** — the one place the scheduler moves points, and deliberately so: the outbound was driven whether or not anyone remembered to close it; inserts an `audit_log` row per generation (`cron_generate_return_leg`), per auto-close (`cron_auto_close`) and per expiry (`cron_expire_unstarted`), plus one `cron_tick_failures` row (`entity_id: null`) for any tick that could not process a trip — the response body is only read by `pg_net`, which discards it, so isolation without this record would just be a quieter version of the same silent failure. All carry `actor_profile_id: null`, marking them system-acted.
+- **Side effects**: inserts `notification` rows (`type: "reminder"` for departures, `type: "close_reminder"` for unclosed trips, `type: "change"` for expiries, `type: "rate"` for the kudos prompt on every ride it finishes, `type: "change"` to the back leg's riders when one is generated) + sends push; updates stale trips' `status`/`closed_at` and expired trips' `status`/`cancelled_reason`; **may write `points_ledger`** on both closing jobs (2) and (3) — a `drive_adjust` correction when the roster at close differs from the one Start was paid for (D-56), and the whole award for any trip that was already `started` before D-56 shipped and so has no `drive` row; inserts an `audit_log` row per generation (`cron_generate_return_leg`), per auto-close (`cron_auto_close`) and per expiry (`cron_expire_unstarted`), plus one `cron_tick_failures` row (`entity_id: null`) for any tick that could not process a trip — the response body is only read by `pg_net`, which discards it, so isolation without this record would just be a quieter version of the same silent failure. All carry `actor_profile_id: null`, marking them system-acted.
 
 ## Feedback
 

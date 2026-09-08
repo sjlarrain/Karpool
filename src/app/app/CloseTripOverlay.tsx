@@ -57,7 +57,7 @@ export function CloseTripOverlay({ tripId, riders, parkingUrl, addableGuests, on
       // why: an unhandled fault here returns an HTML error page, `res.json()` threw, and the driver
       // was told to check their connection while the trip was being half-closed and they were
       // double-paid on every retry.
-      const body = await readJsonBody<{ pointsAwarded: number }>(res);
+      const body = await readJsonBody<{ pointsAwarded: number; pointsAdjusted: number }>(res);
 
       if (!res.ok) {
         setError(body?.message ?? "Something went wrong closing that trip. It may already be closed — reopen it to check before trying again.");
@@ -67,7 +67,12 @@ export function CloseTripOverlay({ tripId, riders, parkingUrl, addableGuests, on
         setError("The trip may have closed even though this failed — reopen it to check before trying again.");
         return;
       }
-      onClosed(`Trip closed · +${body.pointsAwarded} pts, riders notified`);
+      // D-56: the driver was paid at Start, so this close usually moves nothing. Reporting a "+N"
+      // that is really the whole trip's award would read as a second payment; reporting "+0" for a
+      // ride that paid 25 would read as a bug. So: say what changed, and only when it changed.
+      const delta = body.pointsAdjusted ?? 0;
+      const change = delta === 0 ? "" : delta > 0 ? ` · +${delta} pts` : ` · ${delta} pts`;
+      onClosed(`Trip closed${change} · riders notified`);
     } catch {
       setError("Couldn't reach the server — check your connection and try again.");
     } finally {
@@ -90,11 +95,13 @@ export function CloseTripOverlay({ tripId, riders, parkingUrl, addableGuests, on
         <button className="iconbtn" onClick={onClose} aria-label="Back">
           ←
         </button>
-        <h2 style={{ fontSize: 18, fontWeight: 800, color: "var(--ink)", margin: 0 }}>Close trip</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 800, color: "var(--ink)", margin: 0 }}>End trip</h2>
       </div>
       <div className="scroll" style={{ padding: 18 }}>
         <p style={{ font: "600 13px var(--font-body)", lineHeight: 1.5, color: "rgba(0,0,0,.55)", margin: "0 0 16px" }}>
-          Confirm who rode with you. Everyone confirmed counts toward your drive bonus and gets a nudge to leave you kudos.
+          You were paid when you started. Confirm who actually rode — anyone you leave out is marked
+          a no-show, which takes their seat back off your bonus and costs them points. Everyone you
+          confirm gets a nudge to leave you kudos.
         </p>
 
         {riders.length > 0 && (
@@ -238,7 +245,7 @@ export function CloseTripOverlay({ tripId, riders, parkingUrl, addableGuests, on
           </div>
         )}
         <p style={{ font: "500 11px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "2px 2px 20px" }}>
-          A one-off name fills a seat, so it still counts toward your drive bonus — but it is not
+          A one-off name fills a seat, so it is added to your drive bonus here — but it is not
           tracked for anyone. Ask an admin to add a regular rider to the guest list instead.
         </p>
 
@@ -248,7 +255,7 @@ export function CloseTripOverlay({ tripId, riders, parkingUrl, addableGuests, on
 
         {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "0 0 12px" }}>{error}</p>}
         <button className="btnP" disabled={busy} onClick={confirmClose}>
-          Close &amp; notify riders
+          End trip &amp; notify riders
         </button>
       </div>
     </div>

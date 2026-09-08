@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { notifyProfiles } from "@/lib/notify/tripNotify";
 import { writeAuditLog } from "@/lib/audit";
+import { syncDriveAward } from "@/lib/api/driveAward";
 
 const bodySchema = z.object({ profileId: z.string().uuid() });
 
@@ -76,6 +77,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     tripId: id,
   });
 
+  // D-56: on a started trip the driver has already been paid off a smaller car. Seating someone at
+  // the kerb is worth the next seat's bonus, so the award is re-priced here. A no-op while the trip
+  // is still scheduled — nothing has been paid yet.
+  const award = await syncDriveAward(admin, id);
+
   await writeAuditLog(admin, {
     actorProfileId: user.id,
     action: "trip_rider_added_by_driver",
@@ -85,5 +91,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     request,
   });
 
-  return NextResponse.json({ tripRider: added }, { status: 201 });
+  return NextResponse.json(
+    { tripRider: added, pointsAdjusted: award.written?.points ?? 0, awardError: award.error ?? null },
+    { status: 201 },
+  );
 }

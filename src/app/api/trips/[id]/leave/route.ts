@@ -4,6 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { computeLateLeavePenalty } from "@/domain/points";
 import { notifyProfiles } from "@/lib/notify/tripNotify";
+import { syncDriveAward } from "@/lib/api/driveAward";
 import { seatChangeNotice } from "@/domain/seatNotice";
 
 // POST /api/trips/:id/leave — drop a seat you're holding. Marks the seat left and, if inside the
@@ -89,6 +90,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     });
   }
 
+  // D-56: a rider who bails out of a trip that has already started takes their seat's bonus back
+  // off the driver, who was paid for a fuller car at Start. Charged to the rider as before, and
+  // separately re-priced for the driver here. A no-op while the trip is still scheduled.
+  const award = await syncDriveAward(admin, id);
+
   // D-52, the mirror of the join notification and the half the developer cared about least until it
   // was pointed out: a seat given back is a seat the driver can offer to someone else. Fired last,
   // after the seat and any penalty are written, for the reason set out in the join route.
@@ -101,5 +107,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     latePenalty: penalty?.points ?? null,
     // Lets the client say "no points lost" for the right reason rather than guessing from a null.
     penaltyWaived: planChanged,
+    // The driver's side of the same event (D-56), so a support question about a score that moved
+    // has an answer in one response rather than two.
+    driverPointsAdjusted: award.written?.points ?? 0,
+    awardError: award.error ?? null,
   });
 }

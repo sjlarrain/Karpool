@@ -10,7 +10,7 @@
 // Historic ledger rows are never rewritten: entries carry the points they were worth when written.
 
 export interface LedgerAward {
-  kind: "drive" | "pool" | "kudos" | "late_leave" | "no_show";
+  kind: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show";
   points: number;
   reason: string;
 }
@@ -31,10 +31,13 @@ export interface CloseRider {
   name: string;
 }
 
-export interface CloseAwards {
-  // The only row a close writes. Carries the flat drive weight plus the whole fill bonus.
-  // D-49: riders get no award of any kind — see computeCloseAwards.
-  driver: LedgerAward;
+export interface DriveCorrection {
+  // The row to append. Null when the driver has already been paid exactly what they are owed —
+  // points_ledger carries `check (points <> 0)`, so "no change" has no storable row.
+  entry: LedgerAward | null;
+  // What the driver should hold for this trip in total, once `entry` is written. Returned so a
+  // caller can report the real figure rather than the delta.
+  total: number;
 }
 
 /**
@@ -56,11 +59,11 @@ export function seatBonus(seatCount: number, poolWeight: number, poolStep: numbe
 }
 
 /**
- * Closing a trip pays exactly one person: the DRIVER (D-49).
+ * A trip pays exactly one person: the DRIVER (D-49).
  *
- * They get one `drive` row worth the flat drive weight plus the fill bonus for every seat they
- * filled, guests included. Riders earn nothing — the developer's call on 2026-08-31: driving is
- * the behaviour the app pays for, and riding is not.
+ * They get the flat drive weight plus the fill bonus for every seat they filled, guests included.
+ * Riders earn nothing — the developer's call on 2026-08-31: driving is the behaviour the app pays
+ * for, and riding is not.
  *
  * That is NOT a reversal of D-42. D-42 asked that a rider be able to see how often they were
  * pooled, and they still can: `pooled` is now a count of confirmed rides (see
@@ -71,15 +74,48 @@ export function seatBonus(seatCount: number, poolWeight: number, poolStep: numbe
  * `check (points <> 0)`, so "keep the row, make it worth zero" is not expressible — a zero-point
  * `pool` row is rejected by the database and would fail the whole close, the same trap D-43 found
  * behind `kudos_weight = 0`.
+ *
+ * D-56 moved WHEN this is written from close to start. What it computes did not change.
  */
-export function computeCloseAwards(riderCount: number, weights: CloseWeights): CloseAwards {
+export function computeDriveAward(riderCount: number, weights: CloseWeights): LedgerAward {
   const bonus = seatBonus(riderCount, weights.poolWeight, weights.poolStep);
   return {
-    driver: {
-      kind: "drive",
-      points: weights.driveWeight + bonus,
-      reason: riderCount === 0 ? "Drove the trip" : `Drove the trip (${riderCount} pooled)`,
+    kind: "drive",
+    points: weights.driveWeight + bonus,
+    reason: riderCount === 0 ? "Drove the trip" : `Drove the trip (${riderCount} pooled)`,
+  };
+}
+
+/**
+ * D-56. The seat count read when the driver pressed Start is a forecast — someone gets in at the
+ * kerb, someone bails, and the driver names a no-show at close. The developer asked that the award
+ * follow the truth, so every later change to the roster of a started trip re-prices the ride and
+ * appends the DIFFERENCE.
+ *
+ * `paidSoFar` is the sum of every `drive` and `drive_adjust` row already on this trip for this
+ * driver, so the arithmetic is self-correcting: a correction that fails to be written is simply
+ * re-derived by the next one, and one that is written twice cannot double-pay, because the second
+ * call sees the first in `paidSoFar` and finds nothing left to owe.
+ *
+ * Deliberately signed. A rider who booked and did not ride takes the seat's bonus back off the
+ * driver; that is the same claw-back D-19 already applies to the rider themselves, and leaving the
+ * driver paid for an empty seat is exactly the leaderboard drift D-41 had to be cleaned up by hand.
+ */
+export function computeDriveCorrection(
+  paidSoFar: number,
+  riderCount: number,
+  weights: CloseWeights,
+): DriveCorrection {
+  const total = computeDriveAward(riderCount, weights).points;
+  const delta = total - paidSoFar;
+  if (delta === 0) return { entry: null, total };
+  return {
+    entry: {
+      kind: "drive_adjust",
+      points: delta,
+      reason: riderCount === 0 ? "Seat count corrected (drove alone)" : `Seat count corrected (${riderCount} pooled)`,
     },
+    total,
   };
 }
 

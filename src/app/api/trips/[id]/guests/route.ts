@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { writeAuditLog } from "@/lib/audit";
+import { syncDriveAward } from "@/lib/api/driveAward";
 
 // POST /api/trips/:id/guests — the driver seats a guest from the group's roster (D-55).
 //
@@ -73,6 +74,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: code, message: MESSAGE_BY_ERROR[code] }, { status });
   }
 
+  // D-56: a guest fills a seat and so pays the driver's fill bonus (D-09), which means seating one
+  // on a started trip re-prices the ride exactly as seating a member does.
+  const award = await syncDriveAward(admin, id);
+
   await writeAuditLog(admin, {
     actorProfileId: user.id,
     action: "trip_guest_seated_by_driver",
@@ -82,5 +87,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     request,
   });
 
-  return NextResponse.json({ tripRider: seated }, { status: 201 });
+  return NextResponse.json(
+    { tripRider: seated, pointsAdjusted: award.written?.points ?? 0, awardError: award.error ?? null },
+    { status: 201 },
+  );
 }

@@ -8,6 +8,9 @@ import { startTrip } from "@/lib/api/startTrip";
 // 2026-09-01) the group admin starting a trip the driver forgot to. Pure transition logic lives in
 // src/domain/tripMachine.ts and is exhaustively tested there; the write itself is shared with the
 // admin console's force-start via src/lib/api/startTrip.ts.
+//
+// D-56 (2026-09-07): this is also where the driver is PAID. It used to be the close, which drivers
+// were not tapping, so rides ran and paid nobody.
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
@@ -43,5 +46,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     trip: result.trip,
     notifiedRiders: result.notifiedRiders,
     pushDelivery: result.pushDelivery,
+    // D-56: starting the trip is what pays the driver now, so the figure comes back here.
+    pointsAwarded: result.pointsAwarded,
+    awardError: result.awardError,
   });
 }

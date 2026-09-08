@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { writeAuditLog } from "@/lib/audit";
+import { syncDriveAward } from "@/lib/api/driveAward";
 
 // DELETE /api/trips/:id/guests/:tripRiderId — the driver frees a seat they gave a roster guest.
 //
@@ -53,6 +54,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return NextResponse.json({ error: "remove_failed", message: error.message }, { status: 500 });
   }
 
+  // D-56: the seat is gone, so its bonus goes with it on a started trip. No-op while scheduled.
+  const award = await syncDriveAward(admin, id);
+
   await writeAuditLog(admin, {
     actorProfileId: user.id,
     action: "trip_guest_removed_by_driver",
@@ -62,5 +66,5 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     request,
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, pointsAdjusted: award.written?.points ?? 0, awardError: award.error ?? null });
 }

@@ -1,9 +1,15 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { transition, type CloseMode, type TripTransitionErrorCode } from "@/domain/tripMachine";
-import { computeCloseAwards, computeNoShowPenalty } from "@/domain/points";
+import { computeNoShowPenalty } from "@/domain/points";
+import { settleDriveAward } from "@/lib/api/driveAward";
 import { shouldGenerateBackLeg, kudosPromptTargets, rideRiderCount } from "@/domain/backLeg";
 import { notifyProfiles } from "@/lib/notify/tripNotify";
 
+// D-56 (2026-09-07) took the PAYMENT out of here and moved it to start; what is left is the
+// reconciliation, plus everything else a close has always been responsible for. The comments below
+// that talk about "paying" now mean "settling", and the concurrency reasoning is unchanged: two
+// closes racing must still not both write a ledger row.
+//
 // D-35 made close the hinge of the whole round-trip design: it is what materialises the return
 // leg, so it can no longer live only in the driver's route. Three callers share this — the
 // driver's close, a group admin closing a ride the driver forgot, and the platform admin doing the
@@ -40,7 +46,11 @@ export interface CloseTripSuccess {
   trip: Record<string, unknown>;
   confirmedCount: number;
   noShowCount: number;
+  // What the driver holds for this trip in total, across the `drive` row Start wrote and every
+  // correction since.
   pointsAwarded: number;
+  // What this close changed it by. Zero whenever the roster at close matched the roster at Start.
+  pointsAdjusted: number;
   // The return leg this close materialised, if the trip was a round trip. Null for a one-way, and
   // for a round trip whose leg already existed the id of that existing leg — generate_back_trip()
   // is idempotent, so a second close attempt never produces a second leg.
@@ -90,7 +100,7 @@ export async function closeTrip({
 
   const { data: group } = await admin
     .from("group")
-    .select("drive_weight, pool_weight, pool_step, no_show_penalty")
+    .select("no_show_penalty")
     .eq("id", trip.group_id)
     .maybeSingle();
   if (!group) {
@@ -270,43 +280,46 @@ export async function closeTrip({
   // so `confirmedProfileIds` would drop it and quietly underpay the driver for a full car.
   const seatsFilled = confirmedIds.length + insertedGuests.length;
 
-  // D-35 answer (A): every close pays, whoever tapped it. A leg that was driven is a leg that was
-  // driven, and the driver should not lose the award because they forgot the last tap.
+  // D-56: the close no longer PAYS — starting the trip did that. What it does is RECONCILE, because
+  // the close is the moment the seat count stops being a forecast: guests seated here, riders
+  // confirmed here, and no-shows named here all change what the ride was actually worth.
   //
-  // D-49: one award, to the driver, and the seat count is all it needs. Riders no longer earn a
-  // row, which also retired the profile-name lookup that used to sit here purely to caption a
-  // rider's award "Pooled with <driver>".
-  const awards = computeCloseAwards(seatsFilled, {
-    driveWeight: group.drive_weight,
-    poolWeight: group.pool_weight,
-    poolStep: group.pool_step,
-  });
+  // Passing `seatsFilled` rather than letting the helper count is deliberate — the guest rows were
+  // inserted moments ago and the confirm/no_show updates are already applied, so a fresh count would
+  // be racing this function's own writes.
+  //
+  // D-35 answer (A) still holds through this: every close settles, whoever tapped it, and a driver
+  // who forgot the last tap keeps the award Start gave them. A trip that started BEFORE D-56 shipped
+  // has no `drive` row at all, and the correction is then the whole award — which is what makes this
+  // safe against the trips already in flight.
+  const award = await settleDriveAward(
+    admin,
+    { id: tripId, driver_id: trip.driver_id, group_id: trip.group_id },
+    seatsFilled,
+  );
+  if (award.error) {
+    return releaseClaim({ ok: false, error: "ledger_write_failed", status: 500, message: award.error });
+  }
 
   const noShowProfileIds = noShowIds
     .map((rid) => activeById.get(rid)?.profile_id)
     .filter((pid): pid is string => !!pid);
   const noShowPenalty = computeNoShowPenalty(group.no_show_penalty);
 
-  const { error: ledgerError } = await admin.from("points_ledger").insert([
-    {
-      profile_id: trip.driver_id,
-      group_id: trip.group_id,
-      trip_id: tripId,
-      kind: awards.driver.kind,
-      points: awards.driver.points,
-      reason: awards.driver.reason,
-    },
-    ...noShowProfileIds.map((pid) => ({
-      profile_id: pid,
-      group_id: trip.group_id,
-      trip_id: tripId,
-      kind: noShowPenalty.kind,
-      points: noShowPenalty.points,
-      reason: noShowPenalty.reason,
-    })),
-  ]);
-  if (ledgerError) {
-    return releaseClaim({ ok: false, error: "ledger_write_failed", status: 500, message: ledgerError.message });
+  if (noShowProfileIds.length > 0) {
+    const { error: ledgerError } = await admin.from("points_ledger").insert(
+      noShowProfileIds.map((pid) => ({
+        profile_id: pid,
+        group_id: trip.group_id,
+        trip_id: tripId,
+        kind: noShowPenalty.kind,
+        points: noShowPenalty.points,
+        reason: noShowPenalty.reason,
+      })),
+    );
+    if (ledgerError) {
+      return releaseClaim({ ok: false, error: "ledger_write_failed", status: 500, message: ledgerError.message });
+    }
   }
 
   const updated = claimed;
@@ -339,8 +352,11 @@ export async function closeTrip({
     trip: updated,
     confirmedCount: seatsFilled,
     noShowCount: noShowIds.length,
-    // The driver's own award — this is echoed straight back at them as "+N pts" on close.
-    pointsAwarded: awards.driver.points,
+    // D-56: the driver's award for the WHOLE trip, not what this close added to it — the close is
+    // usually worth nothing now, and telling a driver "+0 pts" for a ride that paid them 25 would
+    // read as a bug. The delta is `pointsAdjusted`.
+    pointsAwarded: award.total,
+    pointsAdjusted: award.written?.points ?? 0,
     backTripId,
     backTripSeatedProfileIds,
   };

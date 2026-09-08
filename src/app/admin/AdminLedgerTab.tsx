@@ -8,7 +8,7 @@ interface LedgerRow {
   profile_id: string;
   group_id: string;
   trip_id: string | null;
-  kind: "drive" | "pool" | "kudos" | "late_leave" | "admin_adjust";
+  kind: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust";
   points: number;
   reason: string | null;
   created_at: string;

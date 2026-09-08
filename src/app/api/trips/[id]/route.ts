@@ -209,7 +209,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     backStopId: string | null;
     stops: TripStopView[];
   } | null = null;
-  if (isDriver && trip.status === "scheduled") {
+  // D-56 (2026-09-07, developer: "Always editable by the driver"). This used to be `scheduled`
+  // only, on the reasoning that a started trip's plan is fixed. It is not: the driver is in the car
+  // and the plan is exactly what changes there — a stop dropped, a seat freed, the return pushed
+  // back. Riders are protected by D-38's waiver, which is unchanged and fires on a material edit
+  // whatever the status.
+  if (isDriver && (trip.status === "scheduled" || trip.status === "started")) {
     const { data: groupStops } = await supabase
       .from("pickup_place")
       .select("id, label, icon, address")
@@ -303,8 +308,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (trip.driver_id !== user.id) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  if (trip.status !== "scheduled") {
-    return NextResponse.json({ error: "wrong_status", message: "Only a scheduled trip can be edited." }, { status: 409 });
+  // D-56: a live trip is editable, started or not. Closed and cancelled are history and stay shut.
+  if (trip.status !== "scheduled" && trip.status !== "started") {
+    return NextResponse.json({ error: "wrong_status", message: "This trip is no longer active." }, { status: 409 });
   }
 
   const json = await request.json().catch(() => null);
