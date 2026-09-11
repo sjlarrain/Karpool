@@ -1,5 +1,27 @@
 # Worklog
 
+## Data fix (2026-09-10, manual — Felipe's return leg closed, sjlarrain's Fri 09-11 trip created)
+- **Felipe's return leg** (`7ecac626…`, the back leg generated from `9e01fae4…` that morning, due
+  16:30 PDT and already past): at the developer's request their own self-booked seat was set `left`
+  with **no `late_leave` row** (the leave route would have charged −5), then the trip was
+  force-started and given a restricted close exactly as `main`'s code does it — 0 seats, one
+  `drive` row of **+10** for Felipe, matching the +10 his empty outbound earned. Felipe was not
+  notified (explicit instruction); with no riders aboard, nobody else was either. Three `audit_log`
+  rows (`trip_rider_removed_by_admin`, `force_start_trip`, `force_close_trip`), actor sjlarrain.
+- **New trip** `72f49984…` in MBA 2028: sjlarrain driving, `round`, Fri 2026-09-11 08:10 → 16:00
+  PDT (15:10Z / 23:00Z), capacity 4. Riders seated through `add_trip_rider()` (driver-added, so
+  penalty-free to leave): Agustin Feres with `wants_return = true`; Alejandro Rivera, Caro De Andrade
+  and Fran Swett one-way. Each got the app's own "You've been added to a ride" bell row plus push —
+  only Caro has a device on file (1/1 delivered). Audit rows `trip_rider_added_by_driver` ×4.
+- **Found while checking which scoring model to mirror:** the live DB carries D-56/D-57's migrations
+  (`0024` `drive_adjust`, `0025` `trip_message`), but production still runs `main`, which pays the
+  driver at CLOSE — that morning's force-close wrote Felipe's `drive` row at close time, and the only
+  `drive_adjust` rows belong to e2e groups. `feat/chat-and-trip-lifecycle` is unmerged.
+- **Gates:** `pnpm verify` green (255/255) after clearing the gitignored `.next/` with the
+  developer's OK — its generated `.next/types` still referenced that branch's `messages` route, which
+  doesn't exist on `main`, so `tsc` failed on a stale build artifact rather than on code. Worth
+  remembering after any branch switch.
+
 ## Data fix (2026-09-04, manual — minizombini forced onto Manolo's return leg)
 - **What:** the developer (profile `minizombini`) asked to be added to Manolo's trip today. Manolo's
   only trip that date had already been driven and closed (both legs — `3c34ab4c…` and its
