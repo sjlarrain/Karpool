@@ -1,5 +1,39 @@
 # Worklog
 
+## Data fix (2026-09-15, manual — Friday 09-11's two return legs closed and paid)
+
+- **What was wrong:** both Friday return legs were really driven, but neither driver tapped
+  Start/Close, so `cron_expire_unstarted` cancelled both 24h later ("never started, 24h past
+  departure" — `audit_log`, 2026-09-12). A driven leg was therefore worth nothing and its riders
+  had no ride counted. The developer reported it as "Manolo pooled minizombini on the way back"
+  and "sjlarrain only took Agustin Feres on the way back" — the data agreed exactly: minizombini
+  was on no Friday trip at all, and Agustin sat on sjlarrain's back leg as `joined`, never
+  confirmed.
+- **Done directly against the remote DB** (one-off data, no schema change), replaying precisely
+  what a restricted close writes, with the award coming from the app's own `computeCloseAwards()`
+  rather than a copy of the arithmetic:
+  - `79be5888…` (Manolo, back, Fri 12:00 PDT): minizombini seated `confirmed`; status
+    `cancelled → closed`, `cancelled_reason` cleared; one `drive` row of **+13** (10 + a 1-seat
+    fill bonus of 3).
+  - `39ba9ac0…` (sjlarrain, back, Fri 16:00 PDT): Agustin Feres `joined → confirmed`; same status
+    repair; one `drive` row of **+13**.
+  - `started_at` set to each leg's real `depart_at`, `closed_at` to the moment of the repair — the
+    shape a very late close would have had anyway. Six `audit_log` rows
+    (`trip_rider_added_by_driver`, `force_start_trip`, `force_close_trip` ×2), actor sjlarrain,
+    each carrying `via: manual data fix (Claude Code, developer request 2026-09-15)`.
+- **Deliberately not done:** no notifications. A close normally pushes the kudos prompt to
+  confirmed riders; four days late that would have woken minizombini and Agustin for a ride long
+  over, and notifying other people is the developer's call, not the agent's. Consequence: neither
+  driver can receive kudos for these legs unless the riders open the trip themselves.
+- **Leaderboard after (recomputed through `aggregateLedger` + `tallyPooledRides`, not by hand):**
+  Manolo 124 → **137** (8 driven), sjlarrain 65 → **78** (4 driven), minizombini pooled 3 → **4**,
+  Agustin Feres pooled 7 → **8**. Nobody else moved.
+- **Left open for the developer:** Manolo's Friday *outbound* (`00dd7df9…`) is closed with **zero**
+  riders and paid 10. If minizombini rode out with him too, that leg owes another 3 points and one
+  more pooled ride — not assumed either way.
+- **Gates:** `pnpm verify` green (255/255). No code or schema touched; the scripts were throwaway,
+  run from the gitignored `tmp/`, not committed.
+
 ## Data fix (2026-09-10, manual — Felipe's return leg closed, sjlarrain's Fri 09-11 trip created)
 - **Felipe's return leg** (`7ecac626…`, the back leg generated from `9e01fae4…` that morning, due
   16:30 PDT and already past): at the developer's request their own self-booked seat was set `left`
