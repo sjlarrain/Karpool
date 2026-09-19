@@ -1,5 +1,26 @@
 # Worklog
 
+## Data fix (2026-09-19, manual — Thu 09-18's two round trips and their return legs closed)
+
+- **What was wrong:** both round trips were force-started by sjlarrain at 13:26 PDT, *after* their
+  return times (Nicolás 10:00, Alejandro 11:30), and nothing ever closed them. The scheduler's T-2h
+  close tried every tick and failed silently: `generate_back_trip()` inserts the return leg with a
+  `depart_at` already in the past, which D-47's `trip_depart_not_before_created` rejects, so
+  `closeTrip()` released its claim. Recorded as **D-60** (open); no code touched.
+- **Done directly against the remote DB** at the developer's request ("force close every trip
+  today and their return trips"), as restricted closes (everyone aboard confirmed, no no-shows),
+  awards from the app's own `computeCloseAwards()`:
+  - `d5a25af3…` Alejandro Rivera outbound: Isi, Fran Swett, Caro De Andrade, Manolo → **+34**.
+    Return leg `34f82276…` created with all four (all had `wants_return`), started, closed → **+34**.
+  - `64156ee3…` Nicolás Carvallo outbound: Agustin Feres, Felipe Trejo, Nicole Cuadros → **+25**.
+    Return leg `fa48a4a8…` created with Agustin (the only `wants_return`), closed → **+13**.
+  - The return legs mirror `generate_back_trip()` exactly except `created_at = return_at`, so the
+    D-47 check holds. `started_at` = the leg's departure. Audit rows `force_start_trip` /
+    `force_close_trip`, actor sjlarrain, `via: manual data fix (Claude Code, developer request 2026-09-18)`.
+- **Deliberately not done:** no notifications (explicit instruction) — zero `notification` rows
+  written. Nobody got a kudos prompt, so kudos for these rides only happen if riders open the trip.
+- **Gates:** `pnpm verify` green. Throwaway scripts in gitignored `tmp/`, not committed.
+
 ## Data fix (2026-09-15, manual — Friday 09-11's two return legs closed and paid)
 
 - **What was wrong:** both Friday return legs were really driven, but neither driver tapped
