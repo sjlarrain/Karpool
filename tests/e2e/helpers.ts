@@ -15,6 +15,20 @@ export async function signIn(page: Page, email: string, password: string) {
   // Post-signin lands on "/" either way — LockedGate (no group yet) or a redirect to /app (has a
   // group) — wait for whichever settled destination actually renders.
   await page.locator(".tabbar, h2:has-text('No group yet')").first().waitFor({ state: "visible", timeout: 10_000 });
+  await dismissWhatsNew(page);
+}
+
+/**
+ * D-61's one-time "what's new" sheet covers the app until it is closed, so every spec that signs a
+ * seeded account in for the first time after the rollout would otherwise fail on its next click.
+ * Closing it here is also what a real person does, once.
+ */
+export async function dismissWhatsNew(page: Page) {
+  const gotIt = page.getByRole("button", { name: "Got it" });
+  if (await gotIt.isVisible({ timeout: 2_000 }).catch(() => false)) {
+    await gotIt.click();
+    await gotIt.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
+  }
 }
 
 export async function createGroup(page: Page, groupName: string) {
