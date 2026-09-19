@@ -17,6 +17,8 @@ export type NotificationItem = {
   title: string;
   body: string | null;
   tripId: string | null;
+  // D-61: set when the row points somewhere outside the app — today only D-54's parking link.
+  url: string | null;
   read: boolean;
   createdAt: string;
 };
@@ -70,6 +72,8 @@ const CTA: Partial<Record<NotificationItem["type"], string>> = {
   change: "View trip",
   reminder: "View trip",
   close_reminder: "End trip",
+  // D-61: this one leaves the app — it opens the group's parking page (D-54).
+  parking: "Pay parking",
   // D-57: a chat message is only useful if you can get to the thread it was said in.
   comment: "Open chat",
   join: "View trip",
@@ -101,18 +105,26 @@ export function NotificationsSheet({ notifications, loading, onClose, onOpenTrip
         )}
 
         {notifications.map((n) => {
-          const actionable = n.tripId !== null;
+          // An external link wins over the trip: a "pay for parking" row exists to be paid from.
+          const actionable = n.url !== null || n.tripId !== null;
+          const open = () => {
+            if (n.url) {
+              window.open(n.url, "_blank", "noopener,noreferrer");
+              return;
+            }
+            if (n.tripId) onOpenTrip(n.tripId);
+          };
           const cta = actionable ? CTA[n.type] : undefined;
           return (
             <div
               key={n.id}
-              onClick={() => actionable && n.tripId && onOpenTrip(n.tripId)}
+              onClick={() => actionable && open()}
               role={actionable ? "button" : undefined}
               tabIndex={actionable ? 0 : undefined}
               onKeyDown={(e) => {
-                if (actionable && n.tripId && (e.key === "Enter" || e.key === " ")) {
+                if (actionable && (e.key === "Enter" || e.key === " ")) {
                   e.preventDefault();
-                  onOpenTrip(n.tripId);
+                  open();
                 }
               }}
               style={{

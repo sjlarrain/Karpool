@@ -29,6 +29,11 @@ const LINES: { icon: string; title: string; body: string }[] = [
     body: "Someone didn't show? Report them — they lose 5 points, you get 2. Someone rode without booking? Add them.",
   },
   {
+    icon: "🅿️",
+    title: "Drivers: the parking link comes to you",
+    body: "30 minutes after every ride you drive, a notification with your group's parking link — tap it to pay.",
+  },
+  {
     icon: "💚",
     title: "Kudos sits on the ride",
     body: "Once a ride has left, its card is where you thank your driver.",

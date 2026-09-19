@@ -26,7 +26,16 @@ export interface NotifyResult {
 // instead, which is what makes a broken notification path visible rather than invisible.
 export async function notifyProfiles(
   profileIds: string[],
-  notification: { type: NotificationType; title: string; body: string; tripId?: string },
+  notification: {
+    type: NotificationType;
+    title: string;
+    body: string;
+    tripId?: string;
+    // D-61: an external destination for this notification — today only the parking link (D-54).
+    // A push carrying one opens the payment page itself when tapped, instead of the app, because
+    // the whole point of the nudge is that the driver pays without hunting for the link.
+    url?: string;
+  },
 ): Promise<NotifyResult> {
   // A driver who also holds a rider row (D-24 lets a driver add seats) would otherwise be told
   // twice about their own trip — once as driver, once as passenger.
@@ -40,7 +49,13 @@ export async function notifyProfiles(
       type: notification.type,
       title: notification.title,
       body: notification.body,
-      payload: notification.tripId ? { tripId: notification.tripId } : null,
+      payload:
+        notification.tripId || notification.url
+          ? {
+              ...(notification.tripId ? { tripId: notification.tripId } : {}),
+              ...(notification.url ? { url: notification.url } : {}),
+            }
+          : null,
     })),
   );
 
@@ -53,7 +68,11 @@ export async function notifyProfiles(
       sendPushToProfile(profileId, {
         title: notification.title,
         body: notification.body,
-        data: notification.tripId ? { tripId: notification.tripId, url: "/app" } : undefined,
+        // The service worker opens `data.url` on tap, falling back to /app.
+        data:
+          notification.tripId || notification.url
+            ? { ...(notification.tripId ? { tripId: notification.tripId } : {}), url: notification.url ?? "/app" }
+            : undefined,
       }),
     ),
   );

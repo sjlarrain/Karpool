@@ -562,7 +562,7 @@ The caller's own notification feed, newest first.
 
 - **Auth**: required
 - **Request**: `?limit=` (int, 1–50, default 30)
-- **Response**: `{ notifications: Array<{ id, type: "start"|"rate"|"change"|"comment"|"tip"|"reminder"|"close_reminder"|"join"|"leave"|"parking", title, body: string|null, tripId: string|null, read: boolean, createdAt: string }>, unreadCount: number }`
+- **Response**: `{ notifications: Array<{ id, type: "start"|"rate"|"change"|"comment"|"tip"|"reminder"|"close_reminder"|"join"|"leave"|"parking", title, body: string|null, tripId: string|null, url: string|null, read: boolean, createdAt: string }>, unreadCount: number }` — `url` is an external destination (today only D-54's parking link, on a `parking` row); the bell opens it in a new tab instead of opening the trip.
 - **Errors**: `401 unauthenticated`, `400 invalid_request`, `500 notifications_load_failed`
 - **Side effects**: none
 
@@ -623,8 +623,13 @@ hand with curl. **Since D-61 this route IS the trip lifecycle.** Three jobs per 
    lower bound on the query: a scheduler that was down for a day still pays yesterday's rides.
 3. **Parking reminders (D-61)** — `PARKING_REMINDER_AFTER_MINUTES` (30) after a settled leg
    departed, and for `PARKING_REMINDER_GRACE_MINUTES` (60) after that, its **driver only** gets a
-   `parking`-type notification + push. Sent only when the group has a parking link for that leg's
-   direction (D-54) — a leg with nothing to pay stays quiet. Deduped per trip.
+   `parking`-type notification + push **carrying the link itself**: `payload.url` is the group's
+   parking URL for that leg, the push's `data.url` is the same, so the service worker opens the
+   payment page on tap rather than the app, and the body names the host ("Tap to pay for today's
+   parking at <host>") so a driver sees where they are going before they go. Sent only when the
+   group has a link for that leg's direction (D-54) — a leg with nothing to pay stays quiet — and
+   deduped per trip, so it is **one per leg**: a round trip's outbound and return each get their
+   own, each with that leg's link.
 
 Retired by D-61: the close reminder, D-35 mechanic (ii)'s T-2h return-leg close, the 6h auto-close,
 and D-23's 24h expiry of trips nobody started.

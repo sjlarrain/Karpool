@@ -42,6 +42,9 @@ export async function GET(request: Request) {
     title: n.title,
     body: n.body,
     tripId: (n.payload as { tripId?: string } | null)?.tripId ?? null,
+    // D-61: an external destination (today, the parking link). Rendered as a link rather than a
+    // trip row, so the driver pays from the bell in one tap.
+    url: (n.payload as { url?: string } | null)?.url ?? null,
     read: n.read_at !== null,
     createdAt: n.created_at,
   }));

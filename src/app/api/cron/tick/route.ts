@@ -10,7 +10,7 @@ import {
 } from "@/domain/constants";
 import { isDepartureReminderDue, isParkingReminderDue } from "@/domain/tripReminders";
 import { isSettleDue } from "@/domain/tripSettle";
-import { parkingUrlForLeg } from "@/domain/parking";
+import { parkingUrlForLeg, parkingLinkHost } from "@/domain/parking";
 import { settleTrip } from "@/lib/api/settleTrip";
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
@@ -197,11 +197,16 @@ async function handleTick(request: Request) {
     if (!url) return;
     if (await alreadyNotified(admin, "parking", trip.id)) return;
 
+    // The link travels WITH the notification (developer, 2026-09-19: "a notification with the
+    // parking link every time"): the push opens the payment page on tap, the bell row does the
+    // same, and the host is named in the body so a driver sees where they are being sent before
+    // they go (D-54's rule for the app's only outbound link).
     const result = await notifyProfiles([trip.driver_id], {
       type: "parking",
       title: "Pay for parking",
-      body: "Don't forget to pay for parking. Open the trip for the link.",
+      body: `Tap to pay for today's parking at ${parkingLinkHost(url)}.`,
       tripId: trip.id,
+      url,
     });
     if (!result.error) parkingRemindersSent += 1;
   });
