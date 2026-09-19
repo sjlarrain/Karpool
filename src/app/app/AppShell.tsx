@@ -12,6 +12,7 @@ import { RanksScreen } from "./RanksScreen";
 import { YouScreen } from "./YouScreen";
 import { NotificationsSheet, type NotificationItem } from "./NotificationsSheet";
 import { ReturnQuestionSheet } from "./ReturnQuestionSheet";
+import { WhatsNewSheet } from "./WhatsNewSheet";
 import { stopView } from "@/domain/toTripView";
 import type { TripStopView } from "@/domain/types";
 import { readJsonBody } from "@/lib/http/readJsonBody";
@@ -35,9 +36,11 @@ interface Props {
   viewerName: string;
   initialTripId: string | null;
   isPlatformAdmin: boolean;
+  // D-61: whether this person still has the "what's new" sheet coming.
+  showWhatsNew: boolean;
 }
 
-export function AppShell({ group, role, memberCount, adminName, pickupPlaces, inviteLink, membershipId, pickupPlaceId, otherGroups, trips, viewerName, initialTripId, isPlatformAdmin }: Props) {
+export function AppShell({ group, role, memberCount, adminName, pickupPlaces, inviteLink, membershipId, pickupPlaceId, otherGroups, trips, viewerName, initialTripId, isPlatformAdmin, showWhatsNew }: Props) {
   // D-29: one admin-managed list of places, two kinds. Stops are the ones a trip can detour
   // through; pickup points stay out of the trip form entirely.
   const stops = pickupPlaces
@@ -47,6 +50,7 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("carpools");
   const [notifsOpen, setNotifsOpen] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(showWhatsNew);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notifsLoading, setNotifsLoading] = useState(true);
 
@@ -275,6 +279,8 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
           }}
         />
       )}
+
+      {whatsNewOpen && <WhatsNewSheet onClose={() => setWhatsNewOpen(false)} />}
 
       {toast && <div className="toast" style={{ position: "fixed" }}>{toast}</div>}
       {returnQuestionFor &&

@@ -1,4 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
 import { expect, type Locator, type Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
 
 // Shared journey steps for the e2e specs: signing in with the fixed seeded accounts, standing up a
 // group, and joining one by code. Extracted from core-loop.spec.ts when the share-link spec needed
@@ -160,4 +163,63 @@ export async function joinTrip(page: Page, card: Locator, wantsReturn = false) {
   }
 
   await expect(page.getByText(/riding this trip/)).toBeVisible({ timeout: 10_000 });
+}
+
+// ─── D-61: making a ride "happen" inside a test ──────────────────────────────
+//
+// Nothing in the UI starts or ends a trip any more — the scheduler settles it once its departure
+// has passed. A spec therefore ages the trip by hand and then runs one tick, which is exactly what
+// production does every five minutes, through the same route.
+
+function loadEnvLocal(): Record<string, string> {
+  const envPath = path.resolve(__dirname, "../../.env.local");
+  const env: Record<string, string> = {};
+  for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (match) env[match[1]!] = match[2]!;
+  }
+  return env;
+}
+
+export function adminClient() {
+  const env = loadEnvLocal();
+  return createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!);
+}
+
+/**
+ * Move a group's trips into the past so the next tick settles them.
+ *
+ * `created_at` moves with `depart_at`: D-47's trip_depart_not_before_created is a CHECK, so it
+ * guards updates as well as inserts, and shifting only the departure would be rejected.
+ */
+export async function ageTripsInGroup(groupId: string, minutesAgo = 5) {
+  const admin = adminClient();
+  const departAt = new Date(Date.now() - minutesAgo * 60_000).toISOString();
+  const { error } = await admin
+    .from("trip")
+    .update({ depart_at: departAt, created_at: departAt })
+    .eq("group_id", groupId)
+    .eq("status", "scheduled");
+  if (error) throw new Error(`could not age trips: ${error.message}`);
+}
+
+/** Run the scheduler once, the way pg_cron does (D-21). Returns the tick's own report. */
+export async function runCronTick(baseURL: string) {
+  const env = loadEnvLocal();
+  const res = await fetch(`${baseURL}/api/cron/tick`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.CRON_SECRET}` },
+  });
+  const body = (await res.json()) as { settled?: number; failures?: string[] };
+  if (!res.ok) throw new Error(`cron tick failed: ${JSON.stringify(body)}`);
+  if ((body.failures ?? []).length > 0) throw new Error(`cron tick reported failures: ${body.failures!.join("; ")}`);
+  return body;
+}
+
+/** The id of the group the driver is looking at, read from the database by name. */
+export async function groupIdByName(name: string): Promise<string> {
+  const admin = adminClient();
+  const { data, error } = await admin.from("group").select("id").eq("name", name).maybeSingle();
+  if (error || !data) throw new Error(`group ${name} not found: ${error?.message}`);
+  return data.id as string;
 }

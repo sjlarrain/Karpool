@@ -1,5 +1,38 @@
 # Worklog
 
+## D-61 (2026-09-19, on `feat/chat-and-trip-lifecycle` — the automatic trip lifecycle)
+
+- **Shipped:** Start and Close removed from the app, the API and the state machine. The scheduler
+  settles every trip at its `depart_at` (`src/lib/api/settleTrip.ts`, job 2 of `/api/cron/tick`):
+  claim `scheduled→closed`, confirm every booked seat, materialise a round trip's return leg, pay
+  the driver. New: `POST /api/trips/:id/no-show` (rider −5, driver +2, seat pay kept), a roster
+  correction window to the end of the departure day in the driver's zone
+  (`src/domain/tripSettle.ts` + `src/lib/api/rosterWindow.ts`), a parking push 30 min after
+  departure on legs with a D-54 link, and a one-time "what's new" sheet
+  (`profile.seen_announcement`). `CloseTripOverlay` became `FixRideListOverlay`; the admin Trips
+  tab is read-only. Migration `0026` carries the `no_show_report` kind, `no_show_report_bonus`,
+  the −5 no-show default, the `parking` notification type, and **the D-60 fix** (a generated back
+  leg is dated from its parent). Deleted: `/start`, `/close`, both admin force routes,
+  `startTrip.ts`, `closeTrip.ts`.
+- **In progress:** nothing mid-flight; the code is committed on the branch, unmerged and undeployed.
+- **Next:** the rollout, in this order and each step with the developer's OK — (1) list every trip
+  still unfinished past its departure and cancel them with `cancelled_reason: 'lifecycle_rollout'`,
+  no points and no notifications; (2) `supabase db push` for `0024`/`0025`/`0026` and confirm with
+  `supabase migration list --linked`; (3) merge to `main` and push so Vercel deploys; (4) watch the
+  first ticks in `audit_log` (`cron_settle_trip`) and `/api/admin/health`.
+- **Blocked on:** nothing in code. The rollout needs the developer's go-ahead for the DB write, the
+  merge and the push. `CLAUDE.md` §4 still says `scheduled → started → closed | cancelled` and
+  −10 for a no-show; both are now wrong and only the developer can edit that file.
+- **Gates now green:** `pnpm verify` — typecheck, lint, 271/271 unit tests. The integration suite
+  (`tests/integration/settle-and-kudos.test.ts`, renamed from `close-and-kudos`) and the two
+  rewritten e2e specs need a running dev server and the live project, so they have not been run
+  here; both now make a ride happen by ageing the trip and calling one cron tick, which is what
+  production does.
+- **Worth knowing for the next session:** two ticks settling the same trip is covered by a
+  compare-and-swap claim, but two *driver* corrections racing each other (two roster changes in
+  flight at once) still read-then-append through `settleDriveAward`, exactly as D-56 left it. Only
+  the driver can trigger those, so it is unlikely rather than impossible.
+
 ## Data fix (2026-09-19, manual — Thu 09-18's two round trips and their return legs closed)
 
 - **What was wrong:** both round trips were force-started by sjlarrain at 13:26 PDT, *after* their

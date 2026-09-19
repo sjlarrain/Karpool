@@ -97,8 +97,6 @@ describe.skipIf(!canRun)("G9/G10 — admin route auth + audit trail", () => {
     { method: "PATCH", path: () => `/api/admin/users/${FAKE_ID}/role`, body: { role: "member" } },
     { method: "GET", path: () => "/api/admin/groups" },
     { method: "GET", path: () => "/api/admin/trips" },
-    { method: "POST", path: () => `/api/admin/trips/${FAKE_ID}/force-close`, body: { reason: "test" } },
-    { method: "POST", path: () => `/api/admin/trips/${FAKE_ID}/force-start` },
     { method: "GET", path: () => "/api/admin/ledger" },
     { method: "POST", path: () => "/api/admin/ledger/adjust", body: { profileId: FAKE_ID, groupId: FAKE_ID, points: 1, reason: "test" } },
     { method: "GET", path: () => "/api/admin/audit-log" },
@@ -140,28 +138,8 @@ describe.skipIf(!canRun)("G9/G10 — admin route auth + audit trail", () => {
     expect(rows?.length ?? 0).toBeGreaterThan(0);
   });
 
-  it("logs an audit_log row when an admin force-starts a trip (D-50)", async () => {
-    const res = await fetch(`${APP_URL}/api/admin/trips/${tripId}/force-start`, {
-      method: "POST",
-      headers: { Cookie: adminCookie },
-    });
-    expect(res.status).toBe(200);
-
-    const { data: rows } = await admin.from("audit_log").select("id").eq("action", "force_start_trip").eq("entity_id", tripId);
-    expect(rows?.length ?? 0).toBeGreaterThan(0);
-  });
-
-  it("logs an audit_log row when an admin force-closes a trip", async () => {
-    const res = await fetch(`${APP_URL}/api/admin/trips/${tripId}/force-close`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: adminCookie },
-      body: JSON.stringify({ reason: "G10 test force-close" }),
-    });
-    expect(res.status).toBe(200);
-
-    const { data: rows } = await admin.from("audit_log").select("id").eq("action", "force_close_trip").eq("entity_id", tripId);
-    expect(rows?.length ?? 0).toBeGreaterThan(0);
-  });
+  // D-61 removed force-start and force-close along with the taps they stood in for: the scheduler
+  // settles every trip at its departure, so there is no trip left for an admin to rescue.
 
   afterAll(async () => {
     if (tripId) await admin.from("trip").delete().eq("id", tripId);

@@ -20,9 +20,10 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "http://127.0.0.1:54321";
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const CRON_SECRET = process.env.CRON_SECRET;
 const PASSWORD = "close-race-test-password-123!";
 
-const canRun = Boolean(SERVICE_ROLE_KEY);
+const canRun = Boolean(SERVICE_ROLE_KEY && CRON_SECRET);
 
 async function signIn(email: string, password: string): Promise<string> {
   const res = await fetch(`${APP_URL}/api/auth/signin`, {
@@ -34,7 +35,7 @@ async function signIn(email: string, password: string): Promise<string> {
   return (res.headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]).join("; ");
 }
 
-describe.skipIf(!canRun)("close + kudos never duplicate or drop a points_ledger row", () => {
+describe.skipIf(!canRun)("settle + kudos never duplicate or drop a points_ledger row", () => {
   let admin: SupabaseClient;
   let driverCookie: string;
   let riderCookie: string;
@@ -43,8 +44,8 @@ describe.skipIf(!canRun)("close + kudos never duplicate or drop a points_ledger 
   let groupId: string;
   const createdTripIds: string[] = [];
 
-  // A scheduled trip departing inside D-16's T-2h start window, so it can be started the moment
-  // anyone who is going to ride it has taken a seat.
+  // A scheduled trip departing shortly, so riders can still take a seat (join_trip only admits
+  // them to a scheduled trip that has not left) before it is aged into the past and settled.
   async function publishTrip(): Promise<string> {
     const { data: trip, error } = await admin
       .from("trip")
@@ -75,26 +76,30 @@ describe.skipIf(!canRun)("close + kudos never duplicate or drop a points_ledger 
     return tripRider.id;
   }
 
-  async function startTrip(tripId: string): Promise<void> {
-    const started = await fetch(`${APP_URL}/api/trips/${tripId}/start`, {
-      method: "POST",
-      headers: { cookie: driverCookie },
-    });
-    expect(started.status).toBe(200);
+  // D-61: a trip is settled by the SCHEDULER once its departure has passed, and by nothing else.
+  // So a test makes a ride happen the way production does — move it into the past, run one tick.
+  // `created_at` moves with it because D-47's check guards updates too.
+  async function ageTrip(tripId: string): Promise<void> {
+    const departAt = new Date(Date.now() - 60_000).toISOString();
+    const { error } = await admin
+      .from("trip")
+      .update({ depart_at: departAt, created_at: departAt })
+      .eq("id", tripId);
+    if (error) throw error;
   }
 
-  async function publishStartedTrip(): Promise<string> {
-    const tripId = await publishTrip();
-    await startTrip(tripId);
-    return tripId;
-  }
-
-  function closeAs(cookie: string, tripId: string, confirmedTripRiderIds: string[] = []) {
-    return fetch(`${APP_URL}/api/trips/${tripId}/close`, {
+  function runTick() {
+    return fetch(`${APP_URL}/api/cron/tick`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", cookie },
-      body: JSON.stringify({ confirmedTripRiderIds, guestNames: [] }),
+      headers: { authorization: `Bearer ${CRON_SECRET}` },
     }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
+  }
+
+  async function settle(tripId: string): Promise<void> {
+    await ageTrip(tripId);
+    const tick = await runTick();
+    expect(tick.status).toBe(200);
+    expect(tick.body?.failures ?? []).toEqual([]);
   }
 
   async function ledgerRows(tripId: string) {
@@ -164,53 +169,46 @@ describe.skipIf(!canRun)("close + kudos never duplicate or drop a points_ledger 
   }, 60_000);
 
   // The bug, exactly as reproduced against this project's database on 2026-08-31: `transition()` is
-  // a read, so two closes in flight together both saw `started`, both were told the close was legal,
-  // and both wrote a full set of award rows. One ride, two `drive` rows, twice the points.
+  // a read, so two callers in flight together both saw a settleable trip, both were told it was
+  // legal, and both wrote a full set of award rows. One ride, two `drive` rows, twice the points.
   //
-  // Written as two genuinely simultaneous requests rather than a fast loop, because a sequential
-  // retry is a DIFFERENT defect ([D-41]) with a different fix, and it was already closed by
-  // reordering the writes. Only real concurrency exercises the compare-and-swap.
-  it("pays the driver once when two closes arrive at the same instant", async () => {
-    const tripId = await publishStartedTrip();
+  // D-61 changed who races — two overlapping cron ticks rather than two drivers — but not the
+  // defect or its fix, so the test follows the writer. Written as two genuinely simultaneous
+  // requests: only real concurrency exercises the compare-and-swap.
+  it("pays the driver once when two ticks settle the same trip at the same instant", async () => {
+    const tripId = await publishTrip();
+    await ageTrip(tripId);
 
-    const [a, b] = await Promise.all([closeAs(driverCookie, tripId), closeAs(driverCookie, tripId)]);
-    const statuses = [a.status, b.status].sort();
-
-    // One winner, one loser told the trip is no longer closeable.
-    expect(statuses).toEqual([200, 409]);
-    const loser = a.status === 409 ? a : b;
-    expect(loser.body?.error).toBe("wrong_status");
+    const [a, b] = await Promise.all([runTick(), runTick()]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    // Neither tick reports a failure: the loser sees `wrong_status`, which is a lost race and not
+    // an error — exactly what it would have been told had it arrived a moment later.
+    expect(a.body?.failures ?? []).toEqual([]);
+    expect(b.body?.failures ?? []).toEqual([]);
 
     const rows = await ledgerRows(tripId);
     expect(rows.filter((r) => r.kind === "drive")).toHaveLength(1);
     expect(rows.filter((r) => r.kind === "drive")[0]?.points).toBe(10);
   }, 60_000);
 
-  // The claim must also hold against a plain retry — a driver tapping Close again after a slow
-  // reply, which is how [D-41]'s ten duplicate rows reached the live leaderboard.
-  it("pays the driver once when a close is retried after it already succeeded", async () => {
-    const tripId = await publishStartedTrip();
+  // The claim must also hold against the next tick five minutes later, which meets the same trip.
+  it("pays the driver once when the scheduler runs again over a settled trip", async () => {
+    const tripId = await publishTrip();
+    await settle(tripId);
+    await runTick();
 
-    const first = await closeAs(driverCookie, tripId);
-    expect(first.status).toBe(200);
-
-    const second = await closeAs(driverCookie, tripId);
-    expect(second.status).toBe(409);
-    expect(second.body?.error).toBe("wrong_status");
-
-    expect((await ledgerRows(tripId)).filter((r) => r.kind === "drive")).toHaveLength(1);
+    const rows = await ledgerRows(tripId);
+    expect(rows.filter((r) => r.kind === "drive")).toHaveLength(1);
+    expect(rows.filter((r) => r.kind === "drive_adjust")).toHaveLength(0);
   }, 60_000);
 
-  // D-49, asserted end to end rather than only in the pure function: a close pays the driver and
+  // D-49, asserted end to end rather than only in the pure function: a ride pays the driver and
   // nobody else. This is the test that would have caught the old shape — D-42 put a `pool` row on
   // the rider, and before that on the driver, so this one assertion has now been wrong twice.
   it("puts the whole award on the driver and writes no rider row", async () => {
     const tripId = await publishTrip();
-    const seatId = await joinAsRider(tripId);
-    await startTrip(tripId);
-
-    const closed = await closeAs(driverCookie, tripId, [seatId]);
-    expect(closed.status).toBe(200);
+    await joinAsRider(tripId);
+    await settle(tripId);
 
     const rows = await ledgerRows(tripId);
     const drive = rows.filter((r) => r.kind === "drive");
@@ -225,6 +223,41 @@ describe.skipIf(!canRun)("close + kudos never duplicate or drop a points_ledger 
     expect(rows.filter((r) => r.profile_id === riderId)).toHaveLength(0);
   }, 60_000);
 
+  // D-61: every booked seat counts as ridden at departure, and the driver reports the one that
+  // didn't — keeping the seat's pay and earning the report bonus on top.
+  it("charges a reported no-show and pays the driver for reporting it", async () => {
+    const tripId = await publishTrip();
+    const seatId = await joinAsRider(tripId);
+    await settle(tripId);
+
+    const reported = await fetch(`${APP_URL}/api/trips/${tripId}/no-show`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: driverCookie },
+      body: JSON.stringify({ tripRiderId: seatId }),
+    });
+    expect(reported.status).toBe(200);
+
+    const rows = await ledgerRows(tripId);
+    // The seat's 3 points are NOT clawed back: no correction row at all.
+    expect(rows.filter((r) => r.kind === "drive")[0]?.points).toBe(13);
+    expect(rows.filter((r) => r.kind === "drive_adjust")).toHaveLength(0);
+    expect(rows.filter((r) => r.kind === "no_show")).toEqual([
+      { profile_id: riderId, kind: "no_show", points: -5 },
+    ]);
+    expect(rows.filter((r) => r.kind === "no_show_report")).toEqual([
+      { profile_id: driverId, kind: "no_show_report", points: 2 },
+    ]);
+
+    // Reporting twice charges once.
+    const again = await fetch(`${APP_URL}/api/trips/${tripId}/no-show`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: driverCookie },
+      body: JSON.stringify({ tripRiderId: seatId }),
+    });
+    expect(again.status).toBe(409);
+    expect((await ledgerRows(tripId)).filter((r) => r.kind === "no_show")).toHaveLength(1);
+  }, 60_000);
+
   // The kudos award insert used to discard its error. Because the `kudos` row is written first under
   // unique(trip_id, from_profile_id), a failure there left the rider with a 201, the driver with no
   // points, and no way back — pressing the button again answers 409 already_given for ever.
@@ -235,9 +268,8 @@ describe.skipIf(!canRun)("close + kudos never duplicate or drop a points_ledger 
   // before this fix it silently ate the rider's one rating.
   it("refuses the kudos and keeps the rider's rating when the award cannot be written", async () => {
     const tripId = await publishTrip();
-    const seatId = await joinAsRider(tripId);
-    await startTrip(tripId);
-    expect((await closeAs(driverCookie, tripId, [seatId])).status).toBe(200);
+    await joinAsRider(tripId);
+    await settle(tripId);
 
     await admin.from("group").update({ kudos_weight: 0 }).eq("id", groupId);
 

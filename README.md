@@ -4,28 +4,28 @@ A workplace commute carpool PWA with light gamification. Employees join a group 
 route, publish and join trips, and earn points (Driven / Kudos) on a leaderboard, with a Pooled
 count showing how often you rode along (D-49: riding is counted, not scored).
 
-Core loop: driver publishes a trip → riders join → **driver starts it and is paid on the spot** →
-the ride finishes itself and riders are prompted for kudos.
+Core loop: driver publishes a trip → riders join → **the ride counts itself at its departure
+time** → the driver is paid and riders can leave kudos.
 
-Points used to be written at the close, which meant a driver who never tapped "End trip" was never
-paid for a ride that actually ran — and in practice, drivers were not tapping it. D-56 (2026-09-07)
-moved the award onto Start, and every later change to a started trip's roster appends a signed
-correction, so what the leaderboard shows is who actually carried whom rather than who remembered a
-last tap. Ending a trip is now optional: the scheduler finishes any ride left running, and the end
-screen is kept for the two things only the driver can do — name who really rode, and seat a guest
-who wasn't on the list.
+There is no Start and no End (D-61, 2026-09-19). Points used to be written at the close, and drivers
+were not closing — so rides that really ran paid nobody, and the scheduler cancelled them a day
+later. Now the scheduler settles each trip as its departure passes: every booked seat counts as
+ridden, the driver's award is written, and a round trip's return leg is created. Everyone gets a
+push 15 minutes before each leg, and the driver gets one 30 minutes after departure to pay for
+parking. Until the end of that day the driver can still fix the list — report a rider who didn't
+show (−5 for them, +2 for reporting it) or add someone who rode without booking.
 
 Everyone on a ride shares a **trip chat** (D-57) for the things that only matter for the next ten
 minutes: where you're waiting, that you've arrived, that you're running late.
 
-On a **round trip** the close does one more thing (D-35): it materialises the return leg as a real
+On a **round trip** the settle does one more thing (D-35): it materialises the return leg as a real
 trip of its own, seating the riders who said at join time that they were coming back, and freeing
-the seats of those who said they weren't. A round trip is therefore two rows with one departure
-each, not one row with two — which is what lets `started_at`, `closed_at`, the T−2h start guard and
-the 24h expiry each mean something unambiguous.
+the seats of those who said they weren't. That leg then settles at its own return time. A round trip
+is therefore two rows with one departure each, not one row with two — which is what lets every rule
+in the app measure against a `depart_at` that is actually true.
 
 **Status:** Phases 0, 1, 2, 3, 4, 5, 7, 8, and 9 of `docs/02_IMPLEMENTATION_PLAN.md` are complete —
-auth, groups, the full trip lifecycle (publish/join/start/close), the append-only points ledger,
+auth, groups, the full trip lifecycle (publish/join/settle), the append-only points ledger,
 kudos, the leaderboard, Web Push, the admin console + audit log, and hardening (E2E, rate limits,
 error boundaries, a11y) are all live against the real Supabase project and deployed to Vercel. Phase
 6 (Google Maps) is deliberately deferred to the end of the build (see `docs/DECISIONS.md`) and is
@@ -120,7 +120,7 @@ verification with `CRON_SECRET`.
 | `pnpm test:rls` | RLS integration tests (needs a running Postgres — see [Tests](#tests)) |
 | `pnpm test:admin` | Admin route integration tests — G9 (403 for non-admin) + G10 (audit row per mutation). Needs `pnpm dev` running (see [Tests](#tests)) |
 | `pnpm test:integration` | Points-ledger route tests — exactly-once close (incl. concurrent), the D-42 drive/pool split, kudos award rollback. Needs `pnpm dev` running (see [Tests](#tests)) |
-| `pnpm e2e` | Playwright E2E — the core publish → join → start → close → kudos loop, driven through a real browser against two seeded accounts |
+| `pnpm e2e` | Playwright E2E — the core publish → join → settle → kudos loop, driven through a real browser against two seeded accounts (the settle is triggered by ageing the trip and running one cron tick) |
 | `pnpm admin:bootstrap` | Promotes the account matching `ADMIN_BOOTSTRAP_EMAIL` to `platform_admin`. Idempotent — safe to re-run |
 | `pnpm verify` | `typecheck && lint && test` — must pass before every commit |
 | `pnpm db:types` | Regenerate `src/types/database.ts` from a **local** Supabase instance (needs Docker + `supabase start`) |
@@ -158,8 +158,11 @@ src/
     notify/        Shared "write a notification row + push it" helper
     push/          web-push wrapper; prunes dead subscriptions on 404/410
     api/adminAuth.ts  authenticateAdmin() — the authenticate+authorize step shared by every /api/admin/* route
-    api/driveAward.ts settleDriveAward()/syncDriveAward() — writes the driver's award at start and
-                    appends a correction whenever a started trip's roster changes (D-56)
+    api/settleTrip.ts settleTrip() — the whole lifecycle: claim, confirm the seats, build the
+                    return leg, pay the driver. Called only by the scheduler (D-61)
+    api/driveAward.ts settleDriveAward()/syncDriveAward() — writes the driver's award at the settle
+                    and appends a correction whenever the roster changes afterwards (D-56/D-61)
+    api/rosterWindow.ts  how long after a ride the driver may still fix its list (D-61)
     audit.ts       writeAuditLog() — appends to the append-only audit_log table
     rateLimit.ts   Postgres-backed rate limiter (serverless has no shared memory to count in)
   styles/
@@ -284,7 +287,7 @@ pnpm e2e            # Playwright — starts the dev server itself, seeds two fix
 
 `pnpm e2e` needs `.env.local` filled in (it talks to the real dev Supabase project) and Playwright's
 Chromium downloaded — `npx playwright install chromium` if `pnpm e2e` reports it's missing. The specs
-are the core loop (publish → join → start → close → kudos), the ride share link's access rules, and
+are the core loop (publish → join → settle → kudos), the ride share link's access rules, and
 the signup email-confirmation round trip (`signup-confirm.spec.ts`, which mints the confirmation
 token with the admin API rather than waiting for a real email, then drives the real callback).
 
@@ -387,7 +390,7 @@ Before trusting push in production:
 2. Install the PWA on an Android device (Chrome) and, separately, an iOS 16.4+ device **added to
    the home screen** (Safari-tab-only sessions never receive push on iOS — no workaround, it's an
    Apple platform restriction; the app shows an in-app nudge for this).
-3. Enable notifications from the You tab, trigger a trip start/close/kudos from another account,
+3. Enable notifications from the You tab, trigger a departure reminder or a kudos from another account,
    and confirm the OS-level notification actually appears. Simulator success is not evidence.
 
 ## Other docs

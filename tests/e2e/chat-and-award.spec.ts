@@ -1,8 +1,19 @@
 import { test, expect, type Page } from "@playwright/test";
 import { E2E_DRIVER_EMAIL, E2E_RIDER_EMAIL, E2E_PASSWORD } from "./global-setup";
-import { createGroup, getGroupCode, joinGroupByCode, signIn, publishTrip, joinTrip } from "./helpers";
+import {
+  createGroup,
+  getGroupCode,
+  joinGroupByCode,
+  signIn,
+  publishTrip,
+  joinTrip,
+  ageTripsInGroup,
+  runCronTick,
+  groupIdByName,
+} from "./helpers";
 
-// D-56 and D-57, driven through the real UI.
+// D-61 and D-57, driven through the real UI: a ride that pays itself at its departure, a chat that
+// stays open while it is happening, and the driver reporting a rider who never got in.
 //
 // Both features are here in one spec because they share the setup that makes either meaningful: a
 // live trip with a driver and a rider actually on it. Splitting them would double a two-account,
@@ -25,7 +36,7 @@ async function openChat(page: Page) {
   await loaded;
 }
 
-test("start pays the driver, the roster corrects it, and the car can talk to itself", async ({ browser }) => {
+test("a ride settles itself, the car talks, and a no-show is reported", async ({ browser, baseURL }) => {
   const driverContext = await browser.newContext();
   const riderContext = await browser.newContext();
   const driver = await driverContext.newPage();
@@ -33,9 +44,7 @@ test("start pays the driver, the roster corrects it, and the car can talk to its
 
   const groupName = `E2E Chat ${Date.now()}`;
 
-  // 45 minutes out: inside the T-2h start window (D-16) so the trip can actually be started, and
-  // inside the 60-minute late-cancellation window (D-10) so the rider's leave is the real,
-  // penalised kind rather than a free one.
+  // 45 minutes out, so the trip is publishable and joinable before it is aged into the past.
   const trip = await test.step("driver publishes, rider joins", async () => {
     await signIn(driver, E2E_DRIVER_EMAIL, E2E_PASSWORD);
     await createGroup(driver, groupName);
@@ -50,28 +59,11 @@ test("start pays the driver, the roster corrects it, and the car can talk to its
     return published;
   });
 
-  // ─── D-56 ────────────────────────────────────────────────────────────────
-  await test.step("starting the trip pays the driver on the spot", async () => {
+  await test.step("nothing on screen starts the ride — the scheduler does, and it pays", async () => {
     await openOwnTrip(driver, trip.displayTime);
-    const started = driver.waitForResponse((r) => r.url().includes("/start") && r.request().method() === "POST");
-    await driver.getByText("Start trip · get your points").click({ timeout: 15_000 });
-
-    // The figure comes off the route, not off the screen: 10 for driving + 3 for the one filled
-    // seat. This is the assertion the whole change exists for — before D-56 this response paid
-    // nothing at all and the ledger stayed empty until someone remembered to close.
-    const body = await (await started).json();
-    expect(body.pointsAwarded).toBe(13);
-    expect(body.awardError).toBeNull();
-
-    await expect(driver.getByText("+13 pts")).toBeVisible({ timeout: 10_000 });
-    await expect(driver.getByText("Your points are already in")).toBeVisible();
-  });
-
-  await test.step("the driver's score is on the leaderboard before anyone has closed anything", async () => {
+    await expect(driver.getByText(/counts itself at/)).toBeVisible({ timeout: 10_000 });
+    await expect(driver.getByText("Start trip")).toHaveCount(0);
     await driver.locator(".ov .iconbtn").first().click();
-    await driver.locator(".tab", { hasText: "Ranks" }).click();
-    await expect(driver.getByText("Leaderboard")).toBeVisible({ timeout: 10_000 });
-    await expect(driver.getByText("13", { exact: true }).first()).toBeVisible();
   });
 
   // ─── D-57 ────────────────────────────────────────────────────────────────
@@ -123,31 +115,39 @@ test("start pays the driver, the roster corrects it, and the car can talk to its
     expect(chat[0].body).toBe("Two minutes, coming down now");
   });
 
-  // ─── D-56, the correcting half ───────────────────────────────────────────
-  await test.step("a rider leaving a started trip takes their seat's bonus back off the driver", async () => {
-    await rider.reload();
-    await openOwnTrip(rider, trip.displayTime);
-    const left = rider.waitForResponse((r) => r.url().includes("/leave") && r.request().method() === "POST");
-    await rider.getByText("Leave this carpool").click();
-    await rider.getByRole("button", { name: "Leave", exact: true }).click();
-    const body = await (await left).json();
+  // ─── D-61, the settle and the correction ────────────────────────────────
+  await test.step("the departure time pays the driver, with no tap from anyone", async () => {
+    await ageTripsInGroup(await groupIdByName(groupName));
+    await runCronTick(baseURL!);
 
-    // Both sides of one event, in one response: the rider is charged the late-cancellation penalty
-    // they always were, and the driver — who was paid for a fuller car 20 lines ago — gives the
-    // seat's 3 points back.
-    expect(body.latePenalty).toBe(-5);
-    expect(body.driverPointsAdjusted).toBe(-3);
-    expect(body.awardError).toBeNull();
-  });
-
-  await test.step("the leaderboard follows", async () => {
     await driver.reload();
     await driver.locator(".tab", { hasText: "Ranks" }).click();
     await expect(driver.getByText("Leaderboard")).toBeVisible({ timeout: 10_000 });
-    // 13 − 3. The append-only ledger now holds a `drive` row and a `drive_adjust` row, and the
-    // driver is still credited with exactly ONE trip driven — a second `drive` row would have said
-    // two, which is why the correction has a kind of its own.
-    await expect(driver.getByText("10", { exact: true }).first()).toBeVisible({ timeout: 10_000 });
+    // 10 for driving + 3 for the one filled seat. Before D-61 this ride would have paid nothing at
+    // all unless someone remembered to press two buttons.
+    await expect(driver.getByText("13", { exact: true }).first()).toBeVisible({ timeout: 10_000 });
+  });
+
+  await test.step("the driver reports the rider who never got in", async () => {
+    await openOwnTrip(driver, trip.displayTime);
+    await driver.getByText("Fix the ride list").click();
+    await expect(driver.getByRole("heading", { name: "Fix the ride list" })).toBeVisible();
+
+    const reported = driver.waitForResponse((r) => r.url().includes("/no-show") && r.request().method() === "POST");
+    await driver.getByText("Didn't show").click();
+    // Two taps, because there is no undo: the ledger is append-only.
+    await driver.getByRole("button", { name: "Report no-show" }).click();
+    const body = await (await reported).json();
+    expect(body.riderPoints).toBe(-5);
+    expect(body.driverPoints).toBe(2);
+  });
+
+  await test.step("the leaderboard follows: the driver keeps the seat and gains the report bonus", async () => {
+    await driver.reload();
+    await driver.locator(".tab", { hasText: "Ranks" }).click();
+    await expect(driver.getByText("Leaderboard")).toBeVisible({ timeout: 10_000 });
+    // 13 + 2. The seat's own 3 points stay: the driver held it and drove (D-61).
+    await expect(driver.getByText("15", { exact: true }).first()).toBeVisible({ timeout: 10_000 });
   });
 
   await driverContext.close();

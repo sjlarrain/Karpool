@@ -1,13 +1,26 @@
 import { test, expect } from "@playwright/test";
 import { E2E_DRIVER_EMAIL, E2E_RIDER_EMAIL, E2E_PASSWORD } from "./global-setup";
-import { createGroup, getGroupCode, joinGroupByCode, signIn, publishTrip, joinTrip } from "./helpers";
+import {
+  createGroup,
+  getGroupCode,
+  joinGroupByCode,
+  signIn,
+  publishTrip,
+  joinTrip,
+  ageTripsInGroup,
+  runCronTick,
+  groupIdByName,
+} from "./helpers";
 
 // G5 — the core loop, driven through the real UI (not the API directly): sign in, publish a trip,
-// a second account joins it, the driver starts and closes it, the rider gives kudos, and the
-// leaderboard reflects it. Uses the two fixed seeded accounts from global-setup.ts rather than
-// signing up fresh ones per run (Supabase's signup email rate limit makes that impractical).
+// a second account joins it, the ride happens by itself, the rider gives kudos, and the leaderboard
+// reflects it. Uses the two fixed seeded accounts from global-setup.ts rather than signing up fresh
+// ones per run (Supabase's signup email rate limit makes that impractical).
+//
+// D-61: there is no Start and no Close to click. The trip is aged past its departure and one cron
+// tick is run — the same route pg_cron calls in production — and that is what makes the ride count.
 
-test("core loop: publish, join, start, close, kudos, leaderboard", async ({ browser }) => {
+test("core loop: publish, join, settle, kudos, leaderboard", async ({ browser, baseURL }) => {
   const driverContext = await browser.newContext();
   const riderContext = await browser.newContext();
   const driver = await driverContext.newPage();
@@ -40,42 +53,30 @@ test("core loop: publish, join, start, close, kudos, leaderboard", async ({ brow
     await joinTrip(rider, rider.locator(".card", { hasText: trip.displayTime }).first());
   });
 
-  await test.step("driver starts and closes the trip, confirming the rider", async () => {
-    const detailLoaded = driver.waitForResponse((r) => /\/api\/trips\/[^/]+$/.test(new URL(r.url()).pathname) && r.request().method() === "GET");
-    await driver.locator(".card").first().click();
-    await detailLoaded;
-    const started = driver.waitForResponse((r) => r.url().includes("/start") && r.request().method() === "POST");
-    await driver.getByText("Start trip · get your points").click({ timeout: 15_000 });
-    await started;
-    // D-56: the award is written by /start now, so the toast carries the figure and the screen says
-    // the driver has nothing left to do. Asserting the "+13 pts" here is the whole point of the
-    // change — a green "Trip started" would pass just as happily on the old behaviour, which paid
-    // nobody until someone remembered to close.
-    await expect(driver.getByText("+13 pts")).toBeVisible({ timeout: 10_000 });
-    await expect(driver.getByText("Trip in progress")).toBeVisible({ timeout: 10_000 });
-    await expect(driver.getByText("Your points are already in")).toBeVisible();
-    await driver.getByText("End trip now").click();
-    await expect(driver.getByRole("heading", { name: "End trip" })).toBeVisible();
-    await driver.locator("button.btnP", { hasText: "End trip & notify riders" }).click();
-    // No "+N" in this toast: the roster at close matches the roster at start, so the close moved
-    // nothing. That is D-56's normal case, and it is worth asserting that it stays quiet.
-    await expect(driver.getByText("Trip closed")).toBeVisible({ timeout: 10_000 });
-    await driver.locator(".ov .iconbtn").first().click(); // back out of the trip detail overlay
+  await test.step("the ride settles itself once its departure passes", async () => {
+    // What production does every five minutes, compressed: move the trip into the past, then run
+    // one tick. Nobody taps anything.
+    await ageTripsInGroup(await groupIdByName(groupName));
+    const tick = await runCronTick(baseURL!);
+    // Both legs of the round trip: the outbound settles, which materialises the return leg, and the
+    // return is already in the past too, so the same tick settles it as well.
+    expect(tick.settled).toBeGreaterThanOrEqual(1);
+
+    // D-61: a settled ride stays on the LIVE feed until its day is over — its kudos button and the
+    // driver's "fix the list" both live on that card, so hiding it at the moment it departs would
+    // hide the only two things left to do with it.
+    await driver.reload();
+    await expect(driver.locator(".card", { hasText: trip.displayTime }).first()).toBeVisible({ timeout: 10_000 });
+    await expect(driver.getByText("COMPLETED").first()).toBeVisible();
   });
 
   await test.step("rider gives kudos", async () => {
     await rider.reload();
-    // Not `.card` first(): closing a round trip materialises the return leg (D-35), so the feed now
-    // holds a live back trip *above* the closed outbound this step is about.
-    //
-    // And the outbound is no longer in the live feed at all. D-53 (shipped after this spec) puts a
-    // closed trip behind a `Past · N` toggle that starts collapsed, so the kudos prompt lives one
-    // tap deeper than it used to — which is worth walking through here rather than routing around,
-    // because it is the path a real rider takes to leave kudos on a ride that is over.
-    await rider.getByText(/^Past · \d+$/).click();
+    // Still on the live feed (D-61), badged COMPLETED — the ride left minutes ago, and the card is
+    // where the rider thanks their driver.
     await rider.locator(".card", { hasText: trip.displayTime }).first().click();
     await expect(rider.getByText("Rate your ride")).toBeVisible({ timeout: 10_000 });
-    // D-18: the 💚 toggle starts off, so the submit reads "Skip & close" until the rider opts in.
+    // D-18: the kudos toggle starts off, so the submit reads "Skip & close" until the rider opts in.
     await rider.getByRole("button", { name: /Give kudos/ }).click();
     await rider.locator("button.btnP", { hasText: "Send kudos" }).click();
     await expect(rider.getByText("Kudos sent to")).toBeVisible({ timeout: 10_000 });
