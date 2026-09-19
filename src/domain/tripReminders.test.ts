@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDepartureReminderDue, isCloseReminderDue } from "./tripReminders";
+import { isDepartureReminderDue, isParkingReminderDue } from "./tripReminders";
 
 describe("isDepartureReminderDue", () => {
   const NOW = new Date("2026-08-31T08:00:00.000Z");
@@ -38,24 +38,25 @@ describe("isDepartureReminderDue", () => {
   });
 });
 
-describe("isCloseReminderDue", () => {
-  const NOW = new Date("2026-08-31T10:00:00.000Z");
-  const AFTER = 90;
+// D-61: the driver's "pay for parking" push, 30 minutes after the leg departs.
+describe("isParkingReminderDue", () => {
+  const DEPART = "2026-09-18T15:00:00.000Z";
+  const due = (now: string) => isParkingReminderDue(DEPART, new Date(now), 30, 60);
 
-  it("a trip started longer ago than the threshold is due", () => {
-    expect(isCloseReminderDue("2026-08-31T08:29:00.000Z", NOW, AFTER)).toBe(true);
+  it("is not due before 30 minutes have passed", () => {
+    expect(due("2026-09-18T15:29:59.000Z")).toBe(false);
   });
 
-  it("the threshold itself counts as due", () => {
-    expect(isCloseReminderDue("2026-08-31T08:30:00.000Z", NOW, AFTER)).toBe(true);
+  it("is due at 30 minutes and for the grace hour after", () => {
+    expect(due("2026-09-18T15:30:00.000Z")).toBe(true);
+    expect(due("2026-09-18T16:30:00.000Z")).toBe(true);
   });
 
-  it("a trip started more recently than the threshold is left alone", () => {
-    expect(isCloseReminderDue("2026-08-31T09:00:00.000Z", NOW, AFTER)).toBe(false);
+  it("is not resurrected after the grace hour — a scheduler back from the dead stays quiet", () => {
+    expect(due("2026-09-18T16:30:00.001Z")).toBe(false);
   });
 
-  it("a started row with no started_at is not due — a data fault must not spray notifications", () => {
-    expect(isCloseReminderDue(null, NOW, AFTER)).toBe(false);
-    expect(isCloseReminderDue("not a date", NOW, AFTER)).toBe(false);
+  it("an unparseable departure is never due", () => {
+    expect(isParkingReminderDue("not a date", new Date(), 30, 60)).toBe(false);
   });
 });

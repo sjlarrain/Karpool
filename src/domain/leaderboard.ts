@@ -3,7 +3,7 @@
 // and presents ledger rows that already carry the weight-derived points at the time each was
 // written (D-11: weights are per-group and can change over time without rewriting history).
 
-export type LedgerKind = "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust";
+export type LedgerKind = "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "no_show_report" | "admin_adjust";
 
 export interface LedgerRow {
   profileId: string;

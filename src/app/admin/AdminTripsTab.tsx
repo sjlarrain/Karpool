@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useAdminFetch, LoadingOrError, th, td, fmtDate } from "./adminUi";
-import { readJsonBody } from "@/lib/http/readJsonBody";
 
 interface TripRow {
   id: string;
@@ -17,37 +16,15 @@ interface TripRow {
 
 const STATUS_FILTERS = ["all", "scheduled", "started", "closed", "cancelled"] as const;
 
+// D-61: read-only. Force-start and force-close are gone with the taps they stood in for — the
+// scheduler settles every trip at its departure, so there is no trip left for an admin to rescue.
 export function AdminTripsTab() {
   const [status, setStatus] = useState<(typeof STATUS_FILTERS)[number]>("all");
-  const [forceCloseTrip, setForceCloseTrip] = useState<TripRow | null>(null);
-  const [startingTripId, setStartingTripId] = useState<string | null>(null);
-  const [startError, setStartError] = useState<string | null>(null);
 
   const { data, failed, loading, reload } = useAdminFetch<{ trips: TripRow[] }>(
     `/api/admin/trips${status !== "all" ? `?status=${status}` : ""}`,
     [status],
   );
-
-  // D-50: the admin console's other easy-access action — starting a trip the driver forgot to.
-  // No confirmation sheet, unlike force-close: starting moves nothing in points_ledger, so there is
-  // nothing here that needs a typed reason the way a paid close does.
-  async function startTrip(t: TripRow) {
-    setStartError(null);
-    setStartingTripId(t.id);
-    try {
-      const res = await fetch(`/api/admin/trips/${t.id}/force-start`, { method: "POST" });
-      const body = await readJsonBody<{ message?: string }>(res);
-      if (!res.ok) {
-        setStartError(body?.message ?? "Couldn't start that trip.");
-        return;
-      }
-      reload();
-    } catch {
-      setStartError("Couldn't reach the server — check your connection and try again.");
-    } finally {
-      setStartingTripId(null);
-    }
-  }
 
   return (
     <div>
@@ -71,7 +48,6 @@ export function AdminTripsTab() {
                 <th style={th}>Status</th>
                 <th style={th}>Started</th>
                 <th style={th}>Closed</th>
-                <th style={th} />
               </tr>
             </thead>
             <tbody>
@@ -86,30 +62,11 @@ export function AdminTripsTab() {
                   </td>
                   <td style={td}>{fmtDate(t.started_at)}</td>
                   <td style={td}>{fmtDate(t.closed_at)}</td>
-                  <td style={td}>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      {t.status === "scheduled" && (
-                        <button
-                          className="btnG"
-                          style={{ width: "auto", padding: "6px 14px", fontSize: 12 }}
-                          disabled={startingTripId === t.id}
-                          onClick={() => startTrip(t)}
-                        >
-                          {startingTripId === t.id ? "Starting…" : "Start"}
-                        </button>
-                      )}
-                      {(t.status === "scheduled" || t.status === "started") && (
-                        <button className="btnG" style={{ width: "auto", padding: "6px 14px", fontSize: 12, background: "var(--danger)" }} onClick={() => setForceCloseTrip(t)}>
-                          Force close
-                        </button>
-                      )}
-                    </div>
-                  </td>
                 </tr>
               ))}
               {(data?.trips ?? []).length === 0 && (
                 <tr>
-                  <td style={td} colSpan={6}>
+                  <td style={td} colSpan={5}>
                     No trips found.
                   </td>
                 </tr>
@@ -118,73 +75,6 @@ export function AdminTripsTab() {
           </table>
         </div>
       )}
-      {startError && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "10px 0 0" }}>{startError}</p>}
-
-      {forceCloseTrip && (
-        <ForceCloseModal trip={forceCloseTrip} onClose={() => setForceCloseTrip(null)} onDone={() => { setForceCloseTrip(null); reload(); }} />
-      )}
-    </div>
-  );
-}
-
-function ForceCloseModal({ trip, onClose, onDone }: { trip: TripRow; onClose: () => void; onDone: () => void }) {
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit() {
-    if (!reason.trim()) {
-      setError("A reason is required.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/admin/trips/${trip.id}/force-close`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: reason.trim() }),
-      });
-      const body = await readJsonBody(res);
-      if (!res.ok) {
-        setError(body?.message ?? "Couldn't force-close that trip.");
-        return;
-      }
-      onDone();
-    } catch {
-      setError("Couldn't reach the server — check your connection and try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
-      <div style={{ width: "min(420px, 92vw)", background: "var(--bg)", borderRadius: "var(--r-xl)", padding: 20 }} onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ font: "800 16px var(--font-display)", color: "var(--ink)", margin: "0 0 6px" }}>Force-close this trip?</h3>
-        <p style={{ font: "600 12.5px var(--font-body)", color: "rgba(0,0,0,.5)", margin: "0 0 14px" }}>
-          {trip.status === "started"
-            ? "The driver already started this trip, so closing it pays them the normal drive award and confirms every active rider — nobody can be marked a no-show, since only the driver was there to judge that."
-            : "This trip never started, so this is a safety-net status change only — it never touches the points ledger, since no ride happened."}
-        </p>
-        <label className="lbl">Reason (required, logged to the audit trail)</label>
-        <textarea
-          className="field"
-          rows={3}
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          style={{ marginBottom: 10, resize: "vertical" }}
-        />
-        {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "0 0 10px" }}>{error}</p>}
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btnG" style={{ flex: 1 }} onClick={onClose} disabled={busy}>
-            Cancel
-          </button>
-          <button className="btnP" style={{ flex: 1, background: "var(--danger)", boxShadow: "none" }} onClick={submit} disabled={busy}>
-            Force close
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

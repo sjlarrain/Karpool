@@ -58,13 +58,17 @@ export type SeatState = "joined" | "confirmed" | "left" | "no_show";
 
 export function canPostToTrip(input: {
   status: TripStatus;
+  // D-61: a settled trip whose departure day is not over yet (see tripSettle.canCorrect).
+  correctable: boolean;
   isDriver: boolean;
   seatState: SeatState | null;
 }): boolean {
-  // Closed and cancelled threads are readable history. Nothing said now could help anyone catch a
-  // ride that is over, and a thread that stays open on a dead trip is a place for messages nobody
-  // is watching for.
-  if (input.status !== "scheduled" && input.status !== "started") return false;
+  // D-61 settles a trip the moment it departs, so "closed" no longer means the ride is over — the
+  // car has only just left. The thread stays open until the end of that day (the same window the
+  // driver has to fix the ride list), then becomes readable history: nothing said after that could
+  // help anyone catch the ride, and a thread on a dead trip is a place nobody is watching.
+  const live = input.status === "scheduled" || (input.status === "closed" && input.correctable);
+  if (!live) return false;
   return canReadTrip(input);
 }
 

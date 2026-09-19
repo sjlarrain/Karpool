@@ -6,6 +6,7 @@ import {
   computeKudosAward,
   computeLateLeavePenalty,
   computeNoShowPenalty,
+  computeNoShowReport,
   isLateLeave,
   poolPointsForSeat,
 } from "./points";
@@ -146,8 +147,15 @@ describe("computeNoShowPenalty", () => {
     });
   });
 
-  it("costs more than a late cancellation at the configured defaults", () => {
-    expect(Math.abs(computeNoShowPenalty(-10).points)).toBeGreaterThan(Math.abs(-5));
+});
+
+// D-61: the driver reports a no-show after the ride; the rider pays, the driver is paid for telling.
+describe("computeNoShowReport", () => {
+  it("charges the rider and pays the driver, at the D-61 defaults (-5 / +2)", () => {
+    expect(computeNoShowReport(-5, 2)).toEqual({
+      rider: { kind: "no_show", points: -5, reason: "Booked a seat and didn't ride" },
+      driver: { kind: "no_show_report", points: 2, reason: "Reported a no-show" },
+    });
   });
 });
 

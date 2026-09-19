@@ -1,21 +1,24 @@
 import type { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { computeDriveAward, computeDriveCorrection, type CloseWeights, type LedgerAward } from "@/domain/points";
 
-// D-56 — the driver's award, written when they press Start and kept honest afterwards.
+// The driver's award, and every later correction to it.
 //
-// The developer, 2026-09-07: "I want to make points after they press start." Until now the close
-// was the only writer of points_ledger, and drivers were not closing, so rides that ran with a full
-// car paid nothing at all.
-//
-// Start is a forecast. Seats change afterwards — someone climbs in at the kerb, a rider leaves, the
-// driver names a no-show at close — and the developer asked the award to follow ("Yes, correct
-// them"). It does, by APPENDING the difference: points_ledger is append-only (CLAUDE.md §3.5), so
-// nothing here ever edits or deletes the row Start wrote.
+// D-56 paid it at Start; D-61 (2026-09-19) pays it when the scheduler settles the trip at its
+// departure (src/lib/api/settleTrip.ts). Either way the first payment is a forecast of the seats,
+// and the driver can still put the list right until the end of that day — seat someone who rode
+// without booking, or report someone who didn't show. points_ledger is append-only
+// (CLAUDE.md §3.5), so a correction is a NEW row carrying the difference, never an edit.
 //
 // Every correction is derived from what the ledger already holds rather than from the change that
-// triggered it, which is the property that makes this safe to call from six routes and a scheduler
-// that can all fire at once: a correction lost to a failure is simply re-derived by the next one,
-// and one applied twice owes nothing the second time.
+// triggered it, which is the property that makes this safe to call from several routes and the
+// scheduler at once: a correction lost to a failure is re-derived by the next one, and one applied
+// twice owes nothing the second time.
+//
+// Seats counted: `joined`, `confirmed` AND `no_show`. D-61's no-show report leaves the driver's
+// seat pay alone ("+2 for the driver", on top) — they held the seat and drove — so a reported
+// no-show is still a paid seat, and a later correction must not claw it back.
+
+const PAID_SEAT_STATES = ["joined", "confirmed", "no_show"] as const;
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
@@ -27,7 +30,7 @@ export interface DriveAwardResult {
   // Set when the correction could not be written. NOT thrown and NOT swallowed: the roster change
   // that triggered it has already succeeded, so failing the caller's request would be a lie, but a
   // silent miss would be a leaderboard that quietly drifts (the D-41 failure, by another route).
-  // The routes echo this back, and the next correction — or the close — re-derives it anyway.
+  // The routes echo this back, and the next correction re-derives it anyway.
   error?: string;
 }
 
@@ -44,10 +47,10 @@ export async function driveAwardPaid(admin: AdminClient, tripId: string, driverI
 }
 
 /**
- * Re-price a started trip against its current roster and append the difference.
+ * Re-price a settled trip against its current roster and append the difference.
  *
- * A no-op for any trip that is not `started`: a scheduled trip has not been paid yet, and a closed
- * or cancelled one is history. That guard is why the roster routes can call this unconditionally.
+ * A no-op for any trip that is not `closed`: a scheduled trip has not been paid yet, and a
+ * cancelled one never will be. That guard is why the roster routes can call this unconditionally.
  */
 export async function syncDriveAward(admin: AdminClient, tripId: string): Promise<DriveAwardResult> {
   const { data: trip, error } = await admin
@@ -57,24 +60,17 @@ export async function syncDriveAward(admin: AdminClient, tripId: string): Promis
     .maybeSingle();
   if (error) return { written: null, total: 0, error: error.message };
   if (!trip) return { written: null, total: 0, error: "trip_not_found" };
-  if (trip.status !== "started") return { written: null, total: 0 };
+  if (trip.status !== "closed") return { written: null, total: 0 };
   return settleDriveAward(admin, trip);
 }
 
 /**
- * The one write. Counts the seats, reads what has been paid, appends the difference.
- *
- * Called directly by `startTrip` for the first payment, where the trip has only just flipped to
- * `started` and there is nothing on the ledger yet, so the "correction" is the whole award.
- *
- * `seatsFilled` may be supplied by a caller that has already decided the roster — the close knows
- * exactly who it just confirmed, who it just marked a no-show, and which guests it just seated, and
- * a fresh count could race its own writes.
+ * The one write. Counts the paid seats, reads what has been paid, appends the difference. On the
+ * settle there is nothing on the ledger yet, so the "correction" is the whole award.
  */
 export async function settleDriveAward(
   admin: AdminClient,
   trip: { id: string; driver_id: string; group_id: string },
-  seatsFilled?: number,
 ): Promise<DriveAwardResult> {
   const { data: group, error: groupError } = await admin
     .from("group")
@@ -90,19 +86,16 @@ export async function settleDriveAward(
     poolStep: group.pool_step,
   };
 
-  let seats = seatsFilled;
-  if (seats === undefined) {
-    // Guests count alongside registered riders: a guest fills a seat, so they pay the driver's fill
-    // bonus even though they hold no profile and earn nothing themselves (D-09). Counting SEATS
-    // rather than profiles is what D-55 made load-bearing — a roster guest's seat has no profile_id.
-    const { count, error: seatError } = await admin
-      .from("trip_rider")
-      .select("id", { count: "exact", head: true })
-      .eq("trip_id", trip.id)
-      .in("state", ["joined", "confirmed"]);
-    if (seatError) return { written: null, total: 0, error: seatError.message };
-    seats = count ?? 0;
-  }
+  // Guests count alongside registered riders: a guest fills a seat, so they pay the driver's fill
+  // bonus even though they hold no profile and earn nothing themselves (D-09). Counting SEATS rather
+  // than profiles is what D-55 made load-bearing — a roster guest's seat has no profile_id.
+  const { count, error: seatError } = await admin
+    .from("trip_rider")
+    .select("id", { count: "exact", head: true })
+    .eq("trip_id", trip.id)
+    .in("state", [...PAID_SEAT_STATES]);
+  if (seatError) return { written: null, total: 0, error: seatError.message };
+  const seats = count ?? 0;
 
   const paid = await driveAwardPaid(admin, trip.id, trip.driver_id);
   if (paid === null) {

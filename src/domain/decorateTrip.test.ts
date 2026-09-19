@@ -15,6 +15,7 @@ const base: TripView = {
   returnTime: "17:30",
   status: "scheduled",
   departed: false,
+  correctable: false,
   cancelledReason: null,
   direction: "round",
   outStop: null,
@@ -111,25 +112,24 @@ describe("decorateTrip", () => {
     expect(d.driverLabel).toBe("Marco Lee is driving");
   });
 
-  it("stops a departed trip being joinable, while the driver may still start it late", () => {
-    // D-23: the 24h grace window is the driver's, not a late rider's.
-    const d = decorateTrip({ ...base, departed: true, role: "driving" });
+  it("stops a departed trip being joinable", () => {
+    const d = decorateTrip({ ...base, departed: true, role: "open" });
     expect(d.joinable).toBe(false);
     expect(d.isPast).toBe(false);
   });
 
-  it("keeps a departed, unstarted trip on the live feed for every viewer", () => {
-    // D-53: only a terminal status (closed/cancelled) moves a card to Past. A scheduled trip whose
-    // departure has passed is still active for everyone, not just the driver who can still act on it.
+  it("keeps a departed trip the scheduler has not settled yet on the live feed for every viewer", () => {
     const departed = { ...base, departed: true } as const;
     expect(decorateTrip({ ...departed, role: "open" }).isPast).toBe(false);
     expect(decorateTrip({ ...departed, role: "joined" }).isPast).toBe(false);
     expect(decorateTrip({ ...departed, role: "driving" }).isPast).toBe(false);
   });
 
-  it("keeps a started trip live however long ago it left", () => {
-    // A ride in progress is the opposite of past, whatever the clock says. Only `scheduled` ages out.
-    expect(decorateTrip({ ...base, status: "started", departed: true, role: "joined" }).isPast).toBe(false);
+  it("keeps a settled trip on the live feed until its day is over (D-61)", () => {
+    const today = decorateTrip({ ...base, status: "closed", departed: true, correctable: true });
+    expect(today.badge).toBe("COMPLETED");
+    expect(today.isPast).toBe(false);
+    expect(decorateTrip({ ...base, status: "closed", departed: true, correctable: false }).isPast).toBe(true);
   });
 
   it("badges a closed trip as COMPLETED, outranking the viewer's role", () => {
@@ -143,6 +143,9 @@ describe("decorateTrip", () => {
     expect(decorateTrip({ ...base, status: "cancelled" }).badge).toBe("CANCELLED");
     expect(decorateTrip({ ...base, status: "cancelled", cancelledReason: "not_started" }).badge).toBe(
       "PAST · NEVER STARTED",
+    );
+    expect(decorateTrip({ ...base, status: "cancelled", cancelledReason: "lifecycle_rollout" }).badge).toBe(
+      "PAST · NOT COUNTED",
     );
   });
 

@@ -4,6 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { syncDriveAward } from "@/lib/api/driveAward";
+import { rosterWindow } from "@/lib/api/rosterWindow";
 
 // DELETE /api/trips/:id/guests/:tripRiderId — the driver frees a seat they gave a roster guest.
 //
@@ -11,6 +12,10 @@ import { syncDriveAward } from "@/lib/api/driveAward";
 // whose seat was taken back, and a guest has nobody to notify. Marks the seat `left` rather than
 // deleting the row, so a guest's history is only ever what they actually rode — a confirmed seat on
 // a closed trip — and never a seat that was booked and undone.
+//
+// D-61: also open after departure, until the end of that day. A guest can't be charged for not
+// showing (no profile), so freeing their seat — and with it the driver's pay for it — is the
+// guest's version of a no-show.
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string; tripRiderId: string }> }) {
   const { id, tripRiderId } = await params;
   const supabase = await createSupabaseServerClient();
@@ -19,15 +24,16 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const { data: trip } = await supabase.from("trip").select("id, driver_id, status").eq("id", id).maybeSingle();
+  const { data: trip } = await supabase.from("trip").select("id, driver_id, status, depart_at").eq("id", id).maybeSingle();
   if (!trip) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
   if (trip.driver_id !== user.id) {
     return NextResponse.json({ error: "not_driver", message: "Only the driver can free that seat." }, { status: 403 });
   }
-  if (trip.status !== "scheduled" && trip.status !== "started") {
-    return NextResponse.json({ error: "wrong_status", message: "This trip is no longer active." }, { status: 409 });
+  const gate = await rosterWindow(trip);
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error, message: gate.message }, { status: 409 });
   }
 
   const { data: seat, error: seatError } = await supabase
@@ -54,7 +60,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return NextResponse.json({ error: "remove_failed", message: error.message }, { status: 500 });
   }
 
-  // D-56: the seat is gone, so its bonus goes with it on a started trip. No-op while scheduled.
+  // The seat is gone, so on a settled trip its bonus goes with it. No-op while scheduled.
   const award = await syncDriveAward(admin, id);
 
   await writeAuditLog(admin, {

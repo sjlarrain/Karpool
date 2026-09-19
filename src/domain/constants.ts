@@ -6,18 +6,12 @@ export const SEATS = { default: 3, min: 1, max: 7 } as const;
 export const TRIP_STATUS = ["scheduled", "started", "closed", "cancelled"] as const;
 export const GROUP_CODE_LENGTH = 6;
 
-// D-23: a scheduled trip nobody started stays live for this long past its departure time — the
-// driver can still start it, close it, or add passengers — and is then ended by the scheduler with
-// this cancelled_reason, which the UI renders as "Past · not started" rather than "Cancelled".
-export const UNSTARTED_GRACE_HOURS = 24;
+// Historical cancelled_reason sentinels, both written by the system, never by a driver.
+// D-23's scheduler expired trips nobody started (retired by D-61, but its rows remain). D-61's
+// rollout cancelled every trip still unfinished past its departure on switch-over day.
 export const NOT_STARTED_REASON = "not_started";
-
-// D-35 mechanic (ii): how long before a round trip's return departure the scheduler gives up
-// waiting for the driver and materialises the return leg itself. Deliberately the same 120 as
-// D-16's start window, for the same reason — two hours out is the point where a rider needs to
-// know whether they have a seat home, and where a driver can still act on the answer. The two
-// numbers coincide but are not the same rule: changing one does not imply changing the other.
-export const RETURN_LEG_LEAD_MINUTES = 120;
+export const ROLLOUT_REASON = "lifecycle_rollout";
+export const SYSTEM_CANCEL_REASONS: readonly string[] = [NOT_STARTED_REASON, ROLLOUT_REASON];
 
 // D-27: how far back the Carpools tab's Past section reaches. Applied default, not a decision —
 // all-time history is a bigger query and a bigger screen than was asked for.
@@ -35,7 +29,7 @@ export const DEPARTURE_REMINDER_LEAD_MINUTES = 15;
 // bounds this.
 export const DEPARTURE_REMINDER_GRACE_MINUTES = 5;
 
-// How long a trip may sit in `started` before its driver is nudged to close it. Closing is what
-// writes points_ledger, so an unclosed trip pays nobody. Comfortably inside the 6h auto-close
-// (which pays nobody either) so the nudge has time to work before the safety net fires.
-export const CLOSE_REMINDER_AFTER_MINUTES = 90;
+// D-61 (developer, 2026-09-19): 30 minutes after a leg departs, its driver is reminded to pay for
+// parking — only on a leg whose group has a parking link for that direction (D-54).
+export const PARKING_REMINDER_AFTER_MINUTES = 30;
+export const PARKING_REMINDER_GRACE_MINUTES = 60;

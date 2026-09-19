@@ -22,7 +22,9 @@ export type NotificationItem = {
 };
 
 // Sketch's type -> icon/tint maps. "reminder" post-dates the sketch (migration 0003) and reuses the
-// change tint, since both are "something about the schedule needs your attention".
+// change tint, since both are "something about the schedule needs your attention"; so does D-61's
+// "parking", which is the same kind of nudge. `start` and `close_reminder` are no longer written by
+// anything (D-61 removed both taps), but old rows still render.
 const ICON: Record<NotificationItem["type"], string> = {
   start: "🚗",
   rate: "💚",
@@ -31,6 +33,7 @@ const ICON: Record<NotificationItem["type"], string> = {
   tip: "💡",
   reminder: "⏱️",
   close_reminder: "✅",
+  parking: "🅿️",
   join: "🙋",
   leave: "👋",
 };
@@ -43,6 +46,7 @@ const CARD_BG: Record<NotificationItem["type"], string> = {
   tip: "var(--notif-tip-bg)",
   reminder: "var(--amber-soft)",
   close_reminder: "var(--amber-soft)",
+  parking: "var(--amber-soft)",
   join: "var(--green-soft)",
   leave: "var(--amber-soft)",
 };
@@ -55,6 +59,7 @@ const ICON_BG: Record<NotificationItem["type"], string> = {
   tip: "var(--notif-tip-icon)",
   reminder: "var(--notif-change-icon)",
   close_reminder: "var(--notif-change-icon)",
+  parking: "var(--notif-change-icon)",
   join: "var(--green-soft)",
   leave: "var(--notif-change-icon)",
 };

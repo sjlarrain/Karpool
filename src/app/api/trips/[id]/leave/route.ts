@@ -4,7 +4,6 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { computeLateLeavePenalty } from "@/domain/points";
 import { notifyProfiles } from "@/lib/notify/tripNotify";
-import { syncDriveAward } from "@/lib/api/driveAward";
 import { seatChangeNotice } from "@/domain/seatNotice";
 
 // POST /api/trips/:id/leave — drop a seat you're holding. Marks the seat left and, if inside the
@@ -34,8 +33,17 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (!trip) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  if (trip.status !== "scheduled" && trip.status !== "started") {
+  if (trip.status !== "scheduled") {
     return NextResponse.json({ error: "wrong_status", message: "This trip is no longer active." }, { status: 409 });
+  }
+  // D-61: at departure the ride counts, and every seat still booked is a seat that rode. Leaving
+  // after that would be a no-show by another name — which is the driver's to report, not the
+  // rider's to erase (and would dodge the no-show charge for the price of a late-leave one).
+  if (new Date(trip.depart_at).getTime() <= Date.now()) {
+    return NextResponse.json(
+      { error: "departed", message: "This trip has already left, so the seat can't be given back." },
+      { status: 409 },
+    );
   }
 
   const { data: seat, error: seatError } = await supabase
@@ -90,11 +98,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     });
   }
 
-  // D-56: a rider who bails out of a trip that has already started takes their seat's bonus back
-  // off the driver, who was paid for a fuller car at Start. Charged to the rider as before, and
-  // separately re-priced for the driver here. A no-op while the trip is still scheduled.
-  const award = await syncDriveAward(admin, id);
-
   // D-52, the mirror of the join notification and the half the developer cared about least until it
   // was pointed out: a seat given back is a seat the driver can offer to someone else. Fired last,
   // after the seat and any penalty are written, for the reason set out in the join route.
@@ -107,9 +110,5 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     latePenalty: penalty?.points ?? null,
     // Lets the client say "no points lost" for the right reason rather than guessing from a null.
     penaltyWaived: planChanged,
-    // The driver's side of the same event (D-56), so a support question about a score that moved
-    // has an answer in one response rather than two.
-    driverPointsAdjusted: award.written?.points ?? 0,
-    awardError: award.error ?? null,
   });
 }

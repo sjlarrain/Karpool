@@ -71,26 +71,30 @@ describe("canReadTrip", () => {
 });
 
 describe("canPostToTrip", () => {
-  it("is open while the trip is scheduled or started", () => {
-    expect(canPostToTrip({ status: "scheduled", isDriver: true, seatState: null })).toBe(true);
-    expect(canPostToTrip({ status: "started", isDriver: false, seatState: "joined" })).toBe(true);
+  it("is open while the trip is scheduled", () => {
+    expect(canPostToTrip({ status: "scheduled", correctable: false, isDriver: true, seatState: null })).toBe(true);
+    expect(canPostToTrip({ status: "scheduled", correctable: false, isDriver: false, seatState: "joined" })).toBe(true);
   });
 
-  // A confirmed seat still READS the thread once the trip closes — that is the ride they took — but
-  // nothing said on a finished trip can help anyone catch it.
-  it("closes to everyone once the trip is over", () => {
-    expect(canPostToTrip({ status: "closed", isDriver: true, seatState: null })).toBe(false);
-    expect(canPostToTrip({ status: "closed", isDriver: false, seatState: "confirmed" })).toBe(false);
+  // D-61: the trip settles as it departs, so the ride is under way just as it reads "closed".
+  it("stays open on a settled trip until the end of its day", () => {
+    expect(canPostToTrip({ status: "closed", correctable: true, isDriver: false, seatState: "confirmed" })).toBe(true);
+  });
+
+  // A confirmed seat still READS the thread once the day is over — that is the ride they took.
+  it("closes to everyone once the day is over", () => {
+    expect(canPostToTrip({ status: "closed", correctable: false, isDriver: true, seatState: null })).toBe(false);
+    expect(canPostToTrip({ status: "closed", correctable: false, isDriver: false, seatState: "confirmed" })).toBe(false);
     expect(canReadTrip({ isDriver: false, seatState: "confirmed" })).toBe(true);
   });
 
   it("closes on a cancelled trip too", () => {
-    expect(canPostToTrip({ status: "cancelled", isDriver: true, seatState: null })).toBe(false);
+    expect(canPostToTrip({ status: "cancelled", correctable: true, isDriver: true, seatState: null })).toBe(false);
   });
 
   it("never lets a non-participant post to a live trip", () => {
-    expect(canPostToTrip({ status: "started", isDriver: false, seatState: null })).toBe(false);
-    expect(canPostToTrip({ status: "scheduled", isDriver: false, seatState: "left" })).toBe(false);
+    expect(canPostToTrip({ status: "closed", correctable: true, isDriver: false, seatState: null })).toBe(false);
+    expect(canPostToTrip({ status: "scheduled", correctable: false, isDriver: false, seatState: "left" })).toBe(false);
   });
 });
 

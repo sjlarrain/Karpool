@@ -1,4 +1,5 @@
 import { avatarColorFor } from "./avatarColor";
+import { canCorrect } from "./tripSettle";
 import { initialsFor } from "./initials";
 import { dayLabel, formatTripTime } from "./tripDay";
 import { STOP_ICONS } from "./types";
@@ -109,6 +110,7 @@ export function toTripView(params: {
     returnTime: trip.returnAt ? formatTripTime(new Date(trip.returnAt), timeZone) : null,
     status: trip.status,
     departed: departDate.getTime() <= now.getTime(),
+    correctable: canCorrect({ status: trip.status, departAt: departDate }, now, timeZone),
     cancelledReason: trip.cancelledReason ?? null,
     // A leg the trip does not travel cannot carry a stop. The DB enforces this too (migration
     // 0012), but the mapper must not surface a stale value if a direction is ever edited.

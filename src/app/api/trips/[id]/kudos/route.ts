@@ -5,7 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { computeKudosAward } from "@/domain/points";
-import { confirmedRiderCountForRide } from "@/lib/api/closeTrip";
+import { confirmedRiderCountForRide } from "@/lib/api/settleTrip";
 
 const bodySchema = z.object({ comment: z.string().trim().max(500).optional() });
 

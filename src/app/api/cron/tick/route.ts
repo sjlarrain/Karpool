@@ -3,49 +3,36 @@ import { env } from "@/env";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { notifyProfiles } from "@/lib/notify/tripNotify";
 import {
-  NOT_STARTED_REASON,
-  UNSTARTED_GRACE_HOURS,
-  RETURN_LEG_LEAD_MINUTES,
   DEPARTURE_REMINDER_LEAD_MINUTES,
   DEPARTURE_REMINDER_GRACE_MINUTES,
-  CLOSE_REMINDER_AFTER_MINUTES,
+  PARKING_REMINDER_AFTER_MINUTES,
+  PARKING_REMINDER_GRACE_MINUTES,
 } from "@/domain/constants";
-import { isReturnLegDue } from "@/domain/backLeg";
-import { isDepartureReminderDue, isCloseReminderDue } from "@/domain/tripReminders";
-import { closeTrip } from "@/lib/api/closeTrip";
-
-const AUTO_CLOSE_AFTER_HOURS = 6;
+import { isDepartureReminderDue, isParkingReminderDue } from "@/domain/tripReminders";
+import { isSettleDue } from "@/domain/tripSettle";
+import { parkingUrlForLeg } from "@/domain/parking";
+import { settleTrip } from "@/lib/api/settleTrip";
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
 // GET/POST /api/cron/tick — CRON_SECRET-gated (Vercel Cron's Authorization: Bearer <secret>
 // convention). Vercel Cron sends GET; POST is kept for manual/local triggering with curl. The
-// caller in production is the pg_cron job installed by migration 0008 (D-21).
+// caller in production is the pg_cron job installed by migration 0008 (D-21), every 5 minutes.
 //
-// Jobs per tick:
+// D-61 (2026-09-19) made this the whole trip lifecycle. Nobody starts or closes a trip any more;
+// the jobs per tick are:
 //
 // 1. Departure reminders — any scheduled trip departing within DEPARTURE_REMINDER_LEAD_MINUTES
-//    gets a "reminder" notification to its driver and active riders, deduped against an existing
-//    reminder row carrying that trip's id.
-// 2. Close reminders — a trip left "started" for CLOSE_REMINDER_AFTER_MINUTES nudges its driver to
-//    close it. Since D-56 the driver has already been paid at Start and job 4 finishes the ride for
-//    them, so this nudge is now only worth sending for what the driver alone can do: name who
-//    actually rode. It is deliberately kept — a no-show costs a rider points, and only the driver
-//    was there to judge it.
-// 3. Generate a round trip's return leg (D-35 mechanic (ii)) — a round trip whose outbound is
-//    still "started" RETURN_LEG_LEAD_MINUTES before the return departure is closed by the
-//    scheduler, in the same restricted form an admin gets, which settles the driver's award and
-//    materialises the return leg. Without this the leg's existence depends on the driver remembering one tap.
-// 4. Finish trips the driver left running — a trip left "started" for AUTO_CLOSE_AFTER_HOURS is
-//    closed by the scheduler. Since D-56 this is the NORMAL way a ride ends, not a safety net: the
-//    developer removed the driver's obligation to end a trip, so most rides reach "closed" here. It
-//    runs the real close (restricted, as the scheduler's close always was), which confirms the
-//    riders, reconciles the award against what Start paid, materialises any return leg and sends
-//    the kudos prompt. Logged to audit_log (actor_profile_id: null marks it as system-acted).
-// 5. Expire trips nobody started (D-23) — a scheduled trip stays live for UNSTARTED_GRACE_HOURS
-//    past its departure so a driver who forgot to tap Start can still put it right. After that it
-//    ends as cancelled with reason NOT_STARTED_REASON, which the UI shows as "Past · never started"
-//    rather than "Cancelled". No points and no penalties: an expiry is the absence of a trip.
+//    gets a "reminder" notification to its driver and active riders, deduped per trip. A round
+//    trip's return leg is a real trip by the time it is due (job 2 created it at the outbound's
+//    departure), so "15 minutes before the return" needs no job of its own.
+// 2. Settle departed trips — every scheduled trip whose departure has passed is settled
+//    (src/lib/api/settleTrip.ts): seats confirmed, driver paid, return leg materialised.
+// 3. Parking reminders — PARKING_REMINDER_AFTER_MINUTES after a settled leg departed, its driver is
+//    reminded to pay for parking, only when the group has a link for that leg's end (D-54).
+//
+// Retired by D-61: the close reminder, D-35 mechanic (ii)'s T-2h return-leg close, the 6h
+// auto-close and D-23's 24h expiry of unstarted trips. None of them has anything left to do.
 
 // Every notifying job dedupes through this helper. It replaces a `.maybeSingle()` that was actively
 // broken: notifyProfiles writes one row *per recipient*, so as soon as a trip had a single rider
@@ -53,7 +40,7 @@ type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 // row, the error was dropped on the floor with only `data` destructured, and the reminder read as
 // "never sent" — re-pushing to every phone on the trip on each of the three ticks the 15-minute
 // window spans. Asking for at most one row is the whole fix.
-async function alreadyNotified(admin: AdminClient, type: "reminder" | "close_reminder", tripId: string): Promise<boolean> {
+async function alreadyNotified(admin: AdminClient, type: "reminder" | "parking", tripId: string): Promise<boolean> {
   const { data, error } = await admin
     .from("notification")
     .select("id")
@@ -79,15 +66,15 @@ async function tripAudience(admin: AdminClient, tripId: string, driverId: string
 
 // One bad row must not take the scheduler down with it.
 //
-// The five jobs below run in sequence in a single request, and until now nothing caught anything:
-// one unexpected throw — a malformed row, a transient failure inside closeTrip, an audit insert
+// The jobs below run in sequence in a single request, and until now nothing caught anything:
+// one unexpected throw — a malformed row, a transient failure inside settleTrip, an audit insert
 // refused by a constraint — aborted the whole tick, so every job *after* it silently did not run.
 // And because the next tick five minutes later meets exactly the same data, that is not a blip, it
 // is a permanent outage of everything downstream, with no error surfacing anywhere in the app.
 //
 // This project has already lost weeks to a scheduler that was quietly doing nothing (D-21). So each
 // trip is isolated: a failure is recorded against that trip and the sweep moves on, which keeps one
-// unprocessable row from costing every other trip its reminder, its return leg and its expiry.
+// unprocessable row from costing every other trip its reminder, its settle and its return leg.
 async function forEachTrip<T>(rows: T[], failures: string[], label: string, handle: (row: T) => Promise<void>) {
   for (const row of rows) {
     try {
@@ -147,162 +134,76 @@ async function handleTick(request: Request) {
     else remindersSent += 1;
   });
 
-  // --- 2. Close reminders ---------------------------------------------------------------------
-  // Only the driver is nudged: they are the only person who can close a trip, so telling the riders
-  // their points are stuck would be noise they cannot act on.
-  const { data: openTrips } = await admin.from("trip").select("id, driver_id, started_at").eq("status", "started");
+  // --- 2. Settle departed trips (D-61) --------------------------------------------------------
+  // No lower bound on purpose: a scheduler that was down for a day must still pay yesterday's rides
+  // when it comes back. The D-61 rollout cancelled everything unfinished from before this job
+  // existed, so there is no backlog of old trips for it to pay by surprise.
+  const { data: departedTrips } = await admin
+    .from("trip")
+    .select("id, depart_at")
+    .eq("status", "scheduled")
+    .lte("depart_at", now.toISOString())
+    // Oldest first: an outbound always settles before the return leg it creates.
+    .order("depart_at", { ascending: true });
 
-  let closeRemindersSent = 0;
-  let closeReminderFailures = 0;
-  await forEachTrip(openTrips ?? [], failures, "close_reminder", async (trip) => {
-    if (!isCloseReminderDue(trip.started_at, now, CLOSE_REMINDER_AFTER_MINUTES)) return;
-    if (await alreadyNotified(admin, "close_reminder", trip.id)) return;
+  let settled = 0;
+  await forEachTrip(departedTrips ?? [], failures, "settle", async (trip) => {
+    if (!isSettleDue(trip.depart_at, now)) return;
+    const result = await settleTrip(trip.id, now);
+    if (!result.ok) {
+      // A lost race (another tick got there first) is not a failure — anything else is, and it
+      // must reach cron_tick_failures rather than retrying silently forever the way D-60 did.
+      if (result.error !== "wrong_status") failures.push(`settle/${trip.id}: ${result.error} ${result.message ?? ""}`.trim());
+      return;
+    }
+
+    await admin.from("audit_log").insert({
+      actor_profile_id: null,
+      action: "cron_settle_trip",
+      entity_type: "trip",
+      entity_id: trip.id,
+      after: {
+        status: "closed",
+        seatsFilled: result.seatsFilled,
+        pointsAwarded: result.pointsAwarded,
+        backTripId: result.backTripId,
+      },
+    });
+    settled += 1;
+  });
+
+  // --- 3. Parking reminders (D-61) -------------------------------------------------------------
+  // Bounded in SQL to the legs that departed inside the reminder window, then confirmed by the pure
+  // predicate. Only the driver pays for parking, so only the driver is told.
+  const parkingFrom = new Date(
+    now.getTime() - (PARKING_REMINDER_AFTER_MINUTES + PARKING_REMINDER_GRACE_MINUTES) * 60_000,
+  ).toISOString();
+  const parkingTo = new Date(now.getTime() - PARKING_REMINDER_AFTER_MINUTES * 60_000).toISOString();
+  const { data: parkedTrips } = await admin
+    .from("trip")
+    .select("id, driver_id, depart_at, direction, group:group_id(parking_url_out, parking_url_back)")
+    .eq("status", "closed")
+    .gte("depart_at", parkingFrom)
+    .lte("depart_at", parkingTo);
+
+  let parkingRemindersSent = 0;
+  await forEachTrip(parkedTrips ?? [], failures, "parking", async (trip) => {
+    if (!isParkingReminderDue(trip.depart_at, now, PARKING_REMINDER_AFTER_MINUTES, PARKING_REMINDER_GRACE_MINUTES)) return;
+    const group = Array.isArray(trip.group) ? trip.group[0] : trip.group;
+    const url = group
+      ? parkingUrlForLeg(trip.direction, { parkingUrlOut: group.parking_url_out, parkingUrlBack: group.parking_url_back })
+      : null;
+    // Developer, 2026-09-19: only when a link exists — a leg with nothing to pay stays quiet.
+    if (!url) return;
+    if (await alreadyNotified(admin, "parking", trip.id)) return;
 
     const result = await notifyProfiles([trip.driver_id], {
-      type: "close_reminder",
-      title: "Close your trip",
-      body: "This ride is still open. Close it to confirm who came along and hand out the points.",
+      type: "parking",
+      title: "Pay for parking",
+      body: "Don't forget to pay for parking. Open the trip for the link.",
       tripId: trip.id,
     });
-    if (result.error) closeReminderFailures += 1;
-    else closeRemindersSent += 1;
-  });
-
-  // --- 3. Return legs -------------------------------------------------------------------------
-  // D-35 mechanic (ii) runs BEFORE the 6h auto-close, and the auto-close then skips any round trip
-  // still owed a return leg. The ordering matters: on a normal commute the 6h mark arrives first
-  // (out at 08:00, back at 18:00 — stale at 14:00, due at 16:00), so without this the auto-close
-  // would reach the trip first, close it for zero points, and leave the return leg unbuilt. That is
-  // precisely the failure this mechanic exists to prevent, arriving through the other door.
-  const { data: pendingReturns } = await admin
-    .from("trip")
-    .select("id, driver_id, return_at, parent_trip_id")
-    .eq("status", "started")
-    .eq("direction", "round")
-    .not("return_at", "is", null);
-
-  const deferredFromAutoClose = new Set<string>();
-  let returnLegsGenerated = 0;
-
-  await forEachTrip(pendingReturns ?? [], failures, "return_leg", async (trip) => {
-    if (!trip.return_at) return;
-
-    // Already materialised by a driver or admin close on an earlier tick — nothing owed.
-    const { data: existingLeg } = await admin.from("trip").select("id").eq("parent_trip_id", trip.id).maybeSingle();
-    if (existingLeg) return;
-
-    if (!isReturnLegDue(trip.return_at, now, RETURN_LEG_LEAD_MINUTES)) {
-      // Not due yet — but the auto-close must not get to it first.
-      deferredFromAutoClose.add(trip.id);
-      return;
-    }
-
-    const result = await closeTrip({ tripId: trip.id, actor: { isSystem: true } });
-    if (!result.ok) {
-      deferredFromAutoClose.add(trip.id);
-      return;
-    }
-
-    await admin.from("audit_log").insert({
-      actor_profile_id: null,
-      action: "cron_generate_return_leg",
-      entity_type: "trip",
-      entity_id: trip.id,
-      after: {
-        status: "closed",
-        mode: result.mode,
-        confirmedCount: result.confirmedCount,
-        pointsAwarded: result.pointsAwarded,
-        backTripId: result.backTripId,
-        reason: `return departs within ${RETURN_LEG_LEAD_MINUTES}m and nobody closed the outbound`,
-      },
-    });
-    returnLegsGenerated += 1;
-  });
-
-  // --- 4. Auto-close abandoned trips -----------------------------------------------------------
-  const staleBefore = new Date(now.getTime() - AUTO_CLOSE_AFTER_HOURS * 3_600_000).toISOString();
-  const { data: staleTrips } = await admin.from("trip").select("id").eq("status", "started").lte("started_at", staleBefore);
-
-  let autoClosed = 0;
-  await forEachTrip(staleTrips ?? [], failures, "auto_close", async (trip) => {
-    // A round trip still owed a return leg belongs to mechanic (ii), which closes it at the right
-    // moment for its riders. Closing it hours early here would publish the return leg before anyone
-    // needs it.
-    if (deferredFromAutoClose.has(trip.id)) return;
-
-    // D-56 (2026-09-07): this goes through closeTrip() now instead of stamping the status by hand.
-    // The developer removed the driver's obligation to end a trip, and answered "Yes, finish it
-    // automatically" — so this is no longer a tidier, it is how a ride normally ends. Everything a
-    // close is responsible for has to happen: the riders confirmed, the award reconciled against
-    // what Start paid, the return leg materialised, and the kudos prompt sent. A raw status stamp
-    // did none of that, which is why abandoned trips used to leave their riders with no way to
-    // thank anyone.
-    //
-    // Restricted, as the scheduler's close always has been: it confirms every active rider and can
-    // name nobody a no-show, because it was not there either.
-    const result = await closeTrip({ tripId: trip.id, actor: { isSystem: true } });
-    if (!result.ok) {
-      failures.push(`auto_close/${trip.id}: ${result.error}`);
-      return;
-    }
-
-    await admin.from("audit_log").insert({
-      actor_profile_id: null,
-      action: "cron_auto_close",
-      entity_type: "trip",
-      entity_id: trip.id,
-      after: {
-        status: "closed",
-        mode: result.mode,
-        confirmedCount: result.confirmedCount,
-        pointsAwarded: result.pointsAwarded,
-        pointsAdjusted: result.pointsAdjusted,
-        backTripId: result.backTripId,
-        reason: `started_at older than ${AUTO_CLOSE_AFTER_HOURS}h`,
-      },
-    });
-    autoClosed += 1;
-  });
-
-  // --- 5. Expire trips nobody started ----------------------------------------------------------
-  const expireBefore = new Date(now.getTime() - UNSTARTED_GRACE_HOURS * 3_600_000).toISOString();
-  const { data: expiredTrips } = await admin
-    .from("trip")
-    .select("id, driver_id")
-    .eq("status", "scheduled")
-    .lte("depart_at", expireBefore);
-
-  let expired = 0;
-  await forEachTrip(expiredTrips ?? [], failures, "expire", async (trip) => {
-    const { error: expireError } = await admin
-      .from("trip")
-      .update({ status: "cancelled", cancelled_reason: NOT_STARTED_REASON })
-      .eq("id", trip.id)
-      // Guard against a driver starting the trip between the select and this update — without it
-      // the sweep would cancel a ride that is under way.
-      .eq("status", "scheduled");
-    if (expireError) return;
-
-    await notifyProfiles(await tripAudience(admin, trip.id, trip.driver_id), {
-      type: "change",
-      title: "Trip moved to Past",
-      body: `It was never started, so it closed itself ${UNSTARTED_GRACE_HOURS}h after departure. No points were awarded.`,
-      tripId: trip.id,
-    });
-
-    await admin.from("audit_log").insert({
-      actor_profile_id: null,
-      action: "cron_expire_unstarted",
-      entity_type: "trip",
-      entity_id: trip.id,
-      after: {
-        status: "cancelled",
-        cancelled_reason: NOT_STARTED_REASON,
-        reason: `never started, ${UNSTARTED_GRACE_HOURS}h past departure`,
-      },
-    });
-    expired += 1;
+    if (!result.error) parkingRemindersSent += 1;
   });
 
   // Isolation without visibility would just be a quieter version of the same bug: a trip that fails
@@ -325,11 +226,8 @@ async function handleTick(request: Request) {
     failures,
     remindersSent,
     reminderFailures,
-    closeRemindersSent,
-    closeReminderFailures,
-    returnLegsGenerated,
-    autoClosed,
-    expired,
+    settled,
+    parkingRemindersSent,
   });
 }
 

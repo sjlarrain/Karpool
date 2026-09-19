@@ -24,14 +24,20 @@ export function isDepartureReminderDue(
 }
 
 /**
- * Has this started trip been open long enough that its driver should be nudged to close it?
+ * D-61: is this departed trip owed its "pay for parking" nudge?
  *
- * `startedAt` null means the row says `started` but never recorded when — treat it as not due
- * rather than as infinitely overdue, so a data fault can't spray notifications.
+ * Due from `afterMinutes` past departure, for `graceMinutes` after that. Bounded on purpose: a
+ * scheduler that was down for a day must not wake up and nag about yesterday's parking.
  */
-export function isCloseReminderDue(startedAt: string | null, now: Date, afterMinutes: number): boolean {
-  if (!startedAt) return false;
-  const started = new Date(startedAt).getTime();
-  if (Number.isNaN(started)) return false;
-  return now.getTime() - started >= afterMinutes * 60_000;
+export function isParkingReminderDue(
+  departAt: string | Date,
+  now: Date,
+  afterMinutes: number,
+  graceMinutes: number,
+): boolean {
+  const depart = new Date(departAt).getTime();
+  if (Number.isNaN(depart)) return false;
+  const dueAt = depart + afterMinutes * 60_000;
+  const nowMs = now.getTime();
+  return nowMs >= dueAt && nowMs <= dueAt + graceMinutes * 60_000;
 }

@@ -7,7 +7,7 @@ import { NOT_STARTED_REASON } from "@/domain/constants";
 import { StopSign } from "./StopSign";
 import { rideShareMessage, rideShareUrl } from "@/domain/tripShare";
 import { shareOrCopy } from "@/lib/share";
-import { CloseTripOverlay } from "./CloseTripOverlay";
+import { FixRideListOverlay } from "./FixRideListOverlay";
 import { TripChatOverlay } from "./TripChatOverlay";
 import { ParkingLink } from "./ParkingLink";
 import { ReturnQuestionSheet } from "./ReturnQuestionSheet";
@@ -26,6 +26,9 @@ interface Pickup {
   addedByDriver: boolean;
   // D-55: set when the seat belongs to someone on the group's guest roster.
   groupGuestId: string | null;
+  // D-61: a seat with no account behind it. Guests hold no points, so they are never reported as
+  // a no-show — their seat is simply freed.
+  isGuest: boolean;
 }
 
 interface AddableMember {
@@ -82,7 +85,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   // D-35: the "coming back too?" question, shown before a join on a round trip.
   const [askingReturn, setAskingReturn] = useState(false);
-  const [closing, setClosing] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const [kudosComment, setKudosComment] = useState("");
   // Sketch default: the toggle starts off, so the submit reads "Skip & close" until the rider opts in.
   const [givingKudos, setGivingKudos] = useState(false);
@@ -201,10 +204,13 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
 
   const { trip, isDriver, pickups, addableMembers, addableGuests, seatsLeft, penaltyWaived, editable } = data;
   const otherPickups = pickups.filter((p) => !p.isViewer);
-  // Only a ride someone could still act on is worth sharing — a closed or cancelled one would send
+  // Only a ride someone could still join is worth sharing — a settled or cancelled one would send
   // the recipient to a dead end.
-  const shareable = trip.status === "scheduled" || trip.status === "started";
-  const isLive = trip.status === "scheduled" || trip.status === "started";
+  const shareable = trip.status === "scheduled" && !trip.departed;
+  const isLive = trip.status === "scheduled";
+  // D-61: the ride has happened and the driver can still say who was really in the car — until the
+  // end of that day. The server decides this (TripView.correctable); this is only which buttons to draw.
+  const canFix = isDriver && trip.correctable;
   const isCancelled = trip.status === "cancelled";
   // D-23: the scheduler ending a trip nobody started is not the driver calling it off, and must
   // never be worded as if it were.
@@ -535,7 +541,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
                     {p.addedByDriver ? "Added by you" : `📍 ${p.pickupLabel ?? "No pickup place set"}`}
                   </div>
                 </div>
-                {p.addedByDriver && trip.status !== "closed" && trip.status !== "cancelled" && (
+                {p.addedByDriver && (trip.status === "scheduled" || canFix) && (
                   <button
                     onClick={() =>
                       p.groupGuestId ? removeGuestPassenger(p.id, p.name) : removePassenger(p.id, p.name)
@@ -558,7 +564,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
               </div>
             ))}
 
-            {(trip.status === "scheduled" || trip.status === "started") && (
+            {(trip.status === "scheduled" || canFix) && (
               <button
                 onClick={() => setAddingPassenger(true)}
                 disabled={busy || seatsLeft <= 0 || addableMembers.length === 0}
@@ -579,30 +585,34 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
                   ? "No seats left to add anyone"
                   : addableMembers.length === 0
                     ? "Everyone in the group is already on this ride"
-                    : "+ Add a passenger"}
+                    : canFix
+                      ? "+ Add someone who rode"
+                      : "+ Add a passenger"}
               </button>
             )}
             <div style={{ height: 8 }} />
-            {trip.status === "scheduled" && (
+            {trip.status === "scheduled" && !trip.departed && (
               <>
                 {shareButton}
-                <button
-                  className="btnP"
-                  disabled={busy}
-                  onClick={() =>
-                    act("start", (body) => {
-                      // D-56: Start is the tap that pays now, so the toast says so. Falls back to
-                      // the old wording if the award could not be written — the trip did start.
-                      const points = typeof body?.pointsAwarded === "number" ? body.pointsAwarded : 0;
-                      return points > 0 ? `Trip started · +${points} pts 🚗` : "Trip started — riders notified 🚗";
-                    })
-                  }
+                {/* D-61: there is nothing to press to begin a ride. The card says what will happen
+                    by itself, so a driver is not left looking for the button that used to be here. */}
+                <div
+                  style={{
+                    background: "var(--green-soft)",
+                    border: "1px solid rgba(23,201,100,.4)",
+                    borderRadius: 13,
+                    padding: 11,
+                    textAlign: "center",
+                    font: "600 12px/1.45 var(--font-body)",
+                    color: "var(--green-ink)",
+                    margin: "0 0 10px",
+                  }}
                 >
-                  Start trip · get your points
-                </button>
-                {/* D-38: plans change. Both ways out sit under the primary action, secondary in
-                    weight — the common case is still starting the ride you published. */}
-                <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                  This ride counts itself at {trip.time} — your points land then.
+                </div>
+                <ParkingLink url={data.parkingUrl} />
+                {/* D-38: plans change. Both ways out, while the ride is still ahead. */}
+                <div style={{ display: "flex", gap: 10 }}>
                   <button
                     className="btnG"
                     disabled={busy || !editable}
@@ -622,48 +632,39 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
                 </div>
               </>
             )}
-            {trip.status === "started" && (
+            {trip.status === "scheduled" && trip.departed && (
+              <div
+                style={{
+                  background: "var(--chip)",
+                  border: "1px solid rgba(0,0,0,.08)",
+                  borderRadius: 13,
+                  padding: 11,
+                  textAlign: "center",
+                  font: "600 12px/1.45 var(--font-body)",
+                  color: "rgba(0,0,0,.55)",
+                }}
+              >
+                This ride has left — it will be counted in a few minutes.
+              </div>
+            )}
+            {canFix && (
               <>
-                {shareButton}
+                {/* D-61: the ride is over and paid. The one thing left that only the driver knows
+                    is who was actually in the car, and they have until the end of the day to say so. */}
                 <div
                   style={{
-                    background: "var(--teal-soft)",
-                    border: "1px solid rgba(20,184,196,.4)",
-                    borderRadius: 13,
-                    padding: 11,
-                    textAlign: "center",
-                    font: "700 12px var(--font-body)",
-                    color: "var(--teal-ink)",
-                    marginBottom: 10,
-                  }}
-                >
-                  ● Trip in progress — riders notified
-                </div>
-                {/* D-56: the developer removed the driver's obligation to end a trip ("no user is
-                    using that"). They have already been paid, and the ride finishes itself — so the
-                    screen says so rather than leaving a button nobody presses looking mandatory. */}
-                <div
-                  style={{
-                    font: "600 11.5px var(--font-body)",
+                    font: "600 11.5px/1.45 var(--font-body)",
                     color: "rgba(0,0,0,.5)",
                     textAlign: "center",
-                    lineHeight: 1.45,
                     margin: "0 0 12px",
                   }}
                 >
-                  Your points are already in — this ride closes itself.
+                  Counted and paid. Until tonight you can still fix who was in the car.
                 </div>
                 <ParkingLink url={data.parkingUrl} />
-                {/* Both of the driver's remaining reasons to touch this screen, which are the two
-                    the developer named: change the plan, or say who actually rode. */}
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button className="btnG" disabled={busy || !editable} onClick={() => setEditing(true)} style={{ flex: 1 }}>
-                    Edit trip
-                  </button>
-                  <button className="btnG" disabled={busy} onClick={() => setClosing(true)} style={{ flex: 1 }}>
-                    End trip now
-                  </button>
-                </div>
+                <button className="btnG" disabled={busy} onClick={() => setFixing(true)} style={{ width: "100%" }}>
+                  Fix the ride list
+                </button>
               </>
             )}
           </>
@@ -998,15 +999,22 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
         />
       )}
 
-      {closing && (
-        <CloseTripOverlay
+      {fixing && (
+        <FixRideListOverlay
           tripId={tripId}
-          parkingUrl={data.parkingUrl}
           addableGuests={data.addableGuests}
-          riders={otherPickups.map((p) => ({ id: p.id, name: p.name, initials: p.initials, color: p.color }))}
-          onClose={() => setClosing(false)}
-          onClosed={(message) => {
-            setClosing(false);
+          riders={otherPickups.map((p) => ({
+            id: p.id,
+            name: p.name,
+            initials: p.initials,
+            color: p.color,
+            addedByDriver: p.addedByDriver,
+            isGuest: p.isGuest,
+            groupGuestId: p.groupGuestId,
+          }))}
+          onClose={() => setFixing(false)}
+          onFixed={(message) => {
+            setFixing(false);
             onChanged(message);
           }}
         />

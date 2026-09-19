@@ -1,4 +1,4 @@
-import { NOT_STARTED_REASON } from "./constants";
+import { NOT_STARTED_REASON, ROLLOUT_REASON } from "./constants";
 import type { TripStopView, TripView } from "./types";
 
 // Ported from the sketch's decorate() — a trip's role-derived presentation (badge, accent, seat
@@ -101,7 +101,9 @@ const TERMINAL_STYLE: { badge: string; badgeColor: string; badgeBg: string; acce
 function terminalBadge(trip: TripView): string | null {
   if (trip.status === "closed") return "COMPLETED";
   if (trip.status !== "cancelled") return null;
-  return trip.cancelledReason === NOT_STARTED_REASON ? "PAST · NEVER STARTED" : "CANCELLED";
+  if (trip.cancelledReason === NOT_STARTED_REASON) return "PAST · NEVER STARTED";
+  if (trip.cancelledReason === ROLLOUT_REASON) return "PAST · NOT COUNTED";
+  return "CANCELLED";
 }
 
 // D-29. A stop belongs to a leg, and `direction` says which legs the ride actually travels — so a
@@ -162,16 +164,15 @@ export function decorateTrip(trip: TripView): DecoratedTrip {
     seatsLeft,
     seatStr: `${filled} / ${trip.capacity} seats`,
     seatColor: trip.role === "open" && seatsLeft > 0 ? "var(--green)" : "rgba(0,0,0,.45)",
-    // D-23: a ride that has already left can't be taken, even though its driver may still start
-    // and close it for another 24h.
+    // A ride that has already left can't be taken.
     joinable: trip.role === "open" && seatsLeft > 0 && trip.status === "scheduled" && !trip.departed,
     joinBlock: trip.role === "open" ? joinBlockFor(trip, seatsLeft) : null,
     driverLabel: trip.role === "driving" ? "You’re driving" : `${trip.driver} is driving`,
     stopNotices: stopNotices(trip),
-    // D-53: a card only stops being news once its status is terminal — closed or cancelled. A
-    // scheduled trip whose departure has passed is still active (its driver has 24h per D-23 to
-    // start it, close it, or add someone, and everyone else still needs to see it's happening), and
-    // a started trip is obviously still live — neither belongs behind the collapsed Past toggle.
-    isPast: finished !== null,
+    // D-53: only a finished trip goes behind the collapsed Past toggle. D-61 settles a trip the
+    // moment it departs, so "closed" alone would hide today's ride while it is still being driven —
+    // along with its kudos button and the driver's "Fix the ride list". A settled trip therefore
+    // stays live until its departure day ends.
+    isPast: finished !== null && !trip.correctable,
   };
 }

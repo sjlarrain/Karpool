@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { syncDriveAward } from "@/lib/api/driveAward";
+import { rosterWindow } from "@/lib/api/rosterWindow";
 
 // POST /api/trips/:id/guests — the driver seats a guest from the group's roster (D-55).
 //
@@ -15,10 +16,15 @@ import { syncDriveAward } from "@/lib/api/driveAward";
 //
 // Nobody is notified: a guest has no profile and no device. That is the one thing this route does
 // not share with POST /riders.
+//
+// D-61: also after the ride, until the end of that day, for a guest who rode without a seat. Only
+// then does it take a typed `guestName` as well — D-09's "just this once" guest, which used to live
+// on the close screen. Before departure the driver still picks from the roster (D-24).
 
-const bodySchema = z.object({
-  groupGuestId: z.string().uuid(),
-});
+const bodySchema = z.union([
+  z.object({ groupGuestId: z.string().uuid() }),
+  z.object({ guestName: z.string().trim().min(1).max(60) }),
+]);
 
 const STATUS_BY_ERROR: Record<string, number> = {
   trip_not_found: 404,
@@ -53,12 +59,67 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   // RLS (is_member) makes this null for a non-member, giving the same 404 as a missing trip.
-  const { data: trip } = await supabase.from("trip").select("id").eq("id", id).maybeSingle();
+  const { data: trip } = await supabase
+    .from("trip")
+    .select("id, driver_id, status, depart_at, capacity")
+    .eq("id", id)
+    .maybeSingle();
   if (!trip) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+  const gate = await rosterWindow(trip);
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error, message: gate.message }, { status: 409 });
+  }
 
   const admin = createSupabaseAdminClient();
+
+  if ("guestName" in parsed.data) {
+    if (trip.driver_id !== user.id) {
+      return NextResponse.json({ error: "not_driver", message: MESSAGE_BY_ERROR.not_driver }, { status: 403 });
+    }
+    if (!gate.settled) {
+      return NextResponse.json(
+        { error: "wrong_status", message: "Before the ride, pick guests from the group's list." },
+        { status: 409 },
+      );
+    }
+    // No row lock needed here, unlike add_trip_guest: a settled trip takes no self-serve joins, so
+    // the driver is the only writer to its roster.
+    const { count, error: countError } = await admin
+      .from("trip_rider")
+      .select("id", { count: "exact", head: true })
+      .eq("trip_id", id)
+      .in("state", ["joined", "confirmed"]);
+    if (countError) {
+      return NextResponse.json({ error: "add_guest_failed", message: countError.message }, { status: 500 });
+    }
+    if ((count ?? 0) >= trip.capacity) {
+      return NextResponse.json({ error: "full", message: MESSAGE_BY_ERROR.full }, { status: 409 });
+    }
+    const { data: seated, error: insertError } = await admin
+      .from("trip_rider")
+      .insert({ trip_id: id, guest_name: parsed.data.guestName, state: "confirmed", added_by_profile_id: user.id })
+      .select()
+      .single();
+    if (insertError || !seated) {
+      return NextResponse.json({ error: "add_guest_failed", message: insertError?.message }, { status: 500 });
+    }
+    const award = await syncDriveAward(admin, id);
+    await writeAuditLog(admin, {
+      actorProfileId: user.id,
+      action: "trip_guest_seated_by_driver",
+      entityType: "trip_rider",
+      entityId: seated.id,
+      after: { tripId: id, guestName: parsed.data.guestName },
+      request,
+    });
+    return NextResponse.json(
+      { tripRider: seated, pointsAdjusted: award.written?.points ?? 0, awardError: award.error ?? null },
+      { status: 201 },
+    );
+  }
+
   // Driver, status, group and capacity are all checked inside the function, under the same row lock
   // add_trip_rider uses — a guest and a self-joining rider racing for the last seat is the exact
   // case that lock exists for.
@@ -74,8 +135,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: code, message: MESSAGE_BY_ERROR[code] }, { status });
   }
 
-  // D-56: a guest fills a seat and so pays the driver's fill bonus (D-09), which means seating one
-  // on a started trip re-prices the ride exactly as seating a member does.
+  // A guest fills a seat and so pays the driver's fill bonus (D-09), which means seating one on a
+  // settled trip re-prices the ride exactly as seating a member does.
   const award = await syncDriveAward(admin, id);
 
   await writeAuditLog(admin, {

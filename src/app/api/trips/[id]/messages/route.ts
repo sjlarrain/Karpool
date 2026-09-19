@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { canCorrect } from "@/domain/tripSettle";
+import { viewerTimeZone } from "@/lib/time/viewerTimeZone";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -45,6 +47,7 @@ const MAX_THREAD = 200;
 interface Participation {
   tripId: string;
   status: TripStatus;
+  correctable: boolean;
   driverId: string;
   groupId: string;
   isDriver: boolean;
@@ -64,7 +67,7 @@ async function participation(
 ): Promise<Participation | null> {
   const { data: trip } = await supabase
     .from("trip")
-    .select("id, status, driver_id, group_id")
+    .select("id, status, driver_id, group_id, depart_at")
     .eq("id", tripId)
     .maybeSingle();
   if (!trip) return null;
@@ -80,6 +83,7 @@ async function participation(
   return {
     tripId: trip.id,
     status: trip.status,
+    correctable: canCorrect({ status: trip.status, departAt: trip.depart_at }, new Date(), await viewerTimeZone()),
     driverId: trip.driver_id,
     groupId: trip.group_id,
     isDriver: trip.driver_id === profileId,
@@ -171,7 +175,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
   if (!canPostToTrip(standing)) {
     return NextResponse.json(
-      { error: "wrong_status", message: "This trip is over — its chat is read-only now." },
+      { error: "wrong_status", message: "This ride is over — its chat is read-only now." },
       { status: 409 },
     );
   }

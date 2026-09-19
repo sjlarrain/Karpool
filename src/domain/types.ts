@@ -54,11 +54,14 @@ export interface TripView {
   capacity: number;
   returnTime: string | null;
   status: TripStatus;
-  // D-23: past its departure time. Seats stop being self-servable here even while the driver can
-  // still start the trip late.
+  // Past its departure time. Seats stop being self-servable here; since D-61 this is also the
+  // moment the scheduler settles the trip (within one 5-minute tick).
   departed: boolean;
-  // Set when the scheduler ended a trip nobody started (cancelled_reason 'not_started'), which the
-  // UI must present as "Past", not as a driver cancelling on people.
+  // D-61: a settled trip whose departure day is not over yet, in the reader's zone. Its driver can
+  // still fix the ride list, and the card stays on the live feed until then.
+  correctable: boolean;
+  // Set when the SYSTEM cancelled the trip (D-23's expiry, or D-61's rollout), which the UI must
+  // present as "Past", not as a driver cancelling on people.
   cancelledReason: string | null;
   // D-29: at most one stop per leg. Which line each one renders on is derived in decorateTrip().
   outStop: TripStopView | null;

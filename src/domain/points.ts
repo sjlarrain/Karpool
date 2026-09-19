@@ -10,7 +10,7 @@
 // Historic ledger rows are never rewritten: entries carry the points they were worth when written.
 
 export interface LedgerAward {
-  kind: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show";
+  kind: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "no_show_report";
   points: number;
   reason: string;
 }
@@ -97,9 +97,9 @@ export function computeDriveAward(riderCount: number, weights: CloseWeights): Le
  * re-derived by the next one, and one that is written twice cannot double-pay, because the second
  * call sees the first in `paidSoFar` and finds nothing left to owe.
  *
- * Deliberately signed. A rider who booked and did not ride takes the seat's bonus back off the
- * driver; that is the same claw-back D-19 already applies to the rider themselves, and leaving the
- * driver paid for an empty seat is exactly the leaderboard drift D-41 had to be cleaned up by hand.
+ * Deliberately signed: a seat that disappears takes its bonus back. D-61 narrowed what counts as
+ * disappearing — a seat the driver REPORTS as a no-show stays paid (they held it and drove), so the
+ * callers count `no_show` seats alongside `joined` and `confirmed`. See `computeNoShowReport`.
  */
 export function computeDriveCorrection(
   paidSoFar: number,
@@ -130,6 +130,27 @@ export function computeKudosAward(kudosWeight: number, confirmedRiderCount: numb
     kind: "kudos",
     points: kudosWeight * riders,
     reason: riders > 1 ? `Received kudos (${riders} riders pooled)` : "Received kudos",
+  };
+}
+
+export interface NoShowReport {
+  rider: LedgerAward; // charged to the rider
+  driver: LedgerAward; // paid to the driver for reporting it
+}
+
+/**
+ * D-61 (developer, 2026-09-19: "-5 for the rider +2 for the driver"). With no Close, nobody
+ * confirms who got in the car, so every booked seat counts as ridden at departure — and the driver
+ * can report the one that wasn't, until the end of that day. The driver keeps the seat's pay AND
+ * earns the report bonus: reporting is the only way the leaderboard learns the truth, so it is paid
+ * rather than merely allowed. Registered riders only — a guest has no profile to charge, and paying
+ * the driver to "report" a guest they seated themselves would be free points.
+ * `penalty` is negative and `bonus` positive, as stored on the group.
+ */
+export function computeNoShowReport(penalty: number, bonus: number): NoShowReport {
+  return {
+    rider: computeNoShowPenalty(penalty),
+    driver: { kind: "no_show_report", points: bonus, reason: "Reported a no-show" },
   };
 }
 

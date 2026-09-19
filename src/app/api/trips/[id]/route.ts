@@ -135,6 +135,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       // D-24: a seat the driver booked on this member's behalf. The driver may take it back; a
       // seat someone booked themselves is theirs to give up.
       addedByDriver: r.added_by_profile_id !== null,
+      // D-61: only a seat a REGISTERED rider booked themselves can be reported as a no-show — a
+      // guest has no points to lose, and a seat the driver added was never the rider's doing.
+      isGuest: r.profile_id === null,
       // D-55: a seat held by someone on the group's guest roster. Freed through its own route,
       // because the member one notifies the person whose seat was taken and a guest has no device.
       groupGuestId: r.group_guest_id,
@@ -170,8 +173,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   // here rather than in a second round trip so the client never has to ask "who is in my group" —
   // a question RLS should answer on the server.
   const isDriver = trip.driver_id === user.id;
+  // D-61: the driver's roster tools (add a member, seat a guest, edit the plan) are open before
+  // departure and again on a settled trip until the end of its day — the window in which they can
+  // still say who really rode. Same rule the roster routes enforce (src/lib/api/rosterWindow.ts).
+  const rosterOpen = view.status === "scheduled" || view.correctable;
   let addableMembers: { id: string; name: string; initials: string; color: string }[] = [];
-  if (isDriver && (trip.status === "scheduled" || trip.status === "started")) {
+  if (isDriver && rosterOpen) {
     const { data: memberships } = await supabase
       .from("membership")
       .select("profile_id")
@@ -209,12 +216,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     backStopId: string | null;
     stops: TripStopView[];
   } | null = null;
-  // D-56 (2026-09-07, developer: "Always editable by the driver"). This used to be `scheduled`
-  // only, on the reasoning that a started trip's plan is fixed. It is not: the driver is in the car
-  // and the plan is exactly what changes there — a stop dropped, a seat freed, the return pushed
-  // back. Riders are protected by D-38's waiver, which is unchanged and fires on a material edit
-  // whatever the status.
-  if (isDriver && (trip.status === "scheduled" || trip.status === "started")) {
+  if (isDriver && view.status === "scheduled" && !view.departed) {
     const { data: groupStops } = await supabase
       .from("pickup_place")
       .select("id, label, icon, address")
@@ -243,10 +245,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     : null;
 
   // D-55: the guests the driver can still seat — this group's roster minus anyone already aboard.
-  // Assembled here for the same reason as addableMembers just above, and gated the same way:
-  // only the driver of a live trip is offered the list.
+  // Assembled here for the same reason as addableMembers just above, and gated the same way.
   let addableGuests: { id: string; name: string; initials: string; color: string }[] = [];
-  if (isDriver && (trip.status === "scheduled" || trip.status === "started")) {
+  if (isDriver && rosterOpen) {
     const roster = await loadGuestRoster(supabase, trip.group_id);
     if (roster.ok) {
       const seatedGuestIds = new Set(
@@ -275,8 +276,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   });
 }
 
-// PATCH /api/trips/:id — driver-only, and only while the trip is still scheduled (a started/closed
-// trip's plan is fixed).
+// PATCH /api/trips/:id — driver-only, and only before departure (D-61).
 const patchSchema = z
   .object({
     departAt: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "must be a valid date/time"),
@@ -308,9 +308,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (trip.driver_id !== user.id) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  // D-56: a live trip is editable, started or not. Closed and cancelled are history and stay shut.
-  if (trip.status !== "scheduled" && trip.status !== "started") {
+  // D-61: the plan is editable until the trip departs. After that the ride has happened and its
+  // day, time and direction are facts — what is still wrong is who was aboard, and that is fixed
+  // through the roster routes, not here.
+  if (trip.status !== "scheduled") {
     return NextResponse.json({ error: "wrong_status", message: "This trip is no longer active." }, { status: 409 });
+  }
+  if (new Date(trip.depart_at).getTime() <= Date.now()) {
+    return NextResponse.json(
+      { error: "departed", message: "This ride has already left, so its plan can't be changed." },
+      { status: 409 },
+    );
   }
 
   const json = await request.json().catch(() => null);

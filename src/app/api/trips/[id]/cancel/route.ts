@@ -4,27 +4,27 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/api/auth";
 import { transition, type TripTransitionErrorCode } from "@/domain/tripMachine";
-import { NOT_STARTED_REASON } from "@/domain/constants";
+import { SYSTEM_CANCEL_REASONS } from "@/domain/constants";
 import { notifyProfiles } from "@/lib/notify/tripNotify";
 
 const STATUS_BY_ERROR: Record<TripTransitionErrorCode, number> = {
   not_driver: 403,
-  // D-35 opened close, and only close, to riders and group admins. start and cancel stay
-  // driver-only, so this branch is unreachable here — it exists to keep the map total.
   not_permitted: 403,
   wrong_status: 409,
   too_early: 409,
+  // D-61: a ride that has left happened — the driver fixes its list, they don't call it off.
+  departed: 409,
 };
 
-// cancelled_reason carries both the driver's free text and D-23's expiry sentinel, and the badge
-// reads "PAST · NEVER STARTED" for the latter. A driver typing that exact string would dress their
-// own cancellation up as an expiry, so the one reserved word is refused.
+// cancelled_reason carries both the driver's free text and the system's own sentinels (D-23's
+// expiry, D-61's rollout), and the badge reads "PAST · …" for those. A driver typing one exactly
+// would dress their own cancellation up as the system's, so the reserved words are refused.
 const bodySchema = z.object({
-  reason: z.string().trim().max(200).refine((v) => v !== NOT_STARTED_REASON, "reserved value").optional(),
+  reason: z.string().trim().max(200).refine((v) => !SYSTEM_CANCEL_REASONS.includes(v), "reserved value").optional(),
 });
 
-// POST /api/trips/:id/cancel — driver only, scheduled trips only (a started trip can no longer be
-// cancelled per the state machine).
+// POST /api/trips/:id/cancel — driver only, and only before departure (D-61): once the trip has
+// left it is settled by the scheduler, not cancelled.
 //
 // D-38: the riders are told. A cancellation is the one trip event a rider cannot discover by
 // looking — their card simply stops being a ride — and they need the time to find another way in.

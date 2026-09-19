@@ -165,6 +165,7 @@ export type Database = {
           late_window_minutes: number
           name: string
           no_show_penalty: number
+          no_show_report_bonus: number
           origin_label: string
           pool_step: number
           pool_weight: number
@@ -185,6 +186,7 @@ export type Database = {
           late_window_minutes?: number
           name: string
           no_show_penalty?: number
+          no_show_report_bonus?: number
           origin_label: string
           pool_step?: number
           pool_weight?: number
@@ -205,6 +207,7 @@ export type Database = {
           late_window_minutes?: number
           name?: string
           no_show_penalty?: number
+          no_show_report_bonus?: number
           origin_label?: string
           pool_step?: number
           pool_weight?: number
@@ -375,7 +378,7 @@ export type Database = {
           profile_id: string
           read_at: string | null
           title: string
-          type: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave"
+          type: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave" | "parking"
         }
         Insert: {
           body?: string | null
@@ -385,7 +388,7 @@ export type Database = {
           profile_id: string
           read_at?: string | null
           title: string
-          type: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave"
+          type: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave" | "parking"
         }
         Update: {
           body?: string | null
@@ -395,7 +398,7 @@ export type Database = {
           profile_id?: string
           read_at?: string | null
           title?: string
-          type?: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave"
+          type?: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave" | "parking"
         }
         Relationships: [
           {
@@ -456,7 +459,7 @@ export type Database = {
           created_at: string
           group_id: string
           id: string
-          kind: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust"
+          kind: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust" | "no_show_report"
           points: number
           profile_id: string
           reason: string | null
@@ -466,7 +469,7 @@ export type Database = {
           created_at?: string
           group_id: string
           id?: string
-          kind: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust"
+          kind: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust" | "no_show_report"
           points: number
           profile_id: string
           reason?: string | null
@@ -476,7 +479,7 @@ export type Database = {
           created_at?: string
           group_id?: string
           id?: string
-          kind?: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust"
+          kind?: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust" | "no_show_report"
           points?: number
           profile_id?: string
           reason?: string | null
@@ -515,6 +518,7 @@ export type Database = {
           initials: string
           last_seen_at: string | null
           platform_role: "member" | "platform_admin"
+          seen_announcement: string | null
         }
         Insert: {
           avatar_color: string
@@ -524,6 +528,7 @@ export type Database = {
           initials: string
           last_seen_at?: string | null
           platform_role?: "member" | "platform_admin"
+          seen_announcement?: string | null
         }
         Update: {
           avatar_color?: string
@@ -533,6 +538,7 @@ export type Database = {
           initials?: string
           last_seen_at?: string | null
           platform_role?: "member" | "platform_admin"
+          seen_announcement?: string | null
         }
         Relationships: []
       }

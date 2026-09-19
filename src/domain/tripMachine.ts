@@ -1,38 +1,26 @@
 import type { TripStatus } from "./types";
 
-// Pure state machine, no I/O. Legal transitions per 02_IMPLEMENTATION_PLAN.md §4 Phase 3:
-// scheduled→started (driver or group admin, not before T-2h, D-16, D-50), started→closed (driver
-// or group admin, D-35(i)), scheduled→cancelled (driver only). Everything else is rejected with a
-// typed error.
+// Pure state machine, no I/O.
+//
+// D-61 (2026-09-19) removed Start and Close. Nobody taps anything to begin or end a ride any more:
+// the scheduler SETTLES a trip once its departure time has passed (scheduled → closed), and that
+// one step is what pays the driver, counts the riders and materialises a round trip's return leg.
+// The only human transition left is the driver calling a trip off before it leaves.
+//
+// `started` stays in TripStatus because historical rows carry it, but nothing moves a trip into it
+// any more, and nothing moves a trip out of it either — the D-61 rollout cancelled the ones in
+// flight.
 
-export const START_WINDOW_MINUTES = 120; // D-16: fixed T-2h window
-
-export type TripTransitionEvent = "start" | "close" | "cancel";
+export type TripTransitionEvent = "settle" | "cancel";
 
 export interface TripTransitionActor {
   // Absent for the scheduler, which acts as nobody. An absent id can never match driverId, so it
-  // fails closed on every driver-only transition.
+  // fails closed on the driver-only transition.
   profileId?: string;
-  // D-35 mechanic (i), narrowed by the developer on 2026-08-30: close is no longer driver-only,
-  // but it opens to the GROUP ADMIN and nobody else. Closing a ride the driver forgot is what
-  // generates the return leg, so someone other than the driver has to be able to do it — but not a
-  // rider. A close decides who rode and moves points, and handing that to one passenger over the
-  // others is an authority a colleague should not have over a colleague.
-  // Start and cancel stay driver-only: they are the driver's own commitments to make.
-  // D-50 (2026-09-01): extended to `start` too, so a driver who forgot to tap it is not the only
-  // way a trip gets underway — the admin console can start it on their behalf.
-  isGroupAdmin?: boolean;
-  // D-35 mechanic (ii): the scheduler closing an outbound nobody closed, so the return leg exists
-  // before anyone needs it. Not a person — audit_log records it with a null actor.
+  // The scheduler. The only actor that may settle a trip: a settle decides who rode and moves
+  // points, and D-61's answer is that the departure time decides that, not a person.
   isSystem?: boolean;
 }
-
-// D-35 answer (A). A "full" close is the driver's: it names who actually rode, so anyone left
-// unconfirmed is marked no_show and charged D-19's penalty. A "restricted" close is the group
-// admin's — it confirms every active rider and can mark nobody as a no-show, because deciding that
-// a colleague did not show up is a judgement only the driver was there to make. Both pay the driver
-// the normal award; a leg that was actually driven is paid for regardless of who tapped Close.
-export type CloseMode = "full" | "restricted";
 
 export interface TripTransitionSnapshot {
   status: TripStatus;
@@ -40,13 +28,11 @@ export interface TripTransitionSnapshot {
   departAt: string; // ISO 8601
 }
 
-export type TripTransitionErrorCode = "not_driver" | "not_permitted" | "wrong_status" | "too_early";
+export type TripTransitionErrorCode = "not_driver" | "not_permitted" | "wrong_status" | "too_early" | "departed";
 
 export interface TripTransitionSuccess {
   ok: true;
   nextStatus: TripStatus;
-  // Only set for "close" — which of the two close forms the actor has earned.
-  closeMode?: CloseMode;
 }
 
 export interface TripTransitionFailure {
@@ -57,8 +43,7 @@ export interface TripTransitionFailure {
 export type TripTransitionResult = TripTransitionSuccess | TripTransitionFailure;
 
 const TRANSITIONS: Record<TripTransitionEvent, { from: TripStatus; to: TripStatus }> = {
-  start: { from: "scheduled", to: "started" },
-  close: { from: "started", to: "closed" },
+  settle: { from: "scheduled", to: "closed" },
   cancel: { from: "scheduled", to: "cancelled" },
 };
 
@@ -68,19 +53,9 @@ export function transition(
   actor: TripTransitionActor,
   now: Date = new Date(),
 ): TripTransitionResult {
-  const isDriver = actor.profileId === trip.driverId;
-
-  if (event === "close") {
-    if (!isDriver && !actor.isGroupAdmin && !actor.isSystem) {
-      return { ok: false, error: "not_permitted" };
-    }
-  } else if (event === "start") {
-    // D-50: a group admin can start a trip the driver forgot to, same authority D-35(i) already
-    // gave them over close. Cancel stays driver-only — nobody asked to change that one.
-    if (!isDriver && !actor.isGroupAdmin) {
-      return { ok: false, error: "not_driver" };
-    }
-  } else if (!isDriver) {
+  if (event === "settle") {
+    if (!actor.isSystem) return { ok: false, error: "not_permitted" };
+  } else if (actor.profileId !== trip.driverId) {
     return { ok: false, error: "not_driver" };
   }
 
@@ -89,16 +64,11 @@ export function transition(
     return { ok: false, error: "wrong_status" };
   }
 
-  if (event === "start") {
-    const earliestStart = new Date(trip.departAt).getTime() - START_WINDOW_MINUTES * 60_000;
-    if (now.getTime() < earliestStart) {
-      return { ok: false, error: "too_early" };
-    }
-  }
-
-  if (event === "close") {
-    return { ok: true, nextStatus: to, closeMode: isDriver ? "full" : "restricted" };
-  }
+  const departed = new Date(trip.departAt).getTime() <= now.getTime();
+  // A settle before departure would pay for a ride that has not happened.
+  if (event === "settle" && !departed) return { ok: false, error: "too_early" };
+  // A ride that has left is a ride that happened — the driver fixes its list, they don't cancel it.
+  if (event === "cancel" && departed) return { ok: false, error: "departed" };
 
   return { ok: true, nextStatus: to };
 }
