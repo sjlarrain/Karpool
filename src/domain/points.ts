@@ -105,10 +105,19 @@ export function computeDriveCorrection(
   paidSoFar: number,
   riderCount: number,
   weights: CloseWeights,
+  // Whether this trip already carries the driver's `drive` row. The FIRST payment must be a `drive`
+  // row and every later one a `drive_adjust`, because `aggregateLedger` counts `driven` as the
+  // number of `drive` rows: a second one reports a commute as two trips driven, and none at all
+  // reports a ride nobody drove. Missing this is exactly what shipped in the first D-61 settle —
+  // the points were right and the Ranks tab said "0 driven".
+  hasDriveRow = true,
 ): DriveCorrection {
   const total = computeDriveAward(riderCount, weights).points;
   const delta = total - paidSoFar;
   if (delta === 0) return { entry: null, total };
+  if (!hasDriveRow) {
+    return { entry: { ...computeDriveAward(riderCount, weights), points: delta }, total };
+  }
   return {
     entry: {
       kind: "drive_adjust",

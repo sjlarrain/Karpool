@@ -100,8 +100,17 @@ describe("computeDriveCorrection", () => {
     expect(computeDriveCorrection(13, 0, WEIGHTS).entry?.reason).toBe("Seat count corrected (drove alone)");
   });
 
-  it("is a correction, never a `drive` row — a second drive row would count as a second trip driven", () => {
-    expect(computeDriveCorrection(0, 2, WEIGHTS).entry?.kind).toBe("drive_adjust");
+  it("is a correction once the trip already carries its `drive` row — a second one would count as a second trip driven", () => {
+    expect(computeDriveCorrection(0, 2, WEIGHTS, true).entry?.kind).toBe("drive_adjust");
+  });
+
+  // D-61: the settle is the FIRST payment, so it must write the `drive` row itself. Shipped wrong
+  // for an hour — the points were right and the Ranks tab read "0 driven", because `driven` counts
+  // `drive` rows and there were none.
+  it("writes the `drive` row when the trip has none yet", () => {
+    const { entry, total } = computeDriveCorrection(0, 1, WEIGHTS, false);
+    expect(entry).toEqual({ kind: "drive", points: 13, reason: "Drove the trip (1 pooled)" });
+    expect(total).toBe(13);
   });
 
   // The property that makes this safe to call from six routes and the scheduler: it is derived from
@@ -114,10 +123,8 @@ describe("computeDriveCorrection", () => {
     expect(second.total).toBe(25);
   });
 
-  // A trip that started before D-56 shipped has no `drive` row at all; its close must still pay the
-  // whole award rather than half of one.
   it("pays the full award when nothing has been paid yet", () => {
-    expect(computeDriveCorrection(0, 1, WEIGHTS).entry?.points).toBe(13);
+    expect(computeDriveCorrection(0, 1, WEIGHTS, false).entry?.points).toBe(13);
   });
 });
 

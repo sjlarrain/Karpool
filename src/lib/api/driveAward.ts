@@ -34,16 +34,27 @@ export interface DriveAwardResult {
   error?: string;
 }
 
-/** Everything already paid to this driver for this trip: the `drive` row plus every correction. */
-export async function driveAwardPaid(admin: AdminClient, tripId: string, driverId: string): Promise<number | null> {
+/**
+ * Everything already paid to this driver for this trip: the `drive` row plus every correction, and
+ * whether that `drive` row exists at all — the first payment has to be one, later ones must not be.
+ */
+export async function driveAwardPaid(
+  admin: AdminClient,
+  tripId: string,
+  driverId: string,
+): Promise<{ points: number; hasDriveRow: boolean } | null> {
   const { data, error } = await admin
     .from("points_ledger")
-    .select("points")
+    .select("kind, points")
     .eq("trip_id", tripId)
     .eq("profile_id", driverId)
     .in("kind", ["drive", "drive_adjust"]);
   if (error) return null;
-  return (data ?? []).reduce((sum, row) => sum + row.points, 0);
+  const rows = data ?? [];
+  return {
+    points: rows.reduce((sum, row) => sum + row.points, 0),
+    hasDriveRow: rows.some((row) => row.kind === "drive"),
+  };
 }
 
 /**
@@ -102,7 +113,7 @@ export async function settleDriveAward(
     return { written: null, total: computeDriveAward(seats, weights).points, error: "ledger_read_failed" };
   }
 
-  const { entry, total } = computeDriveCorrection(paid, seats, weights);
+  const { entry, total } = computeDriveCorrection(paid.points, seats, weights, paid.hasDriveRow);
   if (!entry) return { written: null, total };
 
   const { error: insertError } = await admin.from("points_ledger").insert({
@@ -113,7 +124,7 @@ export async function settleDriveAward(
     points: entry.points,
     reason: entry.reason,
   });
-  if (insertError) return { written: null, total: paid, error: insertError.message };
+  if (insertError) return { written: null, total: paid.points, error: insertError.message };
 
   return { written: entry, total };
 }

@@ -4,7 +4,7 @@ import { env } from "@/env";
 import { redeemPendingInvite } from "@/lib/api/redeemPendingInvite";
 import { loadGroupTrips } from "@/lib/trips/loadGroupTrips";
 import { viewerTimeZone } from "@/lib/time/viewerTimeZone";
-import { ANNOUNCEMENT_KEY } from "./WhatsNewSheet";
+import { ANNOUNCEMENT_KEY } from "@/domain/announcement";
 import { AppShell } from "./AppShell";
 
 export default async function AppHome({ searchParams }: { searchParams: Promise<{ g?: string; trip?: string }> }) {

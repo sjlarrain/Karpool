@@ -1,16 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { ANNOUNCEMENT_KEY } from "@/domain/announcement";
 
 // D-61 (developer, 2026-09-19: "a notification message for the users that get into the platform so
 // they can check this new things. Sort of a pop up"). Shown once per person, on their next visit.
 //
 // "Once" is recorded on the profile rather than in localStorage: this announces that the rules of
 // the app changed, and a second phone is not a second person who needs telling twice — nor should
-// clearing site data resurrect it. ANNOUNCEMENT_KEY is what is stored, so the next announcement is
-// a new key rather than a new column.
-
-export const ANNOUNCEMENT_KEY = "2026-09-auto-lifecycle";
+// clearing site data resurrect it. The key itself lives in src/domain/announcement.ts, because the
+// server component that decides whether to render this sheet cannot read a constant out of a
+// "use client" module.
 
 const LINES: { icon: string; title: string; body: string }[] = [
   {

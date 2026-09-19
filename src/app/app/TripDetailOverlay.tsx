@@ -1015,6 +1015,9 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
           onClose={() => setFixing(false)}
           onFixed={(message) => {
             setFixing(false);
+            // Reload the detail behind the sheet as well as the feed: a reported no-show leaves the
+            // screen still listing them as a pickup otherwise, which reads as the report not landing.
+            void load();
             onChanged(message);
           }}
         />
