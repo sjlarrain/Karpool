@@ -1,5 +1,81 @@
 # Worklog
 
+## Data fix (2026-09-19, manual — Thu 09-18's two round trips and their return legs closed)
+
+- **What was wrong:** both round trips were force-started by sjlarrain at 13:26 PDT, *after* their
+  return times (Nicolás 10:00, Alejandro 11:30), and nothing ever closed them. The scheduler's T-2h
+  close tried every tick and failed silently: `generate_back_trip()` inserts the return leg with a
+  `depart_at` already in the past, which D-47's `trip_depart_not_before_created` rejects, so
+  `closeTrip()` released its claim. Recorded as **D-60** (open); no code touched.
+- **Done directly against the remote DB** at the developer's request ("force close every trip
+  today and their return trips"), as restricted closes (everyone aboard confirmed, no no-shows),
+  awards from the app's own `computeCloseAwards()`:
+  - `d5a25af3…` Alejandro Rivera outbound: Isi, Fran Swett, Caro De Andrade, Manolo → **+34**.
+    Return leg `34f82276…` created with all four (all had `wants_return`), started, closed → **+34**.
+  - `64156ee3…` Nicolás Carvallo outbound: Agustin Feres, Felipe Trejo, Nicole Cuadros → **+25**.
+    Return leg `fa48a4a8…` created with Agustin (the only `wants_return`), closed → **+13**.
+  - The return legs mirror `generate_back_trip()` exactly except `created_at = return_at`, so the
+    D-47 check holds. `started_at` = the leg's departure. Audit rows `force_start_trip` /
+    `force_close_trip`, actor sjlarrain, `via: manual data fix (Claude Code, developer request 2026-09-18)`.
+- **Deliberately not done:** no notifications (explicit instruction) — zero `notification` rows
+  written. Nobody got a kudos prompt, so kudos for these rides only happen if riders open the trip.
+- **Gates:** `pnpm verify` green. Throwaway scripts in gitignored `tmp/`, not committed.
+
+## Data fix (2026-09-15, manual — Friday 09-11's two return legs closed and paid)
+
+- **What was wrong:** both Friday return legs were really driven, but neither driver tapped
+  Start/Close, so `cron_expire_unstarted` cancelled both 24h later ("never started, 24h past
+  departure" — `audit_log`, 2026-09-12). A driven leg was therefore worth nothing and its riders
+  had no ride counted. The developer reported it as "Manolo pooled minizombini on the way back"
+  and "sjlarrain only took Agustin Feres on the way back" — the data agreed exactly: minizombini
+  was on no Friday trip at all, and Agustin sat on sjlarrain's back leg as `joined`, never
+  confirmed.
+- **Done directly against the remote DB** (one-off data, no schema change), replaying precisely
+  what a restricted close writes, with the award coming from the app's own `computeCloseAwards()`
+  rather than a copy of the arithmetic:
+  - `79be5888…` (Manolo, back, Fri 12:00 PDT): minizombini seated `confirmed`; status
+    `cancelled → closed`, `cancelled_reason` cleared; one `drive` row of **+13** (10 + a 1-seat
+    fill bonus of 3).
+  - `39ba9ac0…` (sjlarrain, back, Fri 16:00 PDT): Agustin Feres `joined → confirmed`; same status
+    repair; one `drive` row of **+13**.
+  - `started_at` set to each leg's real `depart_at`, `closed_at` to the moment of the repair — the
+    shape a very late close would have had anyway. Six `audit_log` rows
+    (`trip_rider_added_by_driver`, `force_start_trip`, `force_close_trip` ×2), actor sjlarrain,
+    each carrying `via: manual data fix (Claude Code, developer request 2026-09-15)`.
+- **Deliberately not done:** no notifications. A close normally pushes the kudos prompt to
+  confirmed riders; four days late that would have woken minizombini and Agustin for a ride long
+  over, and notifying other people is the developer's call, not the agent's. Consequence: neither
+  driver can receive kudos for these legs unless the riders open the trip themselves.
+- **Leaderboard after (recomputed through `aggregateLedger` + `tallyPooledRides`, not by hand):**
+  Manolo 124 → **137** (8 driven), sjlarrain 65 → **78** (4 driven), minizombini pooled 3 → **4**,
+  Agustin Feres pooled 7 → **8**. Nobody else moved.
+- **Left open for the developer:** Manolo's Friday *outbound* (`00dd7df9…`) is closed with **zero**
+  riders and paid 10. If minizombini rode out with him too, that leg owes another 3 points and one
+  more pooled ride — not assumed either way.
+- **Gates:** `pnpm verify` green (255/255). No code or schema touched; the scripts were throwaway,
+  run from the gitignored `tmp/`, not committed.
+
+## Data fix (2026-09-10, manual — Felipe's return leg closed, sjlarrain's Fri 09-11 trip created)
+- **Felipe's return leg** (`7ecac626…`, the back leg generated from `9e01fae4…` that morning, due
+  16:30 PDT and already past): at the developer's request their own self-booked seat was set `left`
+  with **no `late_leave` row** (the leave route would have charged −5), then the trip was
+  force-started and given a restricted close exactly as `main`'s code does it — 0 seats, one
+  `drive` row of **+10** for Felipe, matching the +10 his empty outbound earned. Felipe was not
+  notified (explicit instruction); with no riders aboard, nobody else was either. Three `audit_log`
+  rows (`trip_rider_removed_by_admin`, `force_start_trip`, `force_close_trip`), actor sjlarrain.
+- **New trip** `72f49984…` in MBA 2028: sjlarrain driving, `round`, Fri 2026-09-11 08:10 → 16:00
+  PDT (15:10Z / 23:00Z), capacity 4. Riders seated through `add_trip_rider()` (driver-added, so
+  penalty-free to leave): Agustin Feres with `wants_return = true`; Alejandro Rivera, Caro De Andrade
+  and Fran Swett one-way. Each got the app's own "You've been added to a ride" bell row plus push —
+  only Caro has a device on file (1/1 delivered). Audit rows `trip_rider_added_by_driver` ×4.
+- **Found while checking which scoring model to mirror:** the live DB carries D-56/D-57's migrations
+  (`0024` `drive_adjust`, `0025` `trip_message`), but production still runs `main`, which pays the
+  driver at CLOSE — that morning's force-close wrote Felipe's `drive` row at close time, and the only
+  `drive_adjust` rows belong to e2e groups. `feat/chat-and-trip-lifecycle` is unmerged.
+- **Gates:** `pnpm verify` green (255/255) after clearing the gitignored `.next/` with the
+  developer's OK — its generated `.next/types` still referenced that branch's `messages` route, which
+  doesn't exist on `main`, so `tsc` failed on a stale build artifact rather than on code. Worth
+  remembering after any branch switch.
 ## Fixed (2026-09-07, on `feat/chat-and-trip-lifecycle` — D-59, "it said it was full when it wasn't")
 - **Reported by the developer while reviewing the branch**, with a screenshot of a trip whose badge
   read `OPEN · 3 SEATS` and whose seat line read `0 / 3 seats`, above the sentence "This carpool is
