@@ -15,19 +15,30 @@
   leg is dated from its parent). Deleted: `/start`, `/close`, both admin force routes,
   `startTrip.ts`, `closeTrip.ts`.
 - **In progress:** nothing mid-flight; the code is committed on the branch, unmerged and undeployed.
-- **Next:** the rollout, in this order and each step with the developer's OK — (1) list every trip
-  still unfinished past its departure and cancel them with `cancelled_reason: 'lifecycle_rollout'`,
-  no points and no notifications; (2) `supabase db push` for `0024`/`0025`/`0026` and confirm with
-  `supabase migration list --linked`; (3) merge to `main` and push so Vercel deploys; (4) watch the
-  first ticks in `audit_log` (`cron_settle_trip`) and `/api/admin/health`.
+- **Next:** merge to `main` and push so Vercel deploys, then watch the first ticks in `audit_log`
+  (`cron_settle_trip`) and `/api/admin/health`. **Migration `0026` is already applied to the live
+  project** (developer's OK, 2026-09-19; `migration list --linked` shows it on both sides). The
+  rollout's cancel step turned out to be empty: a survey of the live database found **zero** trips
+  still `scheduled` or `started`, past or future, so there was nothing to cancel.
 - **Blocked on:** nothing in code. The rollout needs the developer's go-ahead for the DB write, the
   merge and the push. `CLAUDE.md` §4 still says `scheduled → started → closed | cancelled` and
   −10 for a no-show; both are now wrong and only the developer can edit that file.
-- **Gates now green:** `pnpm verify` — typecheck, lint, 271/271 unit tests. The integration suite
+- **Proved in a real browser (live project, local dev server), and it found three faults:**
+  (1) `settleDriveAward` wrote the FIRST award as `drive_adjust` — inherited from D-56, where the
+  same helper made the Start payment. `aggregateLedger` counts `driven` as the number of `drive`
+  rows, so a settled ride paid the right points and reported **zero trips driven**;
+  `computeDriveCorrection` now takes whether the trip already holds its `drive` row. (2)
+  `ANNOUNCEMENT_KEY` was exported from a `"use client"` module, so the server read it as `undefined`
+  and the what's-new sheet came back on every visit — it lives in `src/domain/announcement.ts` now.
+  (3) The trip screen kept listing a reported no-show until it was reopened. After the fixes: a
+  seeded trip aged two minutes into the past settled on one tick (`settled: 1`, `failures: []`),
+  wrote `drive +13` and confirmed the seat with nobody tapping anything; the driver's screen read
+  "Counted and paid"; a no-show report wrote `no_show -5` for the rider and `no_show_report +2` for
+  the driver with the seat's 13 untouched; Ranks read **2 driven · 35 pts**. Test data removed.
+- **Gates now green:** `pnpm verify` — typecheck, lint, 272/272 unit tests. The integration suite
   (`tests/integration/settle-and-kudos.test.ts`, renamed from `close-and-kudos`) and the two
-  rewritten e2e specs need a running dev server and the live project, so they have not been run
-  here; both now make a ride happen by ageing the trip and calling one cron tick, which is what
-  production does.
+  rewritten e2e specs have not been run as suites; both make a ride happen by ageing the trip and
+  calling one cron tick, which is exactly what the manual browser check above did by hand.
 - **Worth knowing for the next session:** two ticks settling the same trip is covered by a
   compare-and-swap claim, but two *driver* corrections racing each other (two roster changes in
   flight at once) still read-then-append through `settleDriveAward`, exactly as D-56 left it. Only
