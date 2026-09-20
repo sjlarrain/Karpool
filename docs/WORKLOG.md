@@ -1,5 +1,30 @@
 # Worklog
 
+## D-61 follow-ups (2026-09-20, on `feat/chat-and-trip-lifecycle`)
+
+- **Shipped:** three developer asks after the first D-61 build. (1) The parking nudge **carries the
+  link**: `payload.url` and the push's `data.url` are the leg's D-54 URL, so tapping the
+  notification opens the payment page rather than the app, and the bell row does the same; one per
+  leg, deduped per trip. (2) The what's-new sheet now shows **twice** rather than once
+  (`ANNOUNCEMENT_MAX_VIEWS`, `profile.announcement_seen_count`, migration `0027`) — pure
+  `shouldShowAnnouncement` / `nextAnnouncementState`, so a new key resets the count. (3) The
+  Fix-the-ride-list flow **no longer names point figures** anywhere on screen; the copy describes
+  removing or adding a person and the ledger is untouched. Also documented
+  `POST /api/me/announcement` in `docs/API.md`, which had shipped undocumented.
+- **In progress:** nothing mid-flight.
+- **Next:** merge to `main` and push so Vercel deploys, then watch the first live ticks in
+  `audit_log` (`cron_settle_trip`) and `/api/admin/health`. Migrations `0026` and `0027` are both
+  already applied to the live project (`migration list --linked` agrees on both sides).
+- **Blocked on:** the developer's go-ahead for the merge and the push, and their own edit to
+  `CLAUDE.md` §4 (trip status row, and the no-show figures).
+- **Proved in a real browser again, against the live project:** the sheet appeared, was dismissed
+  (count 1), appeared on the next visit, was dismissed (count 2), and stayed away on two further
+  visits; a seeded ride settled on one tick and its Fix sheet rendered the new copy with no point
+  figures anywhere; the parking job sent exactly one notification carrying the URL and nothing on
+  the following tick. Seeded rides removed afterwards and the fixture account reset.
+- **Gates now green:** `pnpm verify` — typecheck, lint, 282/282 unit tests (10 new in
+  `announcement.test.ts`).
+
 ## D-61 (2026-09-19, on `feat/chat-and-trip-lifecycle` — the automatic trip lifecycle)
 
 - **Shipped:** Start and Close removed from the app, the API and the state machine. The scheduler
