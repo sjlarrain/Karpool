@@ -577,6 +577,17 @@ Mark notifications read, clearing the bell's unread dot. Opening the sheet calls
   RLS (`notification_own_update`, migration `0005`), not by the route — without that policy the
   update silently affects zero rows rather than erroring.
 
+## Announcements (D-61)
+
+### `POST /api/me/announcement`
+"I've seen the what's-new sheet." Called when the caller dismisses it (`src/app/app/WhatsNewSheet.tsx`).
+
+- **Auth**: required
+- **Request**: `{ key: string (1–64 chars) }` — the announcement's key, `ANNOUNCEMENT_KEY` in `src/domain/announcement.ts`
+- **Response**: `{ ok: true, seenCount: number }`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `500 profile_lookup_failed`, `500 update_failed`
+- **Side effects**: updates `profile.seen_announcement` and `profile.announcement_seen_count` (migration `0027`) via the pure `nextAnnouncementState()`. A key the caller has not seen before resets the count to 1; the same key increments it, capped at `ANNOUNCEMENT_MAX_VIEWS` (2 — "it needs to appear twice"). The app shell decides whether to show the sheet at all with the paired `shouldShowAnnouncement()`, read server-side in `src/app/app/page.tsx` so a used-up announcement never flashes on load.
+
 ## Push
 
 ### `POST /api/push/subscribe`

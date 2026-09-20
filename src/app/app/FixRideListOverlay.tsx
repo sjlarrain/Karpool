@@ -8,10 +8,14 @@ import { readJsonBody } from "@/lib/http/readJsonBody";
 // The ride was counted and paid when it departed, with every booked seat treated as ridden. This is
 // where the driver says otherwise, until the end of that day:
 //
-//   - someone booked and didn't ride  → reported as a no-show: -5 for them, +2 for the driver
-//   - someone rode without booking    → seated now, which pays the driver that seat's bonus
-//   - a seat the DRIVER added went unused → simply freed, and the driver is no longer paid for it.
+//   - someone booked and didn't ride  → reported as a no-show
+//   - someone rode without booking    → seated now
+//   - a seat the DRIVER added went unused → simply freed.
 //     Nobody is charged for a seat they never asked for (D-24's principle, applied after the fact).
+//
+// The points each of those moves are deliberately NOT named on screen (developer, 2026-09-20:
+// "remove the message of point deductions, increases. Just mention that they can remove people or
+// add them"). The ledger still does exactly what D-61 specified; the copy just describes the act.
 //
 // There is no undo: points_ledger is append-only, so a report is a fact once written. Hence the
 // two-tap confirm on the only destructive action here.
@@ -69,10 +73,7 @@ export function FixRideListOverlay({ tripId, riders, addableGuests, onClose, onF
   });
 
   function reportNoShow(rider: Rider) {
-    void send(`/api/trips/${tripId}/no-show`, json({ tripRiderId: rider.id }), (body) => {
-      const driverPoints = typeof body?.driverPoints === "number" ? body.driverPoints : 0;
-      return `${rider.name} marked as a no-show · +${driverPoints} pts for reporting`;
-    });
+    void send(`/api/trips/${tripId}/no-show`, json({ tripRiderId: rider.id }), () => `${rider.name} marked as a no-show`);
   }
 
   function removeSeat(rider: Rider) {
@@ -83,19 +84,13 @@ export function FixRideListOverlay({ tripId, riders, addableGuests, onClose, onF
   }
 
   function seatRosterGuest(guest: { id: string; name: string }) {
-    void send(`/api/trips/${tripId}/guests`, json({ groupGuestId: guest.id }), (body) => {
-      const delta = typeof body?.pointsAdjusted === "number" ? body.pointsAdjusted : 0;
-      return delta > 0 ? `${guest.name} added · +${delta} pts` : `${guest.name} added`;
-    });
+    void send(`/api/trips/${tripId}/guests`, json({ groupGuestId: guest.id }), () => `${guest.name} added to this ride`);
   }
 
   function seatTypedGuest() {
     const name = guestName.trim();
     if (!name) return;
-    void send(`/api/trips/${tripId}/guests`, json({ guestName: name }), (body) => {
-      const delta = typeof body?.pointsAdjusted === "number" ? body.pointsAdjusted : 0;
-      return delta > 0 ? `${name} added · +${delta} pts` : `${name} added`;
-    });
+    void send(`/api/trips/${tripId}/guests`, json({ guestName: name }), () => `${name} added to this ride`);
   }
 
   return (
@@ -118,8 +113,8 @@ export function FixRideListOverlay({ tripId, riders, addableGuests, onClose, onF
 
       <div className="scroll" style={{ padding: 18 }}>
         <p style={{ font: "600 13px var(--font-body)", lineHeight: 1.5, color: "rgba(0,0,0,.55)", margin: "0 0 16px" }}>
-          Everyone below was counted as riding, and you&apos;ve been paid for their seats. Only change
-          what&apos;s actually wrong — you can do this until the end of today.
+          Everyone below was counted as riding. Remove anyone who didn&apos;t, add anyone who rode
+          without booking — you can do this until the end of today.
         </p>
 
         {riders.length > 0 && (
@@ -195,8 +190,7 @@ export function FixRideListOverlay({ tripId, riders, addableGuests, onClose, onF
                           marginBottom: 8,
                         }}
                       >
-                        {r.name} booked a seat and didn&apos;t ride? They lose 5 points and you get 2
-                        for telling us. This can&apos;t be undone.
+                        {r.name} booked a seat and didn&apos;t ride? This can&apos;t be undone.
                       </div>
                       <div style={{ display: "flex", gap: 8 }}>
                         <button
@@ -295,8 +289,8 @@ export function FixRideListOverlay({ tripId, riders, addableGuests, onClose, onF
           </button>
         </div>
         <p style={{ font: "500 11px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "2px 2px 20px" }}>
-          Just this once — a typed name fills a seat and pays you for it, but isn&apos;t tracked for
-          anyone. Ask an admin to add a regular rider to the guest list instead.
+          Just this once — a typed name fills a seat but isn&apos;t tracked for anyone. Ask an admin
+          to add a regular rider to the guest list instead.
         </p>
 
         {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "0 0 12px" }}>{error}</p>}

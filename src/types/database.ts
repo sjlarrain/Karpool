@@ -519,6 +519,7 @@ export type Database = {
           last_seen_at: string | null
           platform_role: "member" | "platform_admin"
           seen_announcement: string | null
+          announcement_seen_count: number
         }
         Insert: {
           avatar_color: string
@@ -529,6 +530,7 @@ export type Database = {
           last_seen_at?: string | null
           platform_role?: "member" | "platform_admin"
           seen_announcement?: string | null
+          announcement_seen_count?: number
         }
         Update: {
           avatar_color?: string
@@ -539,6 +541,7 @@ export type Database = {
           last_seen_at?: string | null
           platform_role?: "member" | "platform_admin"
           seen_announcement?: string | null
+          announcement_seen_count?: number
         }
         Relationships: []
       }

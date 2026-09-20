@@ -4,7 +4,7 @@ import { env } from "@/env";
 import { redeemPendingInvite } from "@/lib/api/redeemPendingInvite";
 import { loadGroupTrips } from "@/lib/trips/loadGroupTrips";
 import { viewerTimeZone } from "@/lib/time/viewerTimeZone";
-import { ANNOUNCEMENT_KEY } from "@/domain/announcement";
+import { shouldShowAnnouncement } from "@/domain/announcement";
 import { AppShell } from "./AppShell";
 
 export default async function AppHome({ searchParams }: { searchParams: Promise<{ g?: string; trip?: string }> }) {
@@ -45,7 +45,11 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           "id",
           memberships.map((m) => m.group_id),
         ),
-      supabase.from("profile").select("display_name, platform_role, seen_announcement").eq("id", userData.user.id).maybeSingle(),
+      supabase
+        .from("profile")
+        .select("display_name, platform_role, seen_announcement, announcement_seen_count")
+        .eq("id", userData.user.id)
+        .maybeSingle(),
     ]);
 
   if (!group) redirect("/");
@@ -74,9 +78,12 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       membershipId={activeMembership?.id ?? ""}
       pickupPlaceId={activeMembership?.pickup_place_id ?? null}
       isPlatformAdmin={viewerProfile?.platform_role === "platform_admin"}
-      // D-61: the one-time "what's new" sheet, decided on the server so it never flashes for
-      // someone who has already closed it.
-      showWhatsNew={viewerProfile?.seen_announcement !== ANNOUNCEMENT_KEY}
+      // D-61: the "what's new" sheet, shown up to ANNOUNCEMENT_MAX_VIEWS times per key, decided on
+      // the server so it never flashes for someone who has already used up their views.
+      showWhatsNew={shouldShowAnnouncement({
+        seenKey: viewerProfile?.seen_announcement ?? null,
+        seenCount: viewerProfile?.announcement_seen_count ?? 0,
+      })}
     />
   );
 }

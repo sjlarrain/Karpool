@@ -4,13 +4,15 @@ import { useState } from "react";
 import { ANNOUNCEMENT_KEY } from "@/domain/announcement";
 
 // D-61 (developer, 2026-09-19: "a notification message for the users that get into the platform so
-// they can check this new things. Sort of a pop up"). Shown once per person, on their next visit.
+// they can check this new things. Sort of a pop up"). Shown up to ANNOUNCEMENT_MAX_VIEWS times per
+// person (2, on the developer's follow-up the same day: "it needs to appear twice") — once wasn't
+// enough for a change this size to register with someone skimming past it.
 //
-// "Once" is recorded on the profile rather than in localStorage: this announces that the rules of
-// the app changed, and a second phone is not a second person who needs telling twice — nor should
-// clearing site data resurrect it. The key itself lives in src/domain/announcement.ts, because the
-// server component that decides whether to render this sheet cannot read a constant out of a
-// "use client" module.
+// The view count is recorded on the profile rather than in localStorage: this announces that the
+// rules of the app changed, and a second phone is not a second person who needs telling from
+// scratch — nor should clearing site data reset the count. The key and the max live in
+// src/domain/announcement.ts, because the server component that decides whether to render this
+// sheet cannot read a constant out of a "use client" module.
 
 const LINES: { icon: string; title: string; body: string }[] = [
   {
@@ -26,7 +28,7 @@ const LINES: { icon: string; title: string; body: string }[] = [
   {
     icon: "✍️",
     title: "Drivers: fix the list until tonight",
-    body: "Someone didn't show? Report them — they lose 5 points, you get 2. Someone rode without booking? Add them.",
+    body: "Until the end of the day you can fix who was in the car: remove someone who didn't show, or add someone who rode without booking.",
   },
   {
     icon: "🅿️",
