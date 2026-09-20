@@ -53,10 +53,12 @@ test("core loop: publish, join, settle, kudos, leaderboard", async ({ browser, b
     await joinTrip(rider, rider.locator(".card", { hasText: trip.displayTime }).first());
   });
 
+  let settledTime = "";
   await test.step("the ride settles itself once its departure passes", async () => {
     // What production does every five minutes, compressed: move the trip into the past, then run
     // one tick. Nobody taps anything.
-    await ageTripsInGroup(await groupIdByName(groupName));
+    // Ageing rewrites the departure, so the card now shows THIS time, not the published one.
+    ({ displayTime: settledTime } = await ageTripsInGroup(await groupIdByName(groupName)));
     const tick = await runCronTick(baseURL!);
     // Both legs of the round trip: the outbound settles, which materialises the return leg, and the
     // return is already in the past too, so the same tick settles it as well.
@@ -66,7 +68,7 @@ test("core loop: publish, join, settle, kudos, leaderboard", async ({ browser, b
     // driver's "fix the list" both live on that card, so hiding it at the moment it departs would
     // hide the only two things left to do with it.
     await driver.reload();
-    await expect(driver.locator(".card", { hasText: trip.displayTime }).first()).toBeVisible({ timeout: 10_000 });
+    await expect(driver.locator(".card", { hasText: settledTime }).first()).toBeVisible({ timeout: 10_000 });
     await expect(driver.getByText("COMPLETED").first()).toBeVisible();
   });
 
@@ -74,7 +76,7 @@ test("core loop: publish, join, settle, kudos, leaderboard", async ({ browser, b
     await rider.reload();
     // Still on the live feed (D-61), badged COMPLETED — the ride left minutes ago, and the card is
     // where the rider thanks their driver.
-    await rider.locator(".card", { hasText: trip.displayTime }).first().click();
+    await rider.locator(".card", { hasText: settledTime }).first().click();
     await expect(rider.getByText("Rate your ride")).toBeVisible({ timeout: 10_000 });
     // D-18: the kudos toggle starts off, so the submit reads "Skip & close" until the rider opts in.
     await rider.getByRole("button", { name: /Give kudos/ }).click();

@@ -42,9 +42,20 @@ export interface TripTransitionFailure {
 
 export type TripTransitionResult = TripTransitionSuccess | TripTransitionFailure;
 
-const TRANSITIONS: Record<TripTransitionEvent, { from: TripStatus; to: TripStatus }> = {
-  settle: { from: "scheduled", to: "closed" },
-  cancel: { from: "scheduled", to: "cancelled" },
+// `started` appears on the settle side as a ROLLOUT SAFETY NET, not as a live status. Nothing in
+// this codebase can put a trip there any more — but the app that ran before D-61 could, and a
+// driver tapping Start on the old build minutes before the new one deploys would otherwise leave a
+// ride that NOTHING can finish: the sweep would skip it, D-23's expiry is gone, and the close route
+// no longer exists. That is the exact failure D-61 was built to end, arriving through the back
+// door. Settling it is also safe by construction: a pre-D-61 `started` trip was never paid (that
+// build paid at close), and `settleDriveAward` writes the `drive` row only when the trip does not
+// already carry one, so a trip that somehow was paid cannot be paid twice.
+//
+// Once the deploy has been live longer than a day, no `started` row can exist and this is dead
+// weight that can come out.
+const TRANSITIONS: Record<TripTransitionEvent, { from: TripStatus[]; to: TripStatus }> = {
+  settle: { from: ["scheduled", "started"], to: "closed" },
+  cancel: { from: ["scheduled"], to: "cancelled" },
 };
 
 export function transition(
@@ -60,7 +71,7 @@ export function transition(
   }
 
   const { from, to } = TRANSITIONS[event];
-  if (trip.status !== from) {
+  if (!from.includes(trip.status)) {
     return { ok: false, error: "wrong_status" };
   }
 

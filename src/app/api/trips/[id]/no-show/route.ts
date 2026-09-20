@@ -72,7 +72,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (seatError) {
     return NextResponse.json({ error: "seat_lookup_failed", message: seatError.message }, { status: 500 });
   }
-  if (!seat || seat.state !== "confirmed") {
+  if (!seat) {
+    return NextResponse.json({ error: "not_found", message: "That rider isn't on this ride." }, { status: 404 });
+  }
+  // Reported already — say so. Falling through to the 404 below would tell a driver who double-taps
+  // that the person "isn't on this ride", which reads as a bug rather than as "you already did it".
+  if (seat.state === "no_show") {
+    return NextResponse.json({ error: "already_reported", message: "You've already reported them." }, { status: 409 });
+  }
+  if (seat.state !== "confirmed") {
     return NextResponse.json({ error: "not_found", message: "That rider isn't on this ride." }, { status: 404 });
   }
   if (!seat.profile_id || seat.added_by_profile_id) {
@@ -151,7 +159,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   await notifyProfiles([seat.profile_id], {
     type: "change",
     title: "Marked as a no-show",
-    body: `Your driver reported you didn't ride. ${report.rider.points} pts.`,
+    // No figure here either (developer, 2026-09-20) — the fact, not the arithmetic.
+    body: "Your driver reported that you didn't ride today.",
     tripId: id,
   });
 

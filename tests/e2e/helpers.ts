@@ -19,16 +19,32 @@ export async function signIn(page: Page, email: string, password: string) {
 }
 
 /**
- * D-61's one-time "what's new" sheet covers the app until it is closed, so every spec that signs a
- * seeded account in for the first time after the rollout would otherwise fail on its next click.
- * Closing it here is also what a real person does, once.
+ * D-61's "what's new" sheet covers the app until it is closed, and since the developer asked for it
+ * to appear TWICE it can come back on any later page load — after a `reload()`, after a redirect —
+ * not only on the first visit. A one-shot dismissal after sign-in is therefore not enough: the
+ * second showing lands mid-spec and silently eats the next click, which is exactly how four specs
+ * failed the first time this suite ran.
+ *
+ * `addLocatorHandler` is Playwright's answer to an overlay that can appear at any moment: the
+ * handler fires whenever the sheet turns up, closes it, and the action that was blocked carries on.
+ * It stays armed for the life of the page, so no spec has to know where the second showing lands.
  */
 export async function dismissWhatsNew(page: Page) {
-  const gotIt = page.getByRole("button", { name: "Got it" });
-  if (await gotIt.isVisible({ timeout: 2_000 }).catch(() => false)) {
-    await gotIt.click();
-    await gotIt.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
-  }
+  await page.addLocatorHandler(
+    page.getByRole("button", { name: "Got it" }),
+    async (gotIt) => {
+      // The handler can fire again while its own first click is still in flight: "Got it" disables
+      // itself until the seen-mark POST returns, and then the sheet unmounts. A plain click() then
+      // waits on a disabled button that is about to detach, which hangs the whole spec — that is
+      // how this failed the first time. So: click only if it is still clickable, then simply wait
+      // for the sheet to be gone, and never let either step throw into the caller's action.
+      if (await gotIt.isEnabled().catch(() => false)) {
+        await gotIt.click({ timeout: 5_000 }).catch(() => {});
+      }
+      await page.locator(".sheet").waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
+    },
+    { noWaitAfter: true },
+  );
 }
 
 export async function createGroup(page: Page, groupName: string) {
@@ -201,13 +217,20 @@ export function adminClient() {
 }
 
 /**
- * Move a group's trips into the past so the next tick settles them.
+ * Move a group's trips into the past so the next tick settles them, and return the time the cards
+ * will now show.
+ *
+ * Returning the new display time is not a convenience: ageing a trip REWRITES its departure, so the
+ * card stops showing the time the spec published and starts showing this one. Asserting on the
+ * original string finds nothing, which is exactly how this suite failed the first time it ran.
  *
  * `created_at` moves with `depart_at`: D-47's trip_depart_not_before_created is a CHECK, so it
  * guards updates as well as inserts, and shifting only the departure would be rejected.
  */
-export async function ageTripsInGroup(groupId: string, minutesAgo = 5) {
+export async function ageTripsInGroup(groupId: string, minutesAgo = 5): Promise<{ displayTime: string }> {
   const admin = adminClient();
+  // One instant for both the write and the rendered string, so they cannot straddle a minute.
+  const { displayTime } = wallClock(-minutesAgo);
   const departAt = new Date(Date.now() - minutesAgo * 60_000).toISOString();
   const { error } = await admin
     .from("trip")
@@ -215,6 +238,7 @@ export async function ageTripsInGroup(groupId: string, minutesAgo = 5) {
     .eq("group_id", groupId)
     .eq("status", "scheduled");
   if (error) throw new Error(`could not age trips: ${error.message}`);
+  return { displayTime };
 }
 
 /** Run the scheduler once, the way pg_cron does (D-21). Returns the tick's own report. */

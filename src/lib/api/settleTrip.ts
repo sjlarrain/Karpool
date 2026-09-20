@@ -56,11 +56,15 @@ export async function settleTrip(tripId: string, now: Date = new Date()): Promis
   // (a slow tick overlapping the next) serialise on the row, and the loser matches nothing and
   // writes nothing. closeTrip used to rewrite seats BEFORE its claim, so a losing caller had already
   // touched the roster; here nothing happens until the claim is won.
+  // `started` is accepted alongside `scheduled` purely as a rollout safety net — see the note on
+  // TRANSITIONS in src/domain/tripMachine.ts. The compare-and-swap is on the status we READ, so a
+  // trip that changes underneath us still loses the race cleanly rather than being claimed twice.
+  const claimedFrom = trip.status;
   const { data: claimed, error: claimError } = await admin
     .from("trip")
     .update({ status: result.nextStatus, closed_at: now.toISOString() })
     .eq("id", tripId)
-    .eq("status", "scheduled")
+    .eq("status", claimedFrom)
     .select("id")
     .maybeSingle();
   if (claimError) return { ok: false, error: "update_failed", message: claimError.message };
@@ -73,7 +77,7 @@ export async function settleTrip(tripId: string, now: Date = new Date()): Promis
   async function releaseClaim(failure: SettleTripFailure): Promise<SettleTripFailure> {
     const { error: revertError } = await admin
       .from("trip")
-      .update({ status: "scheduled", closed_at: null })
+      .update({ status: claimedFrom, closed_at: null })
       .eq("id", tripId)
       .eq("status", "closed");
     if (!revertError) return failure;

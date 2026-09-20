@@ -116,8 +116,10 @@ test("a ride settles itself, the car talks, and a no-show is reported", async ({
   });
 
   // ─── D-61, the settle and the correction ────────────────────────────────
+  // Ageing the trip rewrites its departure, so every card lookup after it uses this time.
+  let settledTime = "";
   await test.step("the departure time pays the driver, with no tap from anyone", async () => {
-    await ageTripsInGroup(await groupIdByName(groupName));
+    ({ displayTime: settledTime } = await ageTripsInGroup(await groupIdByName(groupName)));
     await runCronTick(baseURL!);
 
     await driver.reload();
@@ -129,7 +131,7 @@ test("a ride settles itself, the car talks, and a no-show is reported", async ({
   });
 
   await test.step("the driver reports the rider who never got in", async () => {
-    await openOwnTrip(driver, trip.displayTime);
+    await openOwnTrip(driver, settledTime);
     await driver.getByText("Fix the ride list").click();
     await expect(driver.getByRole("heading", { name: "Fix the ride list" })).toBeVisible();
 

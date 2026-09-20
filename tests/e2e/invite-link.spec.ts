@@ -3,7 +3,7 @@ import path from "node:path";
 import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { E2E_DRIVER_EMAIL, E2E_RIDER_EMAIL, E2E_PASSWORD } from "./global-setup";
-import { createGroup, getGroupCode, signIn } from "./helpers";
+import { createGroup, dismissWhatsNew, getGroupCode, signIn } from "./helpers";
 
 // The GROUP invite link, /j/:code — the one a member copies out of the Group tab and pastes into
 // WhatsApp. Reported broken by the developer on 2026-08-31 ("the sharing link is not working so
@@ -74,6 +74,9 @@ test("group invite link: a newcomer clicking it lands inside the group", async (
     const email = `e2e-invite-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@carpool.test`;
     createdEmails.push(email);
 
+    // D-61's what's-new sheet can appear the moment this newcomer lands in the app, so the handler
+    // is armed before the journey rather than after it.
+    await dismissWhatsNew(page);
     await page.goto(`/j/${code}`);
     await page.locator(".segb", { hasText: "Sign up" }).click();
     await page.getByPlaceholder("you@company.com").fill(email);
@@ -102,6 +105,7 @@ test("group invite link: a newcomer clicking it lands inside the group", async (
     const context = await browser.newContext();
     const page = await context.newPage();
 
+    await dismissWhatsNew(page);
     await page.goto(`/j/${code}`);
     await page.getByPlaceholder("you@company.com").fill(E2E_RIDER_EMAIL);
     await page.getByPlaceholder("••••••••").fill(E2E_PASSWORD);

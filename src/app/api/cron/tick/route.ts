@@ -138,10 +138,12 @@ async function handleTick(request: Request) {
   // No lower bound on purpose: a scheduler that was down for a day must still pay yesterday's rides
   // when it comes back. The D-61 rollout cancelled everything unfinished from before this job
   // existed, so there is no backlog of old trips for it to pay by surprise.
+  // `started` alongside `scheduled` is the rollout safety net (see tripMachine.ts): a ride the
+  // pre-D-61 app started in the minutes before this deployed has no other way to finish.
   const { data: departedTrips } = await admin
     .from("trip")
     .select("id, depart_at")
-    .eq("status", "scheduled")
+    .in("status", ["scheduled", "started"])
     .lte("depart_at", now.toISOString())
     // Oldest first: an outbound always settles before the return leg it creates.
     .order("depart_at", { ascending: true });
