@@ -1,5 +1,19 @@
 # Worklog
 
+## Deployed (2026-09-20) — D-61 is in production
+
+- **Shipped:** `feat/chat-and-trip-lifecycle` fast-forwarded into `main` and pushed (`70dac44`), on the
+  developer's go-ahead after the four pre-merge checks below. This also shipped D-56/D-57.
+- **Proved live, not assumed:** production served the new build ~30s after the push (the removed
+  `/start` route answers 404, the new `/api/me/announcement` answers 401). Then a canary ride was
+  planted in an E2E group and **not** ticked by hand. The production scheduler (pg_cron → Vercel)
+  settled it on its own at 02:05 UTC and wrote `cron_settle_trip`, an audit action only the new
+  build produces. `carpool_cron_status()` showed the job active and succeeding. The canary was removed.
+- **Next:** watch the first real MBA 2028 ride settle, and confirm a 15-minute reminder actually
+  lands on a phone. That is the one thing that cannot be proved from a dev machine.
+- **Blocked on:** the developer's edit to `CLAUDE.md` §4 (trip-status row; no-show −5 / +2).
+- **Gates:** `pnpm verify` 286/286, integration 5/5, e2e 7/7 on the deployed commit.
+
 ## Pre-merge verification (2026-09-20 — the developer asked "are you confident?" before production)
 
 Four checks, run because the answer was honestly "not yet". Each one is recorded because three of
