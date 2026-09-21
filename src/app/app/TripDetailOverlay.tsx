@@ -75,9 +75,12 @@ interface Props {
   tripId: string;
   onClose: () => void;
   onChanged: (message: string) => void;
+  // Open with the trip chat already showing — a chat notification's "Open chat" lands in the thread,
+  // not one tap short of it. Closing the chat leaves the reader on this ride.
+  startInChat?: boolean;
 }
 
-export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
+export function TripDetailOverlay({ tripId, onClose, onChanged, startInChat = false }: Props) {
   const [data, setData] = useState<DetailResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +98,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged }: Props) {
   const [editing, setEditing] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   // D-57: the per-trip thread, opened over this screen.
-  const [chatting, setChatting] = useState(false);
+  const [chatting, setChatting] = useState(startInChat);
   const [cancelReason, setCancelReason] = useState("");
 
   const load = useCallback(async () => {

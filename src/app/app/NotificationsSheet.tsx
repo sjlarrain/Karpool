@@ -5,7 +5,7 @@ import type { Database } from "@/types/database";
 
 // The bell's bottom sheet (sketch: "NOTIFICATIONS (from bell)"). Rows are tinted by type, carry an
 // icon tile, and a `rate` row is the only actionable one in the sketch — here any row that carries a
-// tripId opens that trip, since the same deep-link payload is written for start/change/reminder too.
+// tripId opens that trip (a chat row opens its chat), and a row with a `url` opens that link.
 
 export type NotificationItem = {
   id: string;
@@ -71,7 +71,8 @@ const CTA: Partial<Record<NotificationItem["type"], string>> = {
   start: "View trip",
   change: "View trip",
   reminder: "View trip",
-  close_reminder: "End trip",
+  // Old rows only (D-61 retired the nudge and the End button with it) — so they just open the ride.
+  close_reminder: "View trip",
   // D-61: this one leaves the app — it opens the group's parking page (D-54).
   parking: "Pay parking",
   // D-57: a chat message is only useful if you can get to the thread it was said in.
@@ -84,15 +85,48 @@ type Props = {
   notifications: NotificationItem[];
   loading: boolean;
   onClose: () => void;
-  onOpenTrip: (tripId: string) => void;
+  // `chat: true` opens the ride straight into its chat — a chat row's button says "Open chat", and
+  // landing on the ride instead left the reader one more tap from the message they were sent.
+  onOpenTrip: (tripId: string, opts?: { chat?: boolean }) => void;
 };
 
 export function NotificationsSheet({ notifications, loading, onClose, onOpenTrip }: Props) {
   return (
     <div className="sheet" onClick={onClose}>
       <div className="sheetc" onClick={(e) => e.stopPropagation()}>
-        <div style={{ width: 38, height: 4, background: "rgba(0,0,0,.15)", borderRadius: 2, margin: "0 auto 16px" }} />
-        <h3 style={{ fontSize: 17, fontWeight: 800, color: "var(--ink)", margin: "0 0 12px" }}>Notifications</h3>
+        {/* Pinned while the list scrolls under it (the sheet scrolls itself once it is full). The
+            negative margins pull it over the sheet's own padding so rows never show above it. */}
+        <div
+          style={{
+            position: "sticky",
+            top: -20,
+            zIndex: 1,
+            background: "var(--bg)",
+            margin: "-20px -20px 0",
+            padding: "20px 20px 12px",
+          }}
+        >
+          <div style={{ width: 38, height: 4, background: "rgba(0,0,0,.15)", borderRadius: 2, margin: "0 auto 16px" }} />
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <h3 style={{ fontSize: 17, fontWeight: 800, color: "var(--ink)", margin: 0 }}>Notifications</h3>
+            <button
+              onClick={onClose}
+              aria-label="Close notifications"
+              style={{
+                background: "var(--chip)",
+                border: "none",
+                borderRadius: 999,
+                width: 30,
+                height: 30,
+                font: "700 13px var(--font-body)",
+                color: "rgba(0,0,0,.55)",
+                cursor: "pointer",
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
 
         {loading && (
           <p style={{ font: "500 12px var(--font-body)", color: "var(--muted)", margin: "6px 2px 10px" }}>Loading…</p>
@@ -100,7 +134,7 @@ export function NotificationsSheet({ notifications, loading, onClose, onOpenTrip
 
         {!loading && notifications.length === 0 && (
           <p style={{ font: "500 12.5px var(--font-body)", color: "var(--muted)", margin: "6px 2px 14px" }}>
-            Nothing yet. Trip starts, schedule changes and kudos prompts land here.
+            Nothing yet. Ride reminders, seat changes, chat messages and parking links land here.
           </p>
         )}
 
@@ -112,7 +146,7 @@ export function NotificationsSheet({ notifications, loading, onClose, onOpenTrip
               window.open(n.url, "_blank", "noopener,noreferrer");
               return;
             }
-            if (n.tripId) onOpenTrip(n.tripId);
+            if (n.tripId) onOpenTrip(n.tripId, { chat: n.type === "comment" });
           };
           const cta = actionable ? CTA[n.type] : undefined;
           return (

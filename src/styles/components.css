@@ -196,6 +196,14 @@ a:hover {
   width: 100%;
   padding: 20px 20px 26px;
   animation: up 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Never taller than the screen. The app frame clips its overflow, so a sheet taller than the
+     phone (the bell with a month of notifications, a big group's add-passenger list) grew upwards
+     past the top edge: its title and its NEWEST rows became unreachable, and it covered the whole
+     backdrop, so tapping outside could not close it either. Capped, it scrolls inside itself, and a
+     strip of backdrop stays visible to tap. */
+  max-height: calc(100% - 56px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 @keyframes up {
   from {

@@ -92,6 +92,8 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
   const [overlay, setOverlay] = useState<"create" | null>(null);
   // A ride share link (/t/:id) lands here as /app?trip=<id> — open that ride straight away.
   const [openTripId, setOpenTripId] = useState<string | null>(initialTripId);
+  // Set only when a chat notification opened the ride, so it lands in the thread.
+  const [openTripInChat, setOpenTripInChat] = useState(false);
   // D-35: the trip whose "coming back too?" question is currently on screen, if any.
   const [returnQuestionFor, setReturnQuestionFor] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -105,6 +107,7 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
   // doesn't reopen a ride the viewer just dismissed.
   function closeTrip() {
     setOpenTripId(null);
+    setOpenTripInChat(false);
     const params = new URLSearchParams(window.location.search);
     if (!params.has("trip")) return;
     params.delete("trip");
@@ -199,7 +202,10 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
           {tab === "carpools" && (
             <CarpoolsScreen
               trips={trips}
-              onOpenTrip={(id) => setOpenTripId(id)}
+              onOpenTrip={(id) => {
+                setOpenTripInChat(false);
+                setOpenTripId(id);
+              }}
               onQuickJoin={quickJoin}
             />
           )}
@@ -259,7 +265,11 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
 
       {openTripId && (
         <TripDetailOverlay
+          // Keyed so a different ride — or the same ride opened into its chat — mounts fresh
+          // rather than inheriting the previous one's open sheets.
+          key={`${openTripId}:${openTripInChat}`}
           tripId={openTripId}
+          startInChat={openTripInChat}
           onClose={closeTrip}
           onChanged={(message) => {
             flash(message);
@@ -273,8 +283,9 @@ export function AppShell({ group, role, memberCount, adminName, pickupPlaces, in
           notifications={notifications}
           loading={notifsLoading}
           onClose={() => setNotifsOpen(false)}
-          onOpenTrip={(tripId) => {
+          onOpenTrip={(tripId, opts) => {
             setNotifsOpen(false);
+            setOpenTripInChat(opts?.chat ?? false);
             setOpenTripId(tripId);
           }}
         />
