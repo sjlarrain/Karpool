@@ -1,5 +1,44 @@
 # Worklog
 
+## Pre-merge verification (2026-09-20 — the developer asked "are you confident?" before production)
+
+Four checks, run because the answer was honestly "not yet". Each one is recorded because three of
+them found something.
+
+1. **A trip stranded in `started` by the deploy — FOUND AND FIXED.** Production still runs the
+   pre-D-61 app, where a driver can tap Start. Under the new code that status had NO exit: the sweep
+   skipped it, D-23's expiry is gone and the close route no longer exists, so any ride started in the
+   minutes before the deploy would have frozen for ever — the exact failure D-61 exists to end,
+   through the back door. The settle now accepts `started` as an explicit rollout safety net,
+   claiming on the status it read. Proved on the live project: a hand-made `started` trip was
+   rescued by one tick, paid once, and untouched by the next.
+2. **Both suites run for the first time — 2 defects found, now green.** The database suite
+   (5/5) caught a double no-show report answering `404 not_found` instead of `409 already_reported`
+   — safe, but it read as a bug and contradicted `API.md`. The browser suite (7/7) had never run at
+   all and failed 4 specs on two faults of its own: the what's-new sheet now appears TWICE, so it
+   returned after any `reload()` and ate clicks mid-spec (fixed with a reentrant-safe
+   `addLocatorHandler` — a plain click hung on the button while it disabled itself), and
+   `ageTripsInGroup` rewrites a trip's departure, so cards stopped showing the published time.
+3. **The round trip rehearsed end to end — PASSED.** The path that needed hand-repair on 09-10,
+   09-15 and 09-19 and that D-60 broke had never once run under D-61. Outbound settled and paid
+   **18** (10 + seats at 3 and 5); the ride home was created carrying **exactly** the rider who said
+   they were coming back, with the one-way guest correctly left off; it settled at its own departure
+   for **13**; a third tick changed nothing and only one ride home exists. (The first attempt
+   "failed" on a bug in the rehearsal script, not the app — it omitted `wants_return` on a guest
+   seat, a NOT NULL column, so both seats silently failed to insert. Worth remembering: the app's
+   own seating functions always set it, a hand-written insert must too.)
+4. **The rider's side — PASSED.** Leaving before departure works; after departure it is refused
+   (`409 departed`, "This trip has already left…"); after the settle, refused again; a rider cannot
+   report anyone a no-show (`403 not_driver`); and they can still thank their driver (`201`).
+
+**Live database state at the end:** zero trips `scheduled` or `started` in ANY group, MBA 2028
+included — so the deploy has no backlog to settle by surprise, and the rollout's cancel step remains
+a no-op. Migrations `0026` and `0027` are applied on both sides. All seeded test data removed.
+
+**Still unproven, and unprovable from here:** real push delivery to a phone, and the production
+scheduler calling the deployed app (it calls Vercel, not this dev server) — both are first-five-
+minutes-after-deploy checks.
+
 ## D-61 follow-ups (2026-09-20, on `feat/chat-and-trip-lifecycle`)
 
 - **Shipped:** three developer asks after the first D-61 build. (1) The parking nudge **carries the
