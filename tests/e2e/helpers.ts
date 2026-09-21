@@ -41,7 +41,10 @@ export async function dismissWhatsNew(page: Page) {
       if (await gotIt.isEnabled().catch(() => false)) {
         await gotIt.click({ timeout: 5_000 }).catch(() => {});
       }
-      await page.locator(".sheet").waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
+      // Wait for THIS button to go, not for "a sheet": other sheets (the "Coming back too?" question,
+      // the add-passenger list) share the .sheet class, and waiting on them stalled whichever step
+      // had one open — a flake that failed a different step on every run.
+      await gotIt.waitFor({ state: "detached", timeout: 10_000 }).catch(() => {});
     },
     { noWaitAfter: true },
   );
