@@ -1,5 +1,22 @@
 # Worklog
 
+## Notification sheet fix (2026-09-21, shipped to production as `de215ed`)
+
+- **Shipped:** the bell's sheet had no height cap. With a real month of notifications it grew
+  past the top of the phone, and `main.appshell` clips its overflow, so the title and the NEWEST rows
+  were unreachable (measured: 1447px tall on an 812px screen, top at -635px). It also covered the whole
+  backdrop, so it could not be closed. `.sheetc` is now capped at `calc(100% - 56px)` and scrolls
+  inside itself. That fixes every bottom sheet, including the add-passenger list in big groups. The
+  bell's header is pinned and gains a ✕. A chat row's "Open chat" lands in the thread
+  (`TripDetailOverlay startInChat`). Old `close_reminder` rows no longer offer "End trip", and the
+  empty state no longer promises "trip starts".
+- **Tests:** the chat e2e spec ran at 80-90% of its 90s budget even warm, so it failed at a random
+  step whenever anything slowed down. The dev server being stopped mid-run made every run cold,
+  which exposed this. It now has 180s. The what's-new auto-dismiss waits for its own button rather
+  than any `.sheet`. Full suite 7/7, `pnpm verify` 286/286, production confirmed serving the new
+  stylesheet.
+- **Next / blocked on:** unchanged — confirm a reminder lands on a real phone; `CLAUDE.md` §4 edit.
+
 ## Deployed (2026-09-20) — D-61 is in production
 
 - **Shipped:** `feat/chat-and-trip-lifecycle` fast-forwarded into `main` and pushed (`70dac44`), on the
