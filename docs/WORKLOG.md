@@ -1,5 +1,18 @@
 # Worklog
 
+## Data fix (2026-09-21, manual — "(G)" removed from two guest names)
+
+- **What was wrong:** two guest-roster entries were named "Francisca Sweet (G)" and "Nicolas Carvallo
+  (G)". Both were already linked to the accounts "Fran Swett" and "Nicolas Carvallo". Their 6 seats had
+  copied that name (`trip_rider.guest_name` is denormalised at seating), so the new "Riding" list
+  (D-62) showed the suffix.
+- **Done directly against the remote DB** at the developer's request ("remove the (G) of Fran Swett
+  and Carvallo"). `group_guest.display_name` became "Francisca Sweet" / "Nicolas Carvallo" after a
+  name-clash check within the group, and the 6 seats' `guest_name` was stripped the same way. Audit
+  rows `group_guest_renamed`, `via: manual data fix`. No "(G)" remains anywhere.
+- **Left as is:** only the suffix was removed. The guest is still spelled "Francisca Sweet" while the
+  account is "Fran Swett".
+
 ## Notification sheet fix (2026-09-21, shipped to production as `de215ed`)
 
 - **Shipped:** the bell's sheet had no height cap. With a real month of notifications it grew
