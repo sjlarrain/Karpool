@@ -10,6 +10,7 @@ import {
   ageTripsInGroup,
   runCronTick,
   groupIdByName,
+  openPast,
 } from "./helpers";
 
 // D-61 and D-57, driven through the real UI: a ride that pays itself at its departure, a chat that
@@ -136,6 +137,9 @@ test("a ride settles itself, the car talks, and a no-show is reported", async ({
   });
 
   await test.step("the driver reports the rider who never got in", async () => {
+    // Settled, so the ride is in Past now.
+    await driver.locator(".tab", { hasText: "Carpools" }).click();
+    await openPast(driver);
     await openOwnTrip(driver, settledTime);
     await driver.getByText("Fix the ride list").click();
     await expect(driver.getByRole("heading", { name: "Fix the ride list" })).toBeVisible();

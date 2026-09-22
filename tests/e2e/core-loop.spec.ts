@@ -10,6 +10,7 @@ import {
   ageTripsInGroup,
   runCronTick,
   groupIdByName,
+  openPast,
 } from "./helpers";
 
 // G5 — the core loop, driven through the real UI (not the API directly): sign in, publish a trip,
@@ -64,18 +65,17 @@ test("core loop: publish, join, settle, kudos, leaderboard", async ({ browser, b
     // return is already in the past too, so the same tick settles it as well.
     expect(tick.settled).toBeGreaterThanOrEqual(1);
 
-    // D-61: a settled ride stays on the LIVE feed until its day is over — its kudos button and the
-    // driver's "fix the list" both live on that card, so hiding it at the moment it departs would
-    // hide the only two things left to do with it.
+    // A settled ride moves into Past at once (developer, 2026-09-21).
     await driver.reload();
+    await openPast(driver);
     await expect(driver.locator(".card", { hasText: settledTime }).first()).toBeVisible({ timeout: 10_000 });
     await expect(driver.getByText("COMPLETED").first()).toBeVisible();
   });
 
   await test.step("rider gives kudos", async () => {
     await rider.reload();
-    // Still on the live feed (D-61), badged COMPLETED — the ride left minutes ago, and the card is
-    // where the rider thanks their driver.
+    // The finished ride is in Past, and its card is still where the rider thanks their driver.
+    await openPast(rider);
     await rider.locator(".card", { hasText: settledTime }).first().click();
     await expect(rider.getByText("Rate your ride")).toBeVisible({ timeout: 10_000 });
     // D-18: the kudos toggle starts off, so the submit reads "Skip & close" until the rider opts in.

@@ -125,10 +125,10 @@ describe("decorateTrip", () => {
     expect(decorateTrip({ ...departed, role: "driving" }).isPast).toBe(false);
   });
 
-  it("keeps a settled trip on the live feed until its day is over (D-61)", () => {
+  it("moves a settled trip into Past straight away, even while it can still be fixed (2026-09-21)", () => {
     const today = decorateTrip({ ...base, status: "closed", departed: true, correctable: true });
     expect(today.badge).toBe("COMPLETED");
-    expect(today.isPast).toBe(false);
+    expect(today.isPast).toBe(true);
     expect(decorateTrip({ ...base, status: "closed", departed: true, correctable: false }).isPast).toBe(true);
   });
 

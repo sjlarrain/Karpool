@@ -169,10 +169,11 @@ export function decorateTrip(trip: TripView): DecoratedTrip {
     joinBlock: trip.role === "open" ? joinBlockFor(trip, seatsLeft) : null,
     driverLabel: trip.role === "driving" ? "You’re driving" : `${trip.driver} is driving`,
     stopNotices: stopNotices(trip),
-    // D-53: only a finished trip goes behind the collapsed Past toggle. D-61 settles a trip the
-    // moment it departs, so "closed" alone would hide today's ride while it is still being driven —
-    // along with its kudos button and the driver's "Fix the ride list". A settled trip therefore
-    // stays live until its departure day ends.
-    isPast: finished !== null && !trip.correctable,
+    // D-53: a finished trip — completed or cancelled — goes behind the collapsed Past toggle.
+    // D-61 first kept a settled ride on the live feed until midnight, so its kudos button and the
+    // driver's "Fix the ride list" stayed one tap away; the developer reversed that on 2026-09-21
+    // ("all this trips are finished and there aren't hidden in past"). Both are still reachable
+    // inside Past, and `correctable` still governs them — it just no longer decides where the card sits.
+    isPast: finished !== null,
   };
 }
