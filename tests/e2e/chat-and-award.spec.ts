@@ -38,11 +38,6 @@ async function openChat(page: Page) {
 }
 
 test("a ride settles itself, the car talks, and a no-show is reported", async ({ browser, baseURL }) => {
-  // The longest journey in the suite — two people, a chat both ways, a settle, a no-show report and
-  // the leaderboard — and it ran at 80-90% of the config's 90s even on a warm dev server, so any
-  // slowdown (a cold compile, a busy database) failed it at whichever step the clock ran out on.
-  // Measured at ~1.3m warm and ~1.8m cold; this budget covers both with room.
-  test.setTimeout(180_000);
   const driverContext = await browser.newContext();
   const riderContext = await browser.newContext();
   const driver = await driverContext.newPage();

@@ -266,13 +266,13 @@ export async function groupIdByName(name: string): Promise<string> {
 }
 
 /**
- * Open the Carpools tab's Past section if it is collapsed. A finished ride — completed or
+ * Open the Carpools tab's Completed section if it is collapsed. A finished ride — completed or
  * cancelled — lives there from the moment it settles (developer, 2026-09-21), so any spec that
- * visits a ride after it has run has to open Past first. Reads `aria-expanded` rather than
+ * visits a ride after it has run has to open that section first. Reads `aria-expanded` rather than
  * clicking blindly, because clicking an open section closes it.
  */
 export async function openPast(page: Page) {
-  const toggle = page.locator("button[aria-expanded]", { hasText: /Past · \d+/ });
+  const toggle = page.locator("button[aria-expanded]", { hasText: /Completed · \d+/ });
   await toggle.waitFor({ state: "visible", timeout: 10_000 });
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
 }

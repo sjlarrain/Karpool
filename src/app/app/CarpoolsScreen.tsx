@@ -12,7 +12,7 @@ interface Props {
   onQuickJoin: (tripId: string) => void;
 }
 
-// One card, used by both the live feed and the Past section (D-27). A past trip renders the same
+// One card, used by both the live feed and the Completed section (D-27). A past trip renders the same
 // way minus the quick-join button, which decorateTrip has already turned off — a finished ride
 // can't be joined, and neither can one that has already left.
 function TripCard({
@@ -106,7 +106,7 @@ export function CarpoolsScreen({ trips, onOpenTrip, onQuickJoin }: Props) {
         (a, b) => new Date(a.departAt).getTime() - new Date(b.departAt).getTime(),
       ),
       // The feed arrives ordered by departure ascending, so reversing puts the most recent finished
-      // trip at the top of the Past section — which is the one someone is looking for.
+      // trip at the top of the Completed section — which is the one someone is looking for.
       past: decorated.filter((t) => t.isPast).reverse(),
     };
   }, [trips, filter]);
@@ -141,12 +141,12 @@ export function CarpoolsScreen({ trips, onOpenTrip, onQuickJoin }: Props) {
       <div className="scroll" style={{ padding: "0 20px 16px" }}>
         {days.length === 0 && past.length === 0 && (
           <p style={{ textAlign: "center", font: "600 12px var(--font-body)", color: "rgba(0,0,0,.4)", marginTop: 40 }}>
-            No trips yet — tap + to offer one.
+            No trips available
           </p>
         )}
         {days.length === 0 && past.length > 0 && (
           <p style={{ textAlign: "center", font: "600 12px var(--font-body)", color: "rgba(0,0,0,.4)", margin: "24px 0 18px" }}>
-            Nothing coming up — tap + to offer a ride.
+            No trips available
           </p>
         )}
         {days.map((day) => (
@@ -176,7 +176,10 @@ export function CarpoolsScreen({ trips, onOpenTrip, onQuickJoin }: Props) {
               }}
             >
               <span className="dayh" style={{ marginBottom: 0 }}>
-                Past · {past.length}
+                {/* "Completed", not "Past" (developer, 2026-09-21): a ride settles the moment it
+                    departs, so someone still in the car would find their own ride filed under
+                    "Past". "Completed" says what happened to it without saying it is over for them. */}
+                Completed · {past.length}
               </span>
               <span style={{ color: "rgba(0,0,0,.3)", fontSize: 12, marginTop: 2 }}>{pastOpen ? "▾" : "▸"}</span>
             </button>

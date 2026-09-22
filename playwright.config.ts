@@ -7,7 +7,12 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests/e2e",
   globalSetup: "./tests/e2e/global-setup.ts",
-  timeout: 90_000, // the core-loop test spans ~8 sequential steps across two real browser contexts
+  // The two-person journeys (core loop, chat + no-show, edit + cancel) run 1-2 minutes each: ~8
+  // sequential steps across two real browser contexts, plus a cold dev-server compile on first
+  // visit. At 90s they sat at 80-90% of the budget and failed at whichever step the clock ran out
+  // on, which read as flakiness. Each step still carries its own ~10s expectation, so a real hang is
+  // caught there, not here.
+  timeout: 180_000,
   fullyParallel: false,
   // Every spec drives the *same* two seeded accounts, so files must not run concurrently either —
   // `fullyParallel: false` only serialises within a file, and Playwright still fans files out across
