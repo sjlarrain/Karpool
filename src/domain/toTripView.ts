@@ -13,9 +13,15 @@ import type { TripView } from "./types";
 export interface TripRiderRowInput {
   profileId: string | null;
   guestName: string | null;
-  displayName: string | null; // profile.display_name, only present when profileId is set
-  initials: string | null; // profile.initials, only present when profileId is set
-  avatarColor: string | null; // profile.avatar_color, only present when profileId is set
+  // The account a guest-list seat is linked to (D-55: an admin links a guest to the member they
+  // turned out to be). When set, the seat is SHOWN as that member — their name, initials and colour
+  // — rather than as the name typed onto the guest list (developer, 2026-09-21: "Use users name
+  // rather than the (G) name"). It stays a guest seat for everything else, including `deriveRole`.
+  linkedProfileId?: string | null;
+  // profile.display_name / initials / avatar_color: the seat's own profile, or the linked one.
+  displayName: string | null;
+  initials: string | null;
+  avatarColor: string | null;
 }
 
 // A joined pickup_place row (D-29). `icon` arrives as a bare string from the generated DB types —
@@ -58,11 +64,12 @@ export function stopView(row: TripStopRowInput | null | undefined): TripStopView
 }
 
 export function riderView(rider: TripRiderRowInput): TripRiderView {
-  if (rider.profileId) {
+  const shownAs = rider.profileId ?? rider.linkedProfileId ?? null;
+  if (shownAs) {
     return {
       name: rider.displayName ?? "Member",
       initials: rider.initials ?? "?",
-      color: rider.avatarColor ?? avatarColorFor(rider.profileId),
+      color: rider.avatarColor ?? avatarColorFor(shownAs),
     };
   }
   const name = rider.guestName ?? "Guest";

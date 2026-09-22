@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toTripView, deriveRole, stopView } from "./toTripView";
+import { toTripView, deriveRole, stopView, riderView } from "./toTripView";
 import type { TripRiderRowInput, TripRowInput } from "./toTripView";
 
 // Fixtures carry an explicit offset and every call names the reader's zone, so these assertions
@@ -192,5 +192,38 @@ describe("stopView (D-29)", () => {
     // No recognisable icon means no sign to render, and a blank marker is worse than no marker.
     expect(stopView({ ...row, icon: "jetski" })).toBeNull();
     expect(stopView({ ...row, icon: null })).toBeNull();
+  });
+});
+
+// Developer, 2026-09-21: "Use users name rather than the (G) name." A guest-list seat that an admin
+// has linked to a member is shown as that member.
+describe("riderView — a guest linked to an account", () => {
+  const unlinked: TripRiderRowInput = {
+    profileId: null,
+    guestName: "Francisca Sweet",
+    displayName: null,
+    initials: null,
+    avatarColor: null,
+  };
+
+  it("shows an unlinked guest under the name on the guest list", () => {
+    expect(riderView(unlinked).name).toBe("Francisca Sweet");
+    expect(riderView(unlinked).initials).toBe("FS");
+  });
+
+  it("shows a linked guest as the member: their name, initials and colour", () => {
+    const linked = riderView({
+      ...unlinked,
+      linkedProfileId: "fran-profile",
+      displayName: "Fran Swett",
+      initials: "FS",
+      avatarColor: "var(--pink)",
+    });
+    expect(linked).toEqual({ name: "Fran Swett", initials: "FS", color: "var(--pink)" });
+  });
+
+  it("does not make the viewer's role 'joined' — the seat is still a guest seat", () => {
+    const linked: TripRiderRowInput = { ...unlinked, linkedProfileId: "fran-profile", displayName: "Fran Swett" };
+    expect(deriveRole("driver-1", [linked], "fran-profile")).toBe("open");
   });
 });

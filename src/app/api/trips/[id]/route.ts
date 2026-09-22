@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { loadLinkedMembers } from "@/lib/trips/linkedGuests";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -84,17 +85,27 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   ]);
 
   const riderProfileById = new Map((riderProfiles ?? []).map((p) => [p.id, p]));
+  // Guest seats linked to a member are shown as that member (developer, 2026-09-21: "Use users
+  // name rather than the (G) name") — same loader as the feed, so both agree on the name.
+  const linked = await loadLinkedMembers(supabase, (riderRows ?? []).map((r) => r.group_guest_id));
+  if (!linked.ok) {
+    return NextResponse.json({ error: "rider_lookup_failed" }, { status: 500 });
+  }
+  const linkedMemberFor = (r: { profile_id: string | null; group_guest_id: string | null }) =>
+    !r.profile_id && r.group_guest_id ? linked.byGuestId.get(r.group_guest_id) : undefined;
   const pickupLabelById = new Map((pickupPlaces ?? []).map((p) => [p.id, p.label]));
   const placeById = new Map((pickupPlaces ?? []).map((p) => [p.id, p]));
 
   const activeRiders: TripRiderRowInput[] = (riderRows ?? []).map((r) => {
     const profile = r.profile_id ? riderProfileById.get(r.profile_id) : undefined;
+    const member = linkedMemberFor(r);
     return {
       profileId: r.profile_id,
       guestName: r.guest_name,
-      displayName: profile?.display_name ?? null,
-      initials: profile?.initials ?? null,
-      avatarColor: profile?.avatar_color ?? null,
+      linkedProfileId: member?.profileId ?? null,
+      displayName: profile?.display_name ?? member?.displayName ?? null,
+      initials: profile?.initials ?? member?.initials ?? null,
+      avatarColor: profile?.avatar_color ?? member?.avatarColor ?? null,
     };
   });
 
@@ -124,11 +135,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const pickups = (riderRows ?? []).map((r) => {
     const profile = r.profile_id ? riderProfileById.get(r.profile_id) : undefined;
+    const member = linkedMemberFor(r);
     return {
       id: r.id,
-      name: r.profile_id ? (profile?.display_name ?? "Member") : (r.guest_name ?? "Guest"),
-      initials: r.profile_id ? (profile?.initials ?? "?") : undefined,
-      color: r.profile_id ? (profile?.avatar_color ?? undefined) : undefined,
+      name: r.profile_id
+        ? (profile?.display_name ?? "Member")
+        : (member?.displayName ?? r.guest_name ?? "Guest"),
+      initials: r.profile_id ? (profile?.initials ?? "?") : (member?.initials ?? undefined),
+      color: r.profile_id ? (profile?.avatar_color ?? undefined) : (member?.avatarColor ?? undefined),
       pickupLabel: r.pickup_place_id ? (pickupLabelById.get(r.pickup_place_id) ?? null) : null,
       stopOrder: r.stop_order,
       isViewer: r.profile_id === user.id,

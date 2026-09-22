@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadLinkedMembers } from "@/lib/trips/linkedGuests";
 import type { Database } from "@/types/database";
 import { PAST_TRIPS_WINDOW_DAYS } from "@/domain/constants";
 import { toTripView } from "@/domain/toTripView";
@@ -55,7 +56,7 @@ export async function loadGroupTrips(
     tripIds.length > 0
       ? supabase
           .from("trip_rider")
-          .select("trip_id, profile_id, guest_name, state")
+          .select("trip_id, profile_id, group_guest_id, guest_name, state")
           .in("trip_id", tripIds)
           .in("state", ["joined", "confirmed"])
       : Promise.resolve({ data: [], error: null }),
@@ -76,6 +77,12 @@ export async function loadGroupTrips(
     return { ok: false, error: "lookup_failed" };
   }
 
+  // Guest seats linked to a member are shown as that member (developer, 2026-09-21).
+  const linked = await loadLinkedMembers(supabase, (riders ?? []).map((r) => r.group_guest_id));
+  if (!linked.ok) {
+    return { ok: false, error: "lookup_failed" };
+  }
+
   const driverById = new Map((drivers ?? []).map((d) => [d.id, d]));
   const riderProfileById = new Map((riderProfiles ?? []).map((p) => [p.id, p]));
 
@@ -85,12 +92,14 @@ export async function loadGroupTrips(
       .filter((r) => r.trip_id === trip.id)
       .map((r) => {
         const profile = r.profile_id ? riderProfileById.get(r.profile_id) : undefined;
+        const member = !r.profile_id && r.group_guest_id ? linked.byGuestId.get(r.group_guest_id) : undefined;
         return {
           profileId: r.profile_id,
           guestName: r.guest_name,
-          displayName: profile?.display_name ?? null,
-          initials: profile?.initials ?? null,
-          avatarColor: profile?.avatar_color ?? null,
+          linkedProfileId: member?.profileId ?? null,
+          displayName: profile?.display_name ?? member?.displayName ?? null,
+          initials: profile?.initials ?? member?.initials ?? null,
+          avatarColor: profile?.avatar_color ?? member?.avatarColor ?? null,
         };
       });
 
