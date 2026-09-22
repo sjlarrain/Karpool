@@ -442,6 +442,52 @@ export function TripDetailOverlay({ tripId, onClose, onChanged, startInChat = fa
           </div>
         </div>
 
+        {/* D-62: everyone in the group can see who is riding with this driver, not only the driver.
+            Read-only — the driver's own list below is where seats are managed. */}
+        {!isDriver && (
+          <>
+            <h3 style={{ fontSize: 14, fontWeight: 800, color: "var(--ink)", margin: "0 0 9px" }}>
+              Riding ({pickups.length})
+            </h3>
+            {pickups.length === 0 ? (
+              <p style={{ font: "600 11.5px var(--font-body)", color: "rgba(0,0,0,.45)", margin: "0 0 16px" }}>
+                Nobody has joined yet.
+              </p>
+            ) : (
+              <div style={{ marginBottom: 16 }}>
+                {pickups.map((p) => (
+                  <div
+                    key={p.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 11,
+                      background: "var(--surface)",
+                      border: "1px solid rgba(0,0,0,.07)",
+                      borderRadius: 15,
+                      padding: "11px 12px",
+                      marginBottom: 8,
+                    }}
+                  >
+                    <span className="av" style={{ background: p.color ?? "var(--teal)" }}>
+                      {p.initials ?? p.name.slice(0, 2).toUpperCase()}
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ font: "700 13px var(--font-body)", color: "var(--ink)" }}>
+                        {p.name}
+                        {p.isViewer ? " · you" : ""}
+                      </div>
+                      {p.pickupLabel && (
+                        <div style={{ font: "600 11px var(--font-body)", color: "rgba(0,0,0,.5)" }}>📍 {p.pickupLabel}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
         {error && <p style={{ color: "var(--danger)", font: "600 12px var(--font-body)", margin: "0 0 12px" }}>{error}</p>}
 
         {isCancelled && (
