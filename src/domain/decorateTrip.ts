@@ -61,6 +61,9 @@ export interface DecoratedTrip extends TripView {
   stopNotices: StopNotice[];
   // D-27/D-53: belongs in the Carpools tab's (collapsed) Past section rather than the live feed.
   isPast: boolean;
+  // Which of the Carpools tab's three sections the card sits in (developer, 2026-09-21: "There is
+  // past, there is completed (today) and available trips").
+  section: FeedSection;
 }
 
 const ROLE_STYLE: Record<
@@ -134,6 +137,23 @@ function joinBlockFor(trip: TripView, seatsLeft: number): JoinBlock | null {
   return null;
 }
 
+export type FeedSection = "available" | "completedToday" | "past";
+
+/**
+ * The three sections of the feed:
+ *   - available      — not finished yet: still ahead, or left minutes ago and not settled yet
+ *   - completedToday — settled today (`correctable` is exactly "closed, and its departure day is not
+ *                      over in the reader's zone"), so someone who is in the car right now finds
+ *                      their ride under "Completed today", never under "Past"
+ *   - past           — every other finished ride: completed on an earlier day, or cancelled. A
+ *                      cancelled ride did not happen, so it is never filed as "completed".
+ */
+export function feedSection(trip: TripView, finished: boolean): FeedSection {
+  if (!finished) return "available";
+  if (trip.status === "closed" && trip.correctable) return "completedToday";
+  return "past";
+}
+
 export function decorateTrip(trip: TripView): DecoratedTrip {
   const finished = terminalBadge(trip);
   const style = finished ? TERMINAL_STYLE : ROLE_STYLE[trip.role];
@@ -175,5 +195,6 @@ export function decorateTrip(trip: TripView): DecoratedTrip {
     // ("all this trips are finished and there aren't hidden in past"). Both are still reachable
     // inside Past, and `correctable` still governs them — it just no longer decides where the card sits.
     isPast: finished !== null,
+    section: feedSection(trip, finished !== null),
   };
 }

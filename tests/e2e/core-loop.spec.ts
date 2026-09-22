@@ -10,7 +10,7 @@ import {
   ageTripsInGroup,
   runCronTick,
   groupIdByName,
-  openPast,
+  openSection,
 } from "./helpers";
 
 // G5 — the core loop, driven through the real UI (not the API directly): sign in, publish a trip,
@@ -54,6 +54,11 @@ test("core loop: publish, join, settle, kudos, leaderboard", async ({ browser, b
     await joinTrip(rider, rider.locator(".card", { hasText: trip.displayTime }).first());
   });
 
+  await test.step("the rider can see who is riding with this driver (D-62)", async () => {
+    await expect(rider.getByRole("heading", { name: "Riding (1)" })).toBeVisible({ timeout: 10_000 });
+    await expect(rider.getByText("· you")).toBeVisible();
+  });
+
   let settledTime = "";
   await test.step("the ride settles itself once its departure passes", async () => {
     // What production does every five minutes, compressed: move the trip into the past, then run
@@ -65,17 +70,17 @@ test("core loop: publish, join, settle, kudos, leaderboard", async ({ browser, b
     // return is already in the past too, so the same tick settles it as well.
     expect(tick.settled).toBeGreaterThanOrEqual(1);
 
-    // A settled ride moves into Past at once (developer, 2026-09-21).
+    // A ride settled today sits under "Completed today" (developer, 2026-09-21).
     await driver.reload();
-    await openPast(driver);
+    await openSection(driver, "Completed today");
     await expect(driver.locator(".card", { hasText: settledTime }).first()).toBeVisible({ timeout: 10_000 });
     await expect(driver.getByText("COMPLETED").first()).toBeVisible();
   });
 
   await test.step("rider gives kudos", async () => {
     await rider.reload();
-    // The finished ride is in Past, and its card is still where the rider thanks their driver.
-    await openPast(rider);
+    // The finished ride is under "Completed today", and its card is where the rider thanks their driver.
+    await openSection(rider, "Completed today");
     await rider.locator(".card", { hasText: settledTime }).first().click();
     await expect(rider.getByText("Rate your ride")).toBeVisible({ timeout: 10_000 });
     // D-18: the kudos toggle starts off, so the submit reads "Skip & close" until the rider opts in.

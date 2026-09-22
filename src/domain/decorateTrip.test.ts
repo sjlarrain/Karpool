@@ -125,11 +125,25 @@ describe("decorateTrip", () => {
     expect(decorateTrip({ ...departed, role: "driving" }).isPast).toBe(false);
   });
 
-  it("moves a settled trip into Past straight away, even while it can still be fixed (2026-09-21)", () => {
+  // Developer, 2026-09-21: "There is past, there is completed (today) and available trips."
+  it("files a ride settled today under Completed today, not Past", () => {
     const today = decorateTrip({ ...base, status: "closed", departed: true, correctable: true });
     expect(today.badge).toBe("COMPLETED");
     expect(today.isPast).toBe(true);
-    expect(decorateTrip({ ...base, status: "closed", departed: true, correctable: false }).isPast).toBe(true);
+    expect(today.section).toBe("completedToday");
+  });
+
+  it("files a ride completed on an earlier day under Past", () => {
+    expect(decorateTrip({ ...base, status: "closed", departed: true, correctable: false }).section).toBe("past");
+  });
+
+  it("files a cancelled ride under Past even on the day — it did not happen, so it never 'completed'", () => {
+    expect(decorateTrip({ ...base, status: "cancelled" }).section).toBe("past");
+  });
+
+  it("keeps a ride that is ahead, or has only just left and not settled, under Available", () => {
+    expect(decorateTrip(base).section).toBe("available");
+    expect(decorateTrip({ ...base, departed: true }).section).toBe("available");
   });
 
   it("badges a closed trip as COMPLETED, outranking the viewer's role", () => {
