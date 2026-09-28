@@ -1,5 +1,23 @@
 # Worklog
 
+## D-63 postpone (2026-09-28, branch `feat/postpone-ride`, NOT merged or deployed)
+
+- **Shipped (on the branch):** a driver can postpone a ride that auto-counted but never left, to later
+  the same day. Points, kudos and no-shows are rolled back through append-only `postpone_void` rows,
+  seats are booked again with a free drop-out, and the reminder is resent. Migration `0028` was **applied
+  to the live DB by the developer** and is harmless to `main`.
+- **Verified:** `pnpm verify` 316/316; full e2e suite 8/8 against the live DB (new
+  `trip-postpone.spec.ts`). A manual run on the throwaway group "Manual Postpone Test"
+  (`adaee861…`) covered the Postpone button and sheet, the after-return and past-time refusals, the
+  postpone itself, and the feed moving the ride back to Available at the new time. It also covered
+  the ledger zeroed, the rider's bell ("Ride postponed"), the reminder resent despite a **mock
+  pre-postpone reminder row**, no double reminder, a free late leave, the re-settle paying once
+  (10), and Ranks showing driven 1.
+- **Next:** the developer decides on merging/deploying D-63; then D-64 ride alerts on its own branch;
+  then a "what's new" announcement covering both.
+- **Blocked on:** nothing. D-65 (paid rides) is parked with open questions in DECISIONS.
+- **Left behind in the live DB:** the throwaway group above and its mock reminder row (test accounts only).
+
 ## Data fix (2026-09-21, manual — "(G)" removed from two guest names)
 
 - **What was wrong:** two guest-roster entries were named "Francisca Sweet (G)" and "Nicolas Carvallo
