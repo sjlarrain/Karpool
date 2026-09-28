@@ -40,13 +40,18 @@ type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 // row, the error was dropped on the floor with only `data` destructured, and the reminder read as
 // "never sent" — re-pushing to every phone on the trip on each of the three ticks the 15-minute
 // window spans. Asking for at most one row is the whole fix.
-async function alreadyNotified(admin: AdminClient, type: "reminder" | "parking", tripId: string): Promise<boolean> {
-  const { data, error } = await admin
-    .from("notification")
-    .select("id")
-    .eq("type", type)
-    .contains("payload", { tripId })
-    .limit(1);
+//
+// D-63: `since` is the trip's last postpone. A postponed ride is owed its reminder (and its parking
+// nudge) again for the new time, so only notifications written after the postpone count as sent.
+async function alreadyNotified(
+  admin: AdminClient,
+  type: "reminder" | "parking",
+  tripId: string,
+  since: string | null,
+): Promise<boolean> {
+  let query = admin.from("notification").select("id").eq("type", type).contains("payload", { tripId });
+  if (since) query = query.gte("created_at", since);
+  const { data, error } = await query.limit(1);
 
   // A failed lookup must not be read as "not sent yet" — that is how a dedupe turns into a loop.
   // Skipping this trip costs one late reminder; guessing costs a notification every five minutes.
@@ -107,7 +112,7 @@ async function handleTick(request: Request) {
   const windowEnd = new Date(now.getTime() + DEPARTURE_REMINDER_LEAD_MINUTES * 60_000).toISOString();
   const { data: dueTrips } = await admin
     .from("trip")
-    .select("id, driver_id, depart_at")
+    .select("id, driver_id, depart_at, postponed_at")
     .eq("status", "scheduled")
     .gte("depart_at", windowStart)
     .lte("depart_at", windowEnd);
@@ -122,7 +127,7 @@ async function handleTick(request: Request) {
       DEPARTURE_REMINDER_GRACE_MINUTES,
     );
     if (!due) return;
-    if (await alreadyNotified(admin, "reminder", trip.id)) return;
+    if (await alreadyNotified(admin, "reminder", trip.id, trip.postponed_at)) return;
 
     const result = await notifyProfiles(await tripAudience(admin, trip.id, trip.driver_id), {
       type: "reminder",
@@ -183,7 +188,7 @@ async function handleTick(request: Request) {
   const parkingTo = new Date(now.getTime() - PARKING_REMINDER_AFTER_MINUTES * 60_000).toISOString();
   const { data: parkedTrips } = await admin
     .from("trip")
-    .select("id, driver_id, depart_at, direction, group:group_id(parking_url_out, parking_url_back)")
+    .select("id, driver_id, depart_at, postponed_at, direction, group:group_id(parking_url_out, parking_url_back)")
     .eq("status", "closed")
     .gte("depart_at", parkingFrom)
     .lte("depart_at", parkingTo);
@@ -197,7 +202,7 @@ async function handleTick(request: Request) {
       : null;
     // Developer, 2026-09-19: only when a link exists — a leg with nothing to pay stays quiet.
     if (!url) return;
-    if (await alreadyNotified(admin, "parking", trip.id)) return;
+    if (await alreadyNotified(admin, "parking", trip.id, trip.postponed_at)) return;
 
     // The link travels WITH the notification (developer, 2026-09-19: "a notification with the
     // parking link every time"): the push opens the payment page on tap, the bell row does the

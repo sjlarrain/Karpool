@@ -188,3 +188,27 @@ export function computeLateLeavePenalty(
   if (!isLateLeave(departAt, now, windowMinutes)) return null;
   return { kind: "late_leave", points: penalty, reason: "Left within the cancellation window" };
 }
+
+export interface PaidLedgerRow {
+  id: string;
+  kind: string;
+  points: number;
+  reversesId: string | null;
+}
+
+/**
+ * D-63. What a driver still holds for one trip: every `drive` and `drive_adjust` row no postpone
+ * has voided. Pass the trip's `drive`, `drive_adjust` and `postpone_void` rows for that driver.
+ *
+ * A postponed ride voids its whole award, so it holds nothing and has no live `drive` row — which
+ * makes the next settle write a fresh `drive` row rather than a correction, and the Ranks tab count
+ * the ride once, when it really happens.
+ */
+export function driveStillPaid(rows: readonly PaidLedgerRow[]): { points: number; hasDriveRow: boolean } {
+  const voided = new Set(rows.map((row) => row.reversesId).filter((id): id is string => !!id));
+  const live = rows.filter((row) => (row.kind === "drive" || row.kind === "drive_adjust") && !voided.has(row.id));
+  return {
+    points: live.reduce((sum, row) => sum + row.points, 0),
+    hasDriveRow: live.some((row) => row.kind === "drive"),
+  };
+}

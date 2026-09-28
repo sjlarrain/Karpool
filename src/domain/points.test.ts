@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeDriveAward,
   computeDriveCorrection,
+  driveStillPaid,
   seatBonus,
   computeKudosAward,
   computeLateLeavePenalty,
@@ -195,5 +196,44 @@ describe("computeLateLeavePenalty", () => {
       points: -5,
       reason: "Left within the cancellation window",
     });
+  });
+});
+
+// D-63: what the driver still holds for a trip once a postpone has voided some of it. The first
+// payment after a postpone has to be a fresh `drive` row again, so a voided drive row must stop
+// counting as "already has one".
+describe("driveStillPaid", () => {
+  it("sums drive and corrections nobody has voided", () => {
+    expect(
+      driveStillPaid([
+        { id: "d1", kind: "drive", points: 13, reversesId: null },
+        { id: "j1", kind: "drive_adjust", points: 5, reversesId: null },
+      ]),
+    ).toEqual({ points: 18, hasDriveRow: true });
+  });
+
+  it("a postponed ride holds nothing and needs a new drive row", () => {
+    expect(
+      driveStillPaid([
+        { id: "d1", kind: "drive", points: 13, reversesId: null },
+        { id: "j1", kind: "drive_adjust", points: 5, reversesId: null },
+        { id: "v1", kind: "postpone_void", points: -13, reversesId: "d1" },
+        { id: "v2", kind: "postpone_void", points: -5, reversesId: "j1" },
+      ]),
+    ).toEqual({ points: 0, hasDriveRow: false });
+  });
+
+  it("counts only the payment made after the postpone", () => {
+    expect(
+      driveStillPaid([
+        { id: "d1", kind: "drive", points: 13, reversesId: null },
+        { id: "v1", kind: "postpone_void", points: -13, reversesId: "d1" },
+        { id: "d2", kind: "drive", points: 16, reversesId: null },
+      ]),
+    ).toEqual({ points: 16, hasDriveRow: true });
+  });
+
+  it("holds nothing on a trip never paid", () => {
+    expect(driveStillPaid([])).toEqual({ points: 0, hasDriveRow: false });
   });
 });

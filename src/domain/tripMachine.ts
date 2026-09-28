@@ -5,13 +5,15 @@ import type { TripStatus } from "./types";
 // D-61 (2026-09-19) removed Start and Close. Nobody taps anything to begin or end a ride any more:
 // the scheduler SETTLES a trip once its departure time has passed (scheduled → closed), and that
 // one step is what pays the driver, counts the riders and materialises a round trip's return leg.
-// The only human transition left is the driver calling a trip off before it leaves.
+// The human transitions left are the driver calling a trip off before it leaves, and (D-63) the
+// driver postponing a ride that settled but did not really go: closed back to scheduled, later the
+// same day. The same-day bound needs a zone, so it lives in checkPostpone (tripPostpone.ts).
 //
 // `started` stays in TripStatus because historical rows carry it, but nothing moves a trip into it
 // any more, and nothing moves a trip out of it either — the D-61 rollout cancelled the ones in
 // flight.
 
-export type TripTransitionEvent = "settle" | "cancel";
+export type TripTransitionEvent = "settle" | "cancel" | "postpone";
 
 export interface TripTransitionActor {
   // Absent for the scheduler, which acts as nobody. An absent id can never match driverId, so it
@@ -56,6 +58,7 @@ export type TripTransitionResult = TripTransitionSuccess | TripTransitionFailure
 const TRANSITIONS: Record<TripTransitionEvent, { from: TripStatus[]; to: TripStatus }> = {
   settle: { from: ["scheduled", "started"], to: "closed" },
   cancel: { from: ["scheduled"], to: "cancelled" },
+  postpone: { from: ["closed"], to: "scheduled" },
 };
 
 export function transition(

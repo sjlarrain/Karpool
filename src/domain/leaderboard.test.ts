@@ -45,6 +45,38 @@ describe("aggregateLedger", () => {
     expect(aggregateLedger(rows, NO_RIDES).get("a")).toEqual({ driven: 1, pooled: 0, kudos: 0, points: 5 });
   });
 
+  // D-63: a postponed ride hands back everything it paid. The voids cancel the points AND the
+  // tiles — a ride that did not happen was not driven and earned no kudos — while the ledger keeps
+  // every row it ever wrote.
+  it("a postponed ride's voids cancel its points and its driven/kudos counts", () => {
+    const rows: LedgerRow[] = [
+      { id: "d1", profileId: "a", kind: "drive", points: 13 },
+      { id: "j1", profileId: "a", kind: "drive_adjust", points: 5 },
+      { id: "k1", profileId: "a", kind: "kudos", points: 4 },
+      { id: "v1", profileId: "a", kind: "postpone_void", points: -13, reversesId: "d1" },
+      { id: "v2", profileId: "a", kind: "postpone_void", points: -5, reversesId: "j1" },
+      { id: "v3", profileId: "a", kind: "postpone_void", points: -4, reversesId: "k1" },
+    ];
+    expect(aggregateLedger(rows, NO_RIDES).get("a")).toEqual({ driven: 0, pooled: 0, kudos: 0, points: 0 });
+  });
+
+  it("a ride postponed and then driven counts once", () => {
+    const rows: LedgerRow[] = [
+      { id: "d1", profileId: "a", kind: "drive", points: 13 },
+      { id: "v1", profileId: "a", kind: "postpone_void", points: -13, reversesId: "d1" },
+      { id: "d2", profileId: "a", kind: "drive", points: 16 },
+    ];
+    expect(aggregateLedger(rows, NO_RIDES).get("a")).toEqual({ driven: 1, pooled: 0, kudos: 0, points: 16 });
+  });
+
+  it("a voided no-show refunds the rider without touching any tile", () => {
+    const rows: LedgerRow[] = [
+      { id: "n1", profileId: "r", kind: "no_show", points: -5 },
+      { id: "v1", profileId: "r", kind: "postpone_void", points: 5, reversesId: "n1" },
+    ];
+    expect(aggregateLedger(rows, NO_RIDES).get("r")).toEqual({ driven: 0, pooled: 0, kudos: 0, points: 0 });
+  });
+
   it("returns an empty map for no rows and no rides", () => {
     expect(aggregateLedger([], NO_RIDES).size).toBe(0);
   });

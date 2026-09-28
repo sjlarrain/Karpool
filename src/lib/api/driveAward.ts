@@ -1,5 +1,11 @@
 import type { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { computeDriveAward, computeDriveCorrection, type CloseWeights, type LedgerAward } from "@/domain/points";
+import {
+  computeDriveAward,
+  computeDriveCorrection,
+  driveStillPaid,
+  type CloseWeights,
+  type LedgerAward,
+} from "@/domain/points";
 
 // The driver's award, and every later correction to it.
 //
@@ -43,18 +49,17 @@ export async function driveAwardPaid(
   tripId: string,
   driverId: string,
 ): Promise<{ points: number; hasDriveRow: boolean } | null> {
+  // D-63: a postponed ride's voids come too, so what they cancelled stops counting as paid.
   const { data, error } = await admin
     .from("points_ledger")
-    .select("kind, points")
+    .select("id, kind, points, reverses_id")
     .eq("trip_id", tripId)
     .eq("profile_id", driverId)
-    .in("kind", ["drive", "drive_adjust"]);
+    .in("kind", ["drive", "drive_adjust", "postpone_void"]);
   if (error) return null;
-  const rows = data ?? [];
-  return {
-    points: rows.reduce((sum, row) => sum + row.points, 0),
-    hasDriveRow: rows.some((row) => row.kind === "drive"),
-  };
+  return driveStillPaid(
+    (data ?? []).map((row) => ({ id: row.id, kind: row.kind, points: row.points, reversesId: row.reverses_id })),
+  );
 }
 
 /**

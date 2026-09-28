@@ -110,3 +110,23 @@ describe("tripMachine.transition — departure is the hinge (D-61)", () => {
     });
   });
 });
+
+// D-63: a ride that auto-settled but did not actually leave goes back to being a ride that is
+// still ahead. Only the driver can say so, and only from `closed` — the same-day bound and the new
+// time are checked by `checkPostpone` (src/domain/tripPostpone.ts), which needs a zone.
+describe("tripMachine.transition — postpone (D-63)", () => {
+  for (const status of TRIP_STATUS) {
+    it(`postpone from ${status} by the driver`, () => {
+      const result = transition(snapshot(status), "postpone", { profileId: DRIVER }, AFTER);
+      expect(result).toEqual(
+        status === "closed" ? { ok: true, nextStatus: "scheduled" } : { ok: false, error: "wrong_status" },
+      );
+    });
+
+    it(`nobody but the driver may postpone from ${status}`, () => {
+      for (const actor of [{ profileId: OTHER }, { isSystem: true }, {}]) {
+        expect(transition(snapshot(status), "postpone", actor, AFTER)).toEqual({ ok: false, error: "not_driver" });
+      }
+    });
+  }
+});

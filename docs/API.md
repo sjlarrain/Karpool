@@ -268,7 +268,9 @@ caller to already be `group_admin` of that membership's group.
 Lifecycle transitions are enforced by the pure state machine in `src/domain/tripMachine.ts`
 (exhaustively tested — see `tripMachine.test.ts`), not re-implemented in each route. **Since D-61
 (2026-09-19) there are only two** — `scheduled→closed` (the SCHEDULER, once `depart_at` has passed)
-and `scheduled→cancelled` (driver only, before departure). Every other transition is rejected, and
+and `scheduled→cancelled` (driver only, before departure) — **plus, since D-63 (2026-09-28),
+`closed→scheduled`**: the driver postponing a ride that settled but did not leave (see
+`POST /api/trips/:id/postpone`). Every other transition is rejected, and
 `started` is a historical status no trip can enter any more.
 
 **D-61, the whole lifecycle in one paragraph.** Nobody starts or ends a ride. `/api/cron/tick`
@@ -374,6 +376,17 @@ Driver only, `scheduled→cancelled`, and **only before departure** (D-61).
   they need the time to find another way in. **Nobody is charged**: the riders keep their seats on a
   dead trip rather than leaving them, and a cancelled trip pays and penalises no one. No ledger/audit
   writes.
+
+### `POST /api/trips/:id/postpone`
+D-63. The ride settled by itself at its departure time, but the driver never left. Moves it to a
+**later time the same day** and rolls the settle back, so it is a ride still ahead again.
+
+- **Auth**: required, caller must be the trip's driver
+- **Request**: `{ departAt: string (ISO 8601) }`
+- **Response**: `{ trip, notifiedRiders: number, notifyError?: string }`
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `404 not_found`, `403 forbidden` (not the driver), `409 not_settled` (the ride has not been counted, so edit it instead), `409 window_closed` (the day it left is over, in the driver's zone), `409 not_later` (the new time is not in the future), `409 other_day` (the new time is tomorrow or later), `409 after_return` (a round trip's outbound must still leave before its return time, which does not move), `500 postpone_failed`. Every 409 carries a `message` for the driver.
+- **Side effects**, in one transaction (`postpone_trip()`, migration `0028`): every `drive`, `drive_adjust`, `kudos`, `no_show` and `no_show_report` row on the trip that is not already cancelled gets a new **`postpone_void`** row carrying its negated points and its id in `reverses_id`. That column is unique, so nothing is cancelled twice, and the ledger stays append-only. `kudos` records for the trip are deleted. Every `confirmed` or `no_show` seat goes back to `joined` with `kudos_declined_at` cleared and `penalty_waived_at` stamped, so leaving is free (D-38). The trip becomes `scheduled` with the new `depart_at`, `closed_at` cleared and `postponed_at` stamped. Capacity grows if needed to fit a returning no-show (max 7). `late_leave` rows are untouched, and a round trip's generated return leg is left as it is. Then an `audit_log` row (`trip_postponed`) is written, and every rider still aboard is notified (`type: "change"`, "Ride postponed"). When the new time arrives the scheduler settles it normally and pays a fresh `drive` row. The 15-minute reminder and the parking nudge are sent again, because the scheduler's dedupe only counts notifications written after `postponed_at`.
+- **Ledger reading**: `aggregateLedger` and `driveStillPaid` treat a row named by a `postpone_void` as no longer a ride driven or a kudos received; its points are cancelled by the void's own figure. Callers therefore select `id` and `reverses_id` along with `kind` and `points`.
 
 ### `POST /api/trips/:id/no-show`
 D-61. The driver reports a rider who booked a seat and didn't ride.

@@ -3,12 +3,26 @@
 // and presents ledger rows that already carry the weight-derived points at the time each was
 // written (D-11: weights are per-group and can change over time without rewriting history).
 
-export type LedgerKind = "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "no_show_report" | "admin_adjust";
+export type LedgerKind =
+  | "drive"
+  | "drive_adjust"
+  | "pool"
+  | "kudos"
+  | "late_leave"
+  | "no_show"
+  | "no_show_report"
+  | "admin_adjust"
+  | "postpone_void";
 
 export interface LedgerRow {
+  // D-63: needed to match a `postpone_void` to the row it cancels. A caller that omits them still
+  // gets the right POINTS (a void carries the negated figure), but a voided drive or kudos would
+  // stay on the tiles, so every route that aggregates selects both.
+  id?: string;
   profileId: string;
   kind: LedgerKind;
   points: number;
+  reversesId?: string | null;
 }
 
 export interface ProfileStats {
@@ -33,7 +47,25 @@ export function aggregateLedger(
   const stats = new Map<string, ProfileStats>();
   const blank = (): ProfileStats => ({ driven: 0, pooled: 0, kudos: 0, points: 0 });
 
+  // D-63: a postponed ride did not happen yet, so the drive and kudos rows it had paid stop
+  // counting on the tiles. Their points are cancelled by the voids' own negative figures below.
+  const voided = new Set(rows.map((row) => row.reversesId).filter((id): id is string => !!id));
+
   for (const row of rows) {
+    if (row.kind === "postpone_void") {
+      const current = stats.get(row.profileId) ?? blank();
+      current.points += row.points;
+      stats.set(row.profileId, current);
+      continue;
+    }
+    if (row.id !== undefined && voided.has(row.id)) {
+      // Its points still add (the void's negative figure cancels them), but it is no longer a ride
+      // driven or a kudos received.
+      const current = stats.get(row.profileId) ?? blank();
+      current.points += row.points;
+      stats.set(row.profileId, current);
+      continue;
+    }
     const current = stats.get(row.profileId) ?? blank();
     current.points += row.points;
     // Only `drive` counts a trip driven. D-56's `drive_adjust` re-prices a ride whose seat count

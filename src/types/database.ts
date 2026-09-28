@@ -459,30 +459,33 @@ export type Database = {
           created_at: string
           group_id: string
           id: string
-          kind: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust" | "no_show_report"
+          kind: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust" | "no_show_report" | "postpone_void"
           points: number
           profile_id: string
           reason: string | null
+          reverses_id: string | null
           trip_id: string | null
         }
         Insert: {
           created_at?: string
           group_id: string
           id?: string
-          kind: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust" | "no_show_report"
+          kind: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust" | "no_show_report" | "postpone_void"
           points: number
           profile_id: string
           reason?: string | null
+          reverses_id?: string | null
           trip_id?: string | null
         }
         Update: {
           created_at?: string
           group_id?: string
           id?: string
-          kind?: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust" | "no_show_report"
+          kind?: "drive" | "drive_adjust" | "pool" | "kudos" | "late_leave" | "no_show" | "admin_adjust" | "no_show_report" | "postpone_void"
           points?: number
           profile_id?: string
           reason?: string | null
+          reverses_id?: string | null
           trip_id?: string | null
         }
         Relationships: [
@@ -632,6 +635,7 @@ export type Database = {
           id: string
           out_stop_id: string | null
           parent_trip_id: string | null
+          postponed_at: string | null
           return_at: string | null
           started_at: string | null
           status: "scheduled" | "started" | "closed" | "cancelled"
@@ -649,6 +653,7 @@ export type Database = {
           id?: string
           out_stop_id?: string | null
           parent_trip_id?: string | null
+          postponed_at?: string | null
           return_at?: string | null
           started_at?: string | null
           status?: "scheduled" | "started" | "closed" | "cancelled"
@@ -666,6 +671,7 @@ export type Database = {
           id?: string
           out_stop_id?: string | null
           parent_trip_id?: string | null
+          postponed_at?: string | null
           return_at?: string | null
           started_at?: string | null
           status?: "scheduled" | "started" | "closed" | "cancelled"
@@ -909,6 +915,7 @@ export type Database = {
           id: string
           out_stop_id: string | null
           parent_trip_id: string | null
+          postponed_at: string | null
           return_at: string | null
           started_at: string | null
           status: "scheduled" | "started" | "closed" | "cancelled"
@@ -921,6 +928,33 @@ export type Database = {
         }
       }
       is_member: { Args: { p_group_id: string }; Returns: boolean }
+      postpone_trip: {
+        Args: { p_new_depart_at: string; p_trip_id: string }
+        Returns: {
+          back_stop_id: string | null
+          cancelled_reason: string | null
+          capacity: number
+          closed_at: string | null
+          created_at: string
+          depart_at: string
+          direction: "out" | "back" | "round"
+          driver_id: string
+          group_id: string
+          id: string
+          out_stop_id: string | null
+          parent_trip_id: string | null
+          postponed_at: string | null
+          return_at: string | null
+          started_at: string | null
+          status: "scheduled" | "started" | "closed" | "cancelled"
+        }
+        SetofOptions: {
+          from: "*"
+          to: "trip"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       join_trip: {
         Args: {
           p_profile_id: string

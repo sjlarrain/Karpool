@@ -12,6 +12,7 @@ import { TripChatOverlay } from "./TripChatOverlay";
 import { ParkingLink } from "./ParkingLink";
 import { ReturnQuestionSheet } from "./ReturnQuestionSheet";
 import { EditTripOverlay } from "./EditTripOverlay";
+import { PostponeSheet } from "./PostponeSheet";
 import { readJsonBody } from "@/lib/http/readJsonBody";
 
 interface Pickup {
@@ -97,6 +98,7 @@ export function TripDetailOverlay({ tripId, onClose, onChanged, startInChat = fa
   // D-38: the driver's two ways out of a plan that stopped working.
   const [editing, setEditing] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [postponing, setPostponing] = useState(false);
   // D-57: the per-trip thread, opened over this screen.
   const [chatting, setChatting] = useState(startInChat);
   const [cancelReason, setCancelReason] = useState("");
@@ -708,12 +710,19 @@ export function TripDetailOverlay({ tripId, onClose, onChanged, startInChat = fa
                     margin: "0 0 12px",
                   }}
                 >
-                  Counted and paid. Until tonight you can still fix who was in the car.
+                  Counted and paid. Until tonight you can still fix who was in the car — or postpone the ride if you
+                  didn&apos;t leave.
                 </div>
                 <ParkingLink url={data.parkingUrl} />
-                <button className="btnG" disabled={busy} onClick={() => setFixing(true)} style={{ width: "100%" }}>
-                  Fix the ride list
-                </button>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button className="btnG" disabled={busy} onClick={() => setFixing(true)} style={{ flex: 1 }}>
+                    Fix the ride list
+                  </button>
+                  {/* D-63: the ride counted itself at its time, but the driver never left. */}
+                  <button className="btnG" disabled={busy} onClick={() => setPostponing(true)} style={{ flex: 1 }}>
+                    Postpone
+                  </button>
+                </div>
               </>
             )}
           </>
@@ -977,6 +986,21 @@ export function TripDetailOverlay({ tripId, onClose, onChanged, startInChat = fa
           onClose={() => setEditing(false)}
           onSaved={(message) => {
             setEditing(false);
+            void load();
+            onChanged(message);
+          }}
+        />
+      )}
+
+      {postponing && (
+        <PostponeSheet
+          tripId={tripId}
+          time={trip.time}
+          returnTime={trip.returnTime}
+          riderCount={otherPickups.length}
+          onClose={() => setPostponing(false)}
+          onDone={(message) => {
+            setPostponing(false);
             void load();
             onChanged(message);
           }}

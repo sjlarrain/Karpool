@@ -56,7 +56,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   // Every ledger row this group has ever written — no date filter at all (D-12 reversed).
   const { data: ledgerRows } = await supabase
     .from("points_ledger")
-    .select("profile_id, kind, points")
+    .select("id, profile_id, kind, points, reverses_id")
     .eq("group_id", id);
 
   // D-49: `pooled` is a count of rides taken, not of ledger rows — riding earns nothing, so there
@@ -94,9 +94,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   );
 
   const rows: LedgerRow[] = (ledgerRows ?? []).map((r) => ({
+    id: r.id,
     profileId: r.profile_id,
     kind: r.kind,
     points: r.points,
+    reversesId: r.reverses_id,
   }));
   const stats = aggregateLedger(rows, pooledRides);
 

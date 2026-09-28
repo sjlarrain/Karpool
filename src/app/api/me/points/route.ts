@@ -47,7 +47,7 @@ export async function GET(request: Request) {
   // row on the Ranks tab cannot disagree.
   const { data: ledgerRows } = await supabase
     .from("points_ledger")
-    .select("profile_id, kind, points")
+    .select("id, profile_id, kind, points, reverses_id")
     .eq("profile_id", user.id)
     .eq("group_id", groupId);
 
@@ -90,7 +90,13 @@ export async function GET(request: Request) {
     ? await supabase.from("trip").select("id").in("id", riddenIds).eq("status", "closed")
     : { data: [] };
 
-  const rows: LedgerRow[] = (ledgerRows ?? []).map((r) => ({ profileId: r.profile_id, kind: r.kind, points: r.points }));
+  const rows: LedgerRow[] = (ledgerRows ?? []).map((r) => ({
+    id: r.id,
+    profileId: r.profile_id,
+    kind: r.kind,
+    points: r.points,
+    reversesId: r.reverses_id,
+  }));
   const pooledRides = new Map<string, number>([[user.id, (closedRidden ?? []).length]]);
   const stats = aggregateLedger(rows, pooledRides).get(user.id) ?? { driven: 0, pooled: 0, kudos: 0, points: 0 };
 
