@@ -378,7 +378,7 @@ export type Database = {
           profile_id: string
           read_at: string | null
           title: string
-          type: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave" | "parking"
+          type: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave" | "parking" | "alert"
         }
         Insert: {
           body?: string | null
@@ -388,7 +388,7 @@ export type Database = {
           profile_id: string
           read_at?: string | null
           title: string
-          type: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave" | "parking"
+          type: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave" | "parking" | "alert"
         }
         Update: {
           body?: string | null
@@ -398,7 +398,7 @@ export type Database = {
           profile_id?: string
           read_at?: string | null
           title?: string
-          type?: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave" | "parking"
+          type?: "start" | "rate" | "change" | "comment" | "tip" | "reminder" | "close_reminder" | "join" | "leave" | "parking" | "alert"
         }
         Relationships: [
           {
@@ -616,6 +616,41 @@ export type Database = {
             foreignKeyName: "rate_limit_hit_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: false
+            referencedRelation: "profile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ride_alert: {
+        Row: {
+          days: Json
+          enabled: boolean
+          profile_id: string
+          slack_minutes: number
+          time_zone: string
+          updated_at: string
+        }
+        Insert: {
+          days: Json
+          enabled?: boolean
+          profile_id: string
+          slack_minutes?: number
+          time_zone: string
+          updated_at?: string
+        }
+        Update: {
+          days?: Json
+          enabled?: boolean
+          profile_id?: string
+          slack_minutes?: number
+          time_zone?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ride_alert_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
             referencedRelation: "profile"
             referencedColumns: ["id"]
           },

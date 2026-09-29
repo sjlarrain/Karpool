@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/api/auth";
 import { SEATS } from "@/domain/constants";
 import { loadGroupTrips } from "@/lib/trips/loadGroupTrips";
 import { viewerTimeZone } from "@/lib/time/viewerTimeZone";
+import { sendRideAlerts } from "@/lib/notify/rideAlerts";
 import { resolveTripStops } from "@/lib/trips/resolveStops";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { isDepartureInPast, isReturnBeforeDeparture } from "@/domain/tripSchedule";
@@ -149,5 +150,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "trip_create_failed", message: error?.message }, { status: 500 });
   }
 
-  return NextResponse.json({ trip }, { status: 201 });
+  // D-64: tell whoever usually travels at this time. A brand-new ride has every seat free.
+  const alerts = await sendRideAlerts(trip);
+
+  return NextResponse.json(
+    { trip, alerted: alerts.alerted, ...(alerts.error && { alertError: alerts.error }) },
+    { status: 201 },
+  );
 }

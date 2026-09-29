@@ -310,9 +310,9 @@ pick a direction along it.
 
 - **Auth**: required, caller must be a member of `groupId`
 - **Request**: `{ groupId: string (uuid), direction: "out" | "back" | "round", departAt: string (ISO date/time), returnAt?: string (ISO date/time, required iff direction is "round"), capacity: number (1-7), outStopId?: string (uuid) | null, backStopId?: string (uuid) | null }`
-- **Response**: `201 { trip }`
+- **Response**: `201 { trip, alerted: number, alertError?: string }`
 - **Errors**: `401 unauthenticated`, `400 invalid_request`, `400 unknown_stop`, `404 not_found` (not a member), `429 rate_limited` (10/hour per caller), `500 trip_create_failed`
-- **Side effects**: inserts a `trip` row (`status: "scheduled"`, `driver_id` = caller). No ledger/audit writes.
+- **Side effects**: inserts a `trip` row (`status: "scheduled"`, `driver_id` = caller). Then **D-64 ride alerts**: every other member of the group with `ride_alert.enabled` whose usual time for that workday falls within their chosen slack gets one notification (`type: "alert"`, "A ride at your usual time", body in their own zone naming only the leg(s) that matched). `alerted` is how many people were told. A failed alert never fails the publish; it comes back as `alertError`. Alerts fire **only on publish**, never on an edit, a postpone or a generated return leg. No ledger/audit writes.
 - **Notes** (D-29): at most one stop per leg. `outStopId` is rejected for `direction: "back"` and
   `backStopId` for `direction: "out"` — a leg the trip doesn't travel can't carry a stop, enforced
   by zod here and by CHECK constraints in migration `0012`. Both ids must name a `pickup_place` in
@@ -534,6 +534,23 @@ answers. Removing the window removed the question.
 - **Notes (D-55)**: a seat counts for its rider **or** for whoever a group admin has linked its guest to, so linking a guest moves their whole history onto that member at once. Unclaimed guests with at least one ride appear as their own entries with `registered: false`, `points: 0` and their ride count as `pooled` — greyed and marked "not registered yet" on Ranks. For those rows `profileId` holds the `group_guest` id, a different table, so it can never collide with a real profile id. A **claimed** guest never appears as its own row: its rides are on the member's line, and listing both would show one ride twice.
 - **Errors**: `401 unauthenticated`, `404 not_found`
 - **Side effects**: none
+
+### `GET /api/me/ride-alerts`
+D-64. The caller's ride-alert settings.
+
+- **Auth**: required
+- **Response**: `{ enabled: boolean, slackMinutes: 15 | 30 | 60, days: { mon|tue|wed|thu|fri: { out: "HH:MM" | null, back: "HH:MM" | null } } }`. Someone who never saved gets alerts **off**, 30 min slack and every time blank.
+- **Errors**: `401 unauthenticated`, `500 lookup_failed`
+- **Side effects**: none.
+
+### `PUT /api/me/ride-alerts`
+D-64. Saves the whole settings block. `out` is when the caller usually goes to work and `back` when they usually head home. Either may be null. Workdays only (developer: "Monday to Friday"). One setting covers every group the caller belongs to.
+
+- **Auth**: required; RLS (migration `0029`) restricts every read and write to the caller's own row
+- **Request**: same shape as the GET response (zod: times `HH:MM` 00:00–23:59, slack one of 15/30/60)
+- **Response**: the saved settings
+- **Errors**: `401 unauthenticated`, `400 invalid_request`, `400 no_times` (turning alerts on with no time at all), `500 save_failed`
+- **Side effects**: upserts `ride_alert` and stamps `time_zone` with the caller's current zone, so "7:30" means 7:30 where they are. No ledger/audit writes.
 
 ### `GET /api/me/points?groupId=<uuid>`
 The caller's own all-time totals **for one group** (developer, 2026-09-01: "My tab must be explicit

@@ -10,6 +10,7 @@ import { CreateGroupSheet } from "./GroupScreen";
 import { FeedbackSheet } from "./FeedbackSheet";
 import { InstallCard } from "./InstallCard";
 import { PushSubscribe } from "./PushSubscribe";
+import { RideAlertsOverlay } from "./RideAlertsOverlay";
 
 type PickupPlace = Database["public"]["Tables"]["pickup_place"]["Row"];
 
@@ -47,7 +48,7 @@ export function YouScreen({
   const [stats, setStats] = useState<Stats | null>(null);
   const [pickup, setPickup] = useState<string | null>(pickupPlaceId);
   const [savingPickup, setSavingPickup] = useState(false);
-  const [sheet, setSheet] = useState<"create" | "feedback" | null>(null);
+  const [sheet, setSheet] = useState<"create" | "feedback" | "alerts" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   // Scoped to the group this tab is showing — the totals sit directly under its name and member
@@ -220,6 +221,34 @@ export function YouScreen({
       )}
 
       <InstallCard />
+
+      {/* D-64: opt-in alerts for rides at the times this person usually travels. */}
+      <button
+        onClick={() => setSheet("alerts")}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          background: "var(--surface)",
+          border: "1px solid var(--hairline)",
+          borderRadius: 16,
+          padding: "13px 14px",
+          marginBottom: 10,
+          cursor: "pointer",
+          textAlign: "left",
+        }}
+      >
+        <span style={{ fontSize: 18 }}>🔔</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ font: "800 14px var(--font-display)", color: "var(--ink)" }}>Ride alerts</div>
+          <div style={{ font: "600 11px var(--font-body)", color: "rgba(0,0,0,.45)" }}>
+            Get told when a ride is published at your usual times
+          </div>
+        </div>
+        <span style={{ color: "rgba(0,0,0,.3)", fontSize: 15 }}>→</span>
+      </button>
+
       <PushSubscribe />
 
       {isPlatformAdmin && (
@@ -267,6 +296,15 @@ export function YouScreen({
       </button>
 
       {sheet === "create" && <CreateGroupSheet onClose={() => setSheet(null)} />}
+      {sheet === "alerts" && (
+        <RideAlertsOverlay
+          onClose={() => setSheet(null)}
+          onSaved={(message) => {
+            setSheet(null);
+            flash(message);
+          }}
+        />
+      )}
       {sheet === "feedback" && (
         <FeedbackSheet
           groupId={groupId}

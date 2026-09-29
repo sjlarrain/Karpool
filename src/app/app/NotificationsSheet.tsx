@@ -38,6 +38,8 @@ const ICON: Record<NotificationItem["type"], string> = {
   parking: "🅿️",
   join: "🙋",
   leave: "👋",
+  // D-64: a ride was published at one of your usual times.
+  alert: "🔔",
 };
 
 const CARD_BG: Record<NotificationItem["type"], string> = {
@@ -51,6 +53,7 @@ const CARD_BG: Record<NotificationItem["type"], string> = {
   parking: "var(--amber-soft)",
   join: "var(--green-soft)",
   leave: "var(--amber-soft)",
+  alert: "var(--green-soft)",
 };
 
 const ICON_BG: Record<NotificationItem["type"], string> = {
@@ -64,6 +67,7 @@ const ICON_BG: Record<NotificationItem["type"], string> = {
   parking: "var(--notif-change-icon)",
   join: "var(--green-soft)",
   leave: "var(--notif-change-icon)",
+  alert: "var(--green-soft)",
 };
 
 const CTA: Partial<Record<NotificationItem["type"], string>> = {
@@ -78,6 +82,8 @@ const CTA: Partial<Record<NotificationItem["type"], string>> = {
   // D-57: a chat message is only useful if you can get to the thread it was said in.
   comment: "Open chat",
   join: "View trip",
+  // D-64: the whole point of the alert is to go and grab the seat.
+  alert: "View trip",
   leave: "View trip",
 };
 
