@@ -16,34 +16,19 @@ import { ANNOUNCEMENT_KEY } from "@/domain/announcement";
 
 const LINES: { icon: string; title: string; body: string }[] = [
   {
-    icon: "🚗",
-    title: "No more Start or End",
-    body: "A ride counts itself at its departure time. Your points land then — nothing to tap.",
+    icon: "🔔",
+    title: "Ride alerts",
+    body: "Tell us the times you usually travel and we'll notify you when someone publishes a ride with free seats around then. Turn it on under You → Ride alerts. It's off until you do.",
   },
   {
-    icon: "⏱️",
-    title: "A reminder 15 minutes before",
-    body: "Driver and riders get a nudge before the car leaves, and again before the ride home.",
+    icon: "⏰",
+    title: "Drivers: couldn't leave? Postpone",
+    body: "If a ride counted itself but you never left, open it and tap Postpone to move it to later today. Your riders keep their seats and are told the new time, and it counts when you actually go.",
   },
   {
-    icon: "✍️",
-    title: "Drivers: fix the list until tonight",
-    body: "Until the end of the day you can fix who was in the car: remove someone who didn't show, or add someone who rode without booking.",
-  },
-  {
-    icon: "🅿️",
-    title: "Drivers: the parking link comes to you",
-    body: "30 minutes after every ride you drive, a notification with your group's parking link — tap it to pay.",
-  },
-  {
-    icon: "💚",
-    title: "Kudos sits on the ride",
-    body: "Once a ride has left, its card is where you thank your driver.",
-  },
-  {
-    icon: "💬",
-    title: "Every ride has a chat",
-    body: "The driver and everyone with a seat can talk on the trip itself.",
+    icon: "🙋",
+    title: "Riders: a postponed ride is free to leave",
+    body: "If the new time doesn't work for you, you can drop out with no points lost.",
   },
 ];
 
@@ -75,7 +60,7 @@ export function WhatsNewSheet({ onClose }: { onClose: () => void }) {
           What&apos;s new
         </h3>
         <p style={{ font: "600 12.5px/1.5 var(--font-body)", color: "rgba(0,0,0,.5)", margin: "0 0 16px" }}>
-          Rides now run themselves. Here&apos;s what changed.
+          Two new things in Karpool.
         </p>
 
         {LINES.map((line) => (

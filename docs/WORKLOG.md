@@ -1,5 +1,27 @@
 # Worklog
 
+## D-64 ride alerts + "what's new" (2026-09-30, branch `feat/ride-alerts`, NOT merged or deployed)
+
+- **Shipped (on the branch):** opt-in Ride alerts (You tab → Ride alerts: Off/On, a to-work and a
+  back-home time per weekday Mon–Fri, ±15/30/60 min flexibility, one setting for all groups). A ride
+  published in any of the person's groups with a leg inside their window sends one `alert`
+  notification (never to its driver). New "what's new" popup (key `2026-09-postpone-and-alerts`,
+  shown twice) covering both ride alerts and postpone. Migration `0029` (`ride_alert` table + the
+  `alert` notification type) was **applied to the live DB by the developer** and is harmless to `main`.
+- **Verified:** `pnpm verify` 331/331; full e2e suite 9/9 against the live DB (new
+  `ride-alerts.spec.ts`). By hand, on the throwaway group "Manual Alerts Test" (`2e79cbd2…`): the
+  screen and its example line, the "Add at least one usual time" refusal, saving (stored on, 30 min,
+  Wed 13:50, `America/Los_Angeles`), a ride 25 min from the usual time alerted the rider only and a
+  ride 35 min away alerted nobody, the alert in the bell, and the popup shown twice then gone.
+- **Test-suite fix made on the way:** `publishTrip` now waits for the server's answer (a second
+  account reloading before the ride was saved made `trip-edit-cancel` time out), and the alert spec
+  compares against the time the ride was really published for.
+- **Next:** the developer decides on merging/deploying; then D-65 (paid rides), whose four open
+  questions are in DECISIONS.
+- **Blocked on:** nothing.
+- **Left behind in the live DB:** the throwaway group above and its two rides (test accounts only).
+  The shared test rider's alert settings were reset to off.
+
 ## D-63 postpone (2026-09-28, branch `feat/postpone-ride`, NOT merged or deployed)
 
 - **Shipped (on the branch):** a driver can postpone a ride that auto-counted but never left, to later

@@ -11,7 +11,8 @@
 // last key a person closed, and `profile.announcement_seen_count` how many times they closed THAT
 // key. A new key always starts back at zero views — nobody carries a used-up count into someone
 // else's announcement.
-export const ANNOUNCEMENT_KEY = "2026-09-auto-lifecycle";
+// 2026-09-29: postpone (D-63) and ride alerts (D-64). The previous key was "2026-09-auto-lifecycle".
+export const ANNOUNCEMENT_KEY = "2026-09-postpone-and-alerts";
 
 // Developer, 2026-09-19: "it needs to appear twice." Once wasn't enough for a change this size to
 // register with someone skimming past it.
