@@ -40,8 +40,9 @@ test("ride alerts: an opted-in rider is told about a ride at their usual time", 
   });
 
   const since = new Date().toISOString();
+  let published = usual;
   await test.step("driver publishes a ride at that time", async () => {
-    await publishTrip(driver, 60);
+    published = await publishTrip(driver, 60);
     await expect(driver.getByText("YOU'RE DRIVING")).toBeVisible({ timeout: 10_000 });
   });
 
@@ -56,7 +57,9 @@ test("ride alerts: an opted-in rider is told about a ride at their usual time", 
       .gte("created_at", since);
     expect(alerts).toHaveLength(1);
     expect(alerts![0]!.title).toBe("A ride at your usual time");
-    expect(alerts![0]!.body).toContain(usual.displayTime);
+    // The time the ride was really published for — a minute can pass between setting up the rider
+    // and publishing, so the time computed up front is only the rider's usual time, within slack.
+    expect(alerts![0]!.body).toContain(published.displayTime);
     expect(alerts![0]!.body).toContain("3 seats free");
 
     const { data: driverRow } = await admin.from("trip").select("driver_id").eq("id", trip!.id).single();

@@ -175,7 +175,18 @@ export async function publishTrip(
   await page.locator("input[type=date]").first().fill(date);
   await page.locator("input[type=time]").first().fill(time);
   await page.locator("input[type=time]").nth(1).fill(returnTime);
+  // Wait for the server to answer, not just for the click to land. Returning on the click let a spec
+  // move straight on (a second account reloading its feed) before the ride was saved, so the ride was
+  // missing and the spec then waited out its whole timeout for a card that had simply not been
+  // written yet. Waiting also turns a refusal (429 rate limit, 400, 500) into a failure that says so.
+  const answered = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === "/api/trips" && r.request().method() === "POST",
+  );
   await page.locator("button.btnP", { hasText: "Publish to" }).click();
+  const response = await answered;
+  if (response.status() !== 201) {
+    throw new Error(`publishing the trip was refused: ${response.status()} ${await response.text()}`);
+  }
 
   return { date, time, displayTime };
 }
