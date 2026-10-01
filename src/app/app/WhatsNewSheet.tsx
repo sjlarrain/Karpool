@@ -17,8 +17,8 @@ import { ANNOUNCEMENT_KEY } from "@/domain/announcement";
 const LINES: { icon: string; title: string; body: string }[] = [
   {
     icon: "🔔",
-    title: "Ride alerts",
-    body: "Tell us the times you usually travel and we'll notify you when someone publishes a ride with free seats around then. Turn it on under You → Ride alerts. It's off until you do.",
+    title: "Get told when a new ride is published",
+    body: "This is off until you turn it on. Go to You → Ride alerts, switch it On and add the times you usually travel. Then you'll be notified whenever someone publishes a ride with free seats around those times.",
   },
   {
     icon: "⏰",
