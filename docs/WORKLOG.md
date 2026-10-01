@@ -13,6 +13,14 @@
   screen and its example line, the "Add at least one usual time" refusal, saving (stored on, 30 min,
   Wed 13:50, `America/Los_Angeles`), a ride 25 min from the usual time alerted the rider only and a
   ride 35 min away alerted nobody, the alert in the bell, and the popup shown twice then gone.
+- **Added the same day (developer's idea):** a "seat opened" alert. When a FULL ride at someone's
+  usual time gets a seat back (a rider leaves, the driver removes a passenger or frees a guest's
+  seat, or adds seats in Edit), opted-in members whose usual time fits are told: "A seat opened at
+  your usual time". Quiet for an hour per person per ride; never to the person who gave the seat up.
+  The what's-new text now says alerts must be turned on and that this exists. Verified by the
+  extended `ride-alerts.spec.ts` (full ride + driver adds a seat → one alert) and by hand against the
+  real route: first seat alerted 1, the same again within the hour 0, a ride that was not full 0.
+  Not tried by hand: the leave / remove-passenger / free-guest paths (they share the same helper).
 - **Test-suite fix made on the way:** `publishTrip` now waits for the server's answer (a second
   account reloading before the ride was saved made `trip-edit-cancel` time out), and the alert spec
   compares against the time the ride was really published for.

@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/api/auth";
 import { computeLateLeavePenalty } from "@/domain/points";
 import { notifyProfiles } from "@/lib/notify/tripNotify";
 import { seatChangeNotice } from "@/domain/seatNotice";
+import { seatSnapshot, sendSeatOpenedAlerts } from "@/lib/notify/rideAlerts";
 
 // POST /api/trips/:id/leave — drop a seat you're holding. Marks the seat left and, if inside the
 // group's cancellation window (D-10/LATE_LEAVE, per-group configurable), writes a late_leave
@@ -75,6 +76,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       ? computeLateLeavePenalty(new Date(trip.depart_at), new Date(), group.late_window_minutes, group.late_penalty)
       : null;
 
+  // D-64: was the car full BEFORE this seat is given back? Only then does it count as a seat opening.
+  const before = await seatSnapshot(id);
+
   const admin = createSupabaseAdminClient();
   const { data: updated, error } = await admin
     .from("trip_rider")
@@ -105,7 +109,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const notice = seatChangeNotice("leave", rider?.display_name ?? "");
   await notifyProfiles([trip.driver_id], { ...notice, tripId: id });
 
+  // D-64: tell whoever usually travels at this time that a full ride has a seat again — not the
+  // person who just gave it up.
+  const seatAlerts = await sendSeatOpenedAlerts(id, { wasFull: before?.full ?? false, excludeProfileIds: [user.id] });
+
   return NextResponse.json({
+    seatAlerted: seatAlerts.alerted,
     tripRider: updated,
     latePenalty: penalty?.points ?? null,
     // Lets the client say "no points lost" for the right reason rather than guessing from a null.

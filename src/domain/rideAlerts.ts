@@ -101,6 +101,8 @@ export function rideAlertMessage(input: {
   timeZone: string;
   legs: RideAlertLeg[];
   trip: { direction: "out" | "back" | "round"; departAt: string; returnAt: string | null };
+  // "published" (the default): a new ride at their time. "seat": a full ride at their time got a seat back.
+  kind?: "published" | "seat";
 }): { title: string; body: string } {
   const { trip, legs, timeZone } = input;
   const at = (iso: string) => {
@@ -113,16 +115,45 @@ export function rideAlertMessage(input: {
   const toWork = `${input.originLabel} → ${input.destLabel}`;
   const toHome = `${input.destLabel} → ${input.originLabel}`;
 
-  let what: string;
+  // The route and the moment are kept apart so each wording can put them where it reads naturally.
+  let route: string;
+  let when: string;
   if (legs.includes("out") && legs.includes("back") && backAt) {
     const o = at(outAt);
-    what = `${toWork} on ${o.day} at ${o.time} and back at ${at(backAt).time}`;
+    route = toWork;
+    when = `${o.day} at ${o.time} and back at ${at(backAt).time}`;
   } else if (legs.includes("back") && backAt) {
     const b = at(backAt);
-    what = `${toHome} on ${b.day} at ${b.time}`;
+    route = toHome;
+    when = `${b.day} at ${b.time}`;
   } else {
     const o = at(outAt);
-    what = `${toWork} on ${o.day} at ${o.time}`;
+    route = toWork;
+    when = `${o.day} at ${o.time}`;
   }
-  return { title: "A ride at your usual time", body: `${input.driverName} is driving ${what} — ${seats}.` };
+  if (input.kind === "seat") {
+    return {
+      title: "A seat opened at your usual time",
+      body: `A seat just opened on ${input.driverName}'s ${route} ride on ${when} — ${seats}.`,
+    };
+  }
+  return { title: "A ride at your usual time", body: `${input.driverName} is driving ${route} on ${when} — ${seats}.` };
+}
+
+/**
+ * D-64 (developer, 2026-09-30: "the idea that a new seat is available works for them"). A ride that
+ * was FULL and has just got a seat back is worth telling the people whose usual time it fits. A ride
+ * that already had free seats is not — those people heard when it was published, and re-telling them
+ * every time someone shuffled would train them to ignore the alert.
+ */
+export function shouldAlertSeatOpened(input: {
+  status: string;
+  departAt: string | Date;
+  now: Date;
+  wasFull: boolean;
+  seatsFree: number;
+}): boolean {
+  if (input.status !== "scheduled") return false;
+  if (new Date(input.departAt).getTime() <= input.now.getTime()) return false;
+  return input.wasFull && input.seatsFree >= 1;
 }

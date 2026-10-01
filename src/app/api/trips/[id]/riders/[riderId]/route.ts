@@ -6,6 +6,7 @@ import { notifyProfiles } from "@/lib/notify/tripNotify";
 import { writeAuditLog } from "@/lib/audit";
 import { syncDriveAward } from "@/lib/api/driveAward";
 import { rosterWindow } from "@/lib/api/rosterWindow";
+import { seatSnapshot, sendSeatOpenedAlerts } from "@/lib/notify/rideAlerts";
 
 // DELETE /api/trips/:id/riders/:riderId — D-24: the driver takes back a seat they booked for
 // someone. Deliberately limited to seats the driver added (added_by_profile_id is set): a rider who
@@ -56,6 +57,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     );
   }
 
+  // D-64: was the car full BEFORE this seat is taken back? Only then does it count as a seat opening.
+  const before = await seatSnapshot(id);
+
   const admin = createSupabaseAdminClient();
   const { data: updated, error } = await admin
     .from("trip_rider")
@@ -90,5 +94,17 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     request,
   });
 
-  return NextResponse.json({ tripRider: updated, pointsAdjusted: award.written?.points ?? 0, awardError: award.error ?? null });
+  // D-64: a seat is free again. Not offered to the person the driver just took it from. A no-op on a
+  // settled trip, which is no longer on offer.
+  const seatAlerts = await sendSeatOpenedAlerts(id, {
+    wasFull: before?.full ?? false,
+    excludeProfileIds: seat.profile_id ? [seat.profile_id] : [],
+  });
+
+  return NextResponse.json({
+    tripRider: updated,
+    pointsAdjusted: award.written?.points ?? 0,
+    awardError: award.error ?? null,
+    seatAlerted: seatAlerts.alerted,
+  });
 }

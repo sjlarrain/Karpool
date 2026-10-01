@@ -16,6 +16,7 @@ import { diffTripEdit } from "@/domain/tripEdit";
 import { isDepartureInPast, isReturnBeforeDeparture } from "@/domain/tripSchedule";
 import { parkingUrlForLeg } from "@/domain/parking";
 import { loadGuestRoster } from "@/lib/groups/guestRoster";
+import { sendSeatOpenedAlerts } from "@/lib/notify/rideAlerts";
 
 // GET /api/trips/:id — trip detail overlay: decorated summary + the driver's pickup list in route
 // order. RLS (is_member) makes this 404 rather than 403 for a non-member (plan's "404 never leaks
@@ -482,5 +483,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     notifiedRiders = riderProfileIds.length;
   }
 
-  return NextResponse.json({ trip: updated, changed: diff.changed, notifiedRiders });
+  // D-64: a full ride that just gained a seat is a seat opening, like a rider leaving. Read after the
+  // update, so the people alerted see the new time and the new seat count together.
+  const seatAlerts =
+    parsed.data.capacity !== undefined && parsed.data.capacity > trip.capacity
+      ? await sendSeatOpenedAlerts(id, { wasFull: trip.capacity <= seatedCount })
+      : null;
+
+  return NextResponse.json({
+    trip: updated,
+    changed: diff.changed,
+    notifiedRiders,
+    seatAlerted: seatAlerts?.alerted ?? 0,
+  });
 }

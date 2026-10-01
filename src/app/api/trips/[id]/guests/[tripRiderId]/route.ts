@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/api/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { syncDriveAward } from "@/lib/api/driveAward";
 import { rosterWindow } from "@/lib/api/rosterWindow";
+import { seatSnapshot, sendSeatOpenedAlerts } from "@/lib/notify/rideAlerts";
 
 // DELETE /api/trips/:id/guests/:tripRiderId — the driver frees a seat they gave a roster guest.
 //
@@ -51,6 +52,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
+  // D-64: was the car full BEFORE this seat is freed? Only then does it count as a seat opening.
+  const before = await seatSnapshot(id);
+
   const admin = createSupabaseAdminClient();
   const { error } = await admin
     .from("trip_rider")
@@ -72,5 +76,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     request,
   });
 
-  return NextResponse.json({ ok: true, pointsAdjusted: award.written?.points ?? 0, awardError: award.error ?? null });
+  // D-64: a seat is free again. A no-op on a settled trip, which is no longer on offer.
+  const seatAlerts = await sendSeatOpenedAlerts(id, { wasFull: before?.full ?? false });
+
+  return NextResponse.json({
+    ok: true,
+    pointsAdjusted: award.written?.points ?? 0,
+    awardError: award.error ?? null,
+    seatAlerted: seatAlerts.alerted,
+  });
 }

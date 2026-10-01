@@ -18,7 +18,7 @@ const LINES: { icon: string; title: string; body: string }[] = [
   {
     icon: "🔔",
     title: "Get told when a new ride is published",
-    body: "This is off until you turn it on. Go to You → Ride alerts, switch it On and add the times you usually travel. Then you'll be notified whenever someone publishes a ride with free seats around those times.",
+    body: "This is off until you turn it on. Go to You → Ride alerts, switch it On and add the times you usually travel. Then you'll be notified when someone publishes a ride with free seats around those times, and when a full ride gets a seat back.",
   },
   {
     icon: "⏰",

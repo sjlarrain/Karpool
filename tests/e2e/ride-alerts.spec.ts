@@ -72,6 +72,44 @@ test("ride alerts: an opted-in rider is told about a ride at their usual time", 
     await expect(rider.getByText("A ride at your usual time").first()).toBeVisible({ timeout: 10_000 });
   });
 
+  await test.step("a full ride that gets a seat back alerts the rider again", async () => {
+    const groupId = await groupIdByName(groupName);
+    const { data: trip } = await admin.from("trip").select("id, driver_id").eq("group_id", groupId).is("parent_trip_id", null).single();
+    // Make the car full: one seat, held by a name-only guest the driver added.
+    await admin.from("trip").update({ capacity: 1 }).eq("id", trip!.id);
+    const seated = await admin.from("trip_rider").insert({
+      trip_id: trip!.id,
+      guest_name: "E2E Guest",
+      state: "joined",
+      added_by_profile_id: trip!.driver_id,
+      wants_return: false,
+    });
+    expect(seated.error).toBeNull();
+
+    // The driver adds a seat through the real edit screen.
+    await driver.reload();
+    await driver.locator(".card", { hasText: published.displayTime }).first().click();
+    await driver.getByText("Edit trip").click();
+    await driver.getByRole("button", { name: "One seat more" }).click();
+    const saved = driver.waitForResponse(
+      (r) => /\/api\/trips\/[^/]+$/.test(new URL(r.url()).pathname) && r.request().method() === "PATCH",
+    );
+    await driver.getByText("Save changes").click();
+    const body = await (await saved).json();
+    expect(body.changed).toContain("capacity");
+    expect(body.seatAlerted).toBe(1);
+
+    const { data: alerts } = await admin
+      .from("notification")
+      .select("title, body")
+      .eq("type", "alert")
+      .eq("title", "A seat opened at your usual time")
+      .contains("payload", { tripId: trip!.id });
+    expect(alerts).toHaveLength(1);
+    expect(alerts![0]!.body).toContain(published.displayTime);
+    expect(alerts![0]!.body).toContain("1 seat free");
+  });
+
   await test.step("rider turns alerts back off (the seeded account is shared by every spec)", async () => {
     await rider.keyboard.press("Escape").catch(() => undefined);
     await rider.reload();

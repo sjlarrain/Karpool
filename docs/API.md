@@ -252,6 +252,7 @@ The driver frees a seat they gave a roster guest.
 - **Notes**: separate from `DELETE /riders/:riderId` because that route notifies the person whose seat was taken back. Marks `left` rather than deleting, so a guest's history stays what they actually rode — a confirmed seat on a closed trip — and never a seat booked and undone.
 
 ## Memberships
+- **Seat alerts (D-64)**: The driver freeing a guest's seat counts as a seat opening. If the ride was FULL beforehand and a seat is free afterwards (and it is still `scheduled` and has not departed), every other opted-in member of the group whose usual time fits is notified (`type: "alert"`, "A seat opened at your usual time"). Not the person who gave the seat up, the driver, or anyone still aboard; and nobody twice for the same ride within an hour. The response carries `seatAlerted` (how many were told). A failed alert never fails the request.
 
 ### `PATCH /api/memberships/:id`
 Update a membership. A member can set their own `pickupPlaceId`; changing `groupRole` requires the
@@ -362,6 +363,7 @@ changes once the driver is in the car. Closed and cancelled trips are history an
   not strings, so the client's `…Z` and Postgres's `…+00:00` spelling of the same moment do not read
   as a change. The seat floor is the number of **active riders**, not the number of confirmed ones:
   there is no rule for which rider would lose their seat, and this route does not invent one.
+- **Seat alerts (D-64)**: Adding seats to a full ride counts as a seat opening. If the ride was FULL beforehand and a seat is free afterwards (and it is still `scheduled` and has not departed), every other opted-in member of the group whose usual time fits is notified (`type: "alert"`, "A seat opened at your usual time"). Not the person who gave the seat up, the driver, or anyone still aboard; and nobody twice for the same ride within an hour. The response carries `seatAlerted` (how many were told). A failed alert never fails the request.
 
 ### `POST /api/trips/:id/cancel`
 Driver only, `scheduled→cancelled`, and **only before departure** (D-61).
@@ -417,6 +419,7 @@ Drop a seat you're holding.
 - **Response**: `{ tripRider, latePenalty: number | null, penaltyWaived: boolean }`
 - **Errors**: `401 unauthenticated`, `404 not_found` (trip missing or caller isn't riding it), `409 wrong_status` (trip already settled/cancelled), `409 departed` (D-61 — see below), `500 seat_lookup_failed`, `500 leave_failed`
 - **Side effects**: updates the `trip_rider` row (`state: "left"`, `left_at`). A failed seat lookup is `500 seat_lookup_failed`, never `404` — telling a rider who holds a seat that they don't would leave them on a trip they believe they left. If the leave falls inside the group's configured cancellation window (`group.late_window_minutes`, default 60 — from `windowMinutes` before departure through any time after), inserts a `late_leave` `points_ledger` entry (`group.late_penalty`, default -5) for the leaving rider. **Exception (D-24):** a seat the driver added (`trip_rider.added_by_profile_id` set) is never penalised — the rider never booked it. **Exception (D-38):** a seat whose trip changed under the rider (`trip_rider.penalty_waived_at` set by `PATCH /api/trips/:id`) is never penalised either, at any distance from departure — the window exists to stop people dropping out at the last minute on a plan that never moved, and the plan moved. The response's `penaltyWaived` says which rule applied. **D-61: a seat cannot be given back once the trip has departed** — every booked seat counts as ridden then, so leaving afterwards would be a no-show by another name, and a cheaper one. The driver reports it instead. **Notifies the driver** (`type: "leave"`) + push — a freed seat is one the driver can offer to someone else (D-52) — fired last, after the seat and any penalty are written.
+- **Seat alerts (D-64)**: A rider giving a seat back counts as a seat opening. If the ride was FULL beforehand and a seat is free afterwards (and it is still `scheduled` and has not departed), every other opted-in member of the group whose usual time fits is notified (`type: "alert"`, "A seat opened at your usual time"). Not the person who gave the seat up, the driver, or anyone still aboard; and nobody twice for the same ride within an hour. The response carries `seatAlerted` (how many were told). A failed alert never fails the request.
 
 ### `POST /api/trips/:id/riders`
 Driver seats a group member who asked for the ride in person (D-24). Calls `add_trip_rider()`
@@ -464,6 +467,7 @@ the route, because a policy does not express it cheaply.
 
 **A non-participant gets `404`, not `403`** — on both verbs. Telling someone they may not read a
 thread discloses that there is a thread worth reading.
+- **Seat alerts (D-64)**: The driver taking a seat back counts as a seat opening. If the ride was FULL beforehand and a seat is free afterwards (and it is still `scheduled` and has not departed), every other opted-in member of the group whose usual time fits is notified (`type: "alert"`, "A seat opened at your usual time"). Not the person who gave the seat up, the driver, or anyone still aboard; and nobody twice for the same ride within an hour. The response carries `seatAlerted` (how many were told). A failed alert never fails the request.
 
 ### `GET /api/trips/:id/messages`
 The thread, oldest first.

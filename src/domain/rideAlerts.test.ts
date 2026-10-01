@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchRideAlert, rideAlertMessage, type RideAlertPrefs } from "./rideAlerts";
+import { matchRideAlert, rideAlertMessage, shouldAlertSeatOpened, type RideAlertPrefs } from "./rideAlerts";
 
 const LA = "America/Los_Angeles";
 
@@ -119,5 +119,49 @@ describe("rideAlertMessage (D-64)", () => {
       rideAlertMessage({ ...base, seatsFree: 1, legs: ["out"], trip: { direction: "out", departAt: MON_0730, returnAt: null } })
         .body,
     ).toBe("Ana is driving Home → Office on Mon at 7:30 — 1 seat free.");
+  });
+});
+
+describe("shouldAlertSeatOpened (D-64)", () => {
+  const now = new Date("2026-10-05T14:00:00.000Z");
+  const open = { status: "scheduled", departAt: "2026-10-05T14:30:00.000Z", now, wasFull: true, seatsFree: 1 };
+
+  it("alerts when a full ride, still ahead, gets a seat back", () => {
+    expect(shouldAlertSeatOpened(open)).toBe(true);
+  });
+
+  it("stays quiet when the ride already had free seats — those people were told when it was published", () => {
+    expect(shouldAlertSeatOpened({ ...open, wasFull: false })).toBe(false);
+  });
+
+  it("stays quiet when no seat is actually free afterwards", () => {
+    expect(shouldAlertSeatOpened({ ...open, seatsFree: 0 })).toBe(false);
+  });
+
+  it("stays quiet once the ride has left, or is no longer on offer", () => {
+    expect(shouldAlertSeatOpened({ ...open, departAt: "2026-10-05T13:59:00.000Z" })).toBe(false);
+    expect(shouldAlertSeatOpened({ ...open, departAt: now.toISOString() })).toBe(false);
+    expect(shouldAlertSeatOpened({ ...open, status: "closed" })).toBe(false);
+    expect(shouldAlertSeatOpened({ ...open, status: "cancelled" })).toBe(false);
+  });
+});
+
+describe("rideAlertMessage — a seat opened (D-64)", () => {
+  const base = { driverName: "Ana", originLabel: "Home", destLabel: "Office", seatsFree: 1, timeZone: LA, kind: "seat" as const };
+
+  it("says a seat opened rather than that a ride was published", () => {
+    expect(
+      rideAlertMessage({ ...base, legs: ["out"], trip: { direction: "out", departAt: MON_0730, returnAt: null } }),
+    ).toEqual({
+      title: "A seat opened at your usual time",
+      body: "A seat just opened on Ana's Home → Office ride on Mon at 7:30 — 1 seat free.",
+    });
+  });
+
+  it("still names only the leg that matched", () => {
+    const trip = { direction: "round" as const, departAt: MON_0730, returnAt: "2026-10-06T00:30:00.000Z" };
+    expect(rideAlertMessage({ ...base, legs: ["back"], trip }).body).toBe(
+      "A seat just opened on Ana's Office → Home ride on Mon at 17:30 — 1 seat free.",
+    );
   });
 });
